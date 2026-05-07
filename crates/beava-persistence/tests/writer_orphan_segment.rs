@@ -197,7 +197,6 @@ fn open_refuses_header_plus_partial_record_bytes() {
     // got into the page cache before the SIGKILL. File is now 25 bytes.
     let path = segment_path(dir.path(), start_lsn);
     let mut f = std::fs::OpenOptions::new()
-        .write(true)
         .append(true)
         .open(&path)
         .unwrap();

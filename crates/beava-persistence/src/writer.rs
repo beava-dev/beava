@@ -23,8 +23,23 @@ use crate::{Lsn, WalRecord};
 /// `tests/writer_orphan_segment.rs`).
 ///
 /// Any other on-disk state — non-empty segment, truncated pre-header
-/// file, mismatched header — is refused. We never silently overwrite
-/// segments that may carry committed data.
+/// file, mismatched header, garbage magic, unsupported format version —
+/// is refused. Refusals surface as `PersistError::Io(AlreadyExists)`
+/// with a diagnostic message. We never silently overwrite segments
+/// that may carry committed data, and we never propagate raw
+/// `BadMagic` / `UnsupportedVersion` from the reuse path so the
+/// boot-time error contract stays uniform regardless of corruption
+/// shape.
+///
+/// **Single-writer invariant:** the WAL dir must be opened by only ONE
+/// `WalWriter` process at a time. This holds in normal beava deploys
+/// (single container, `restart: unless-stopped`, `--force-recreate`
+/// serializing on container lifecycle) but is NOT enforced by the OS
+/// — the reuse path opens with `read+write` and takes no `flock`. Two
+/// concurrent processes pointed at the same WAL dir can both pass the
+/// size==`HEADER_SIZE` check and start writing at offset 24,
+/// interleaving record bytes and producing CRC corruption on read. If
+/// you ever multi-process this, add an `fcntl(F_SETLK)` here first.
 ///
 /// Subsequent segments are opened by `rotation::rotate`.
 pub struct WalWriter {
@@ -105,8 +120,29 @@ impl WalWriter {
 
         // Header-sized file: validate it before reuse. If magic / version /
         // start_lsn / registry_version don't match the request, refuse.
+        // We wrap `BadMagic` / `UnsupportedVersion` from `read_header` into
+        // an `AlreadyExists` Io error so the boot-time error contract is
+        // uniform: ANY orphan-segment refusal (size mismatch, header
+        // mismatch, garbage bytes, future format version) surfaces as
+        // `WAL segment exists but can't be reused, refusing to overwrite`.
+        // The original error variant is included in the message for
+        // operator forensics.
         file.seek(SeekFrom::Start(0))?;
-        let (existing_start_lsn, existing_registry_version) = segment::read_header(&mut file)?;
+        let (existing_start_lsn, existing_registry_version) = match segment::read_header(&mut file)
+        {
+            Ok(parsed) => parsed,
+            Err(header_err) => {
+                return Err(PersistError::Io(std::io::Error::new(
+                    std::io::ErrorKind::AlreadyExists,
+                    format!(
+                        "WAL segment {} exists but its header is unparseable ({header_err}). \
+                         Refusing to overwrite — investigate filesystem corruption or a \
+                         foreign file at this path before manually clearing.",
+                        path.display(),
+                    ),
+                )));
+            }
+        };
         if existing_start_lsn != start_lsn || existing_registry_version != registry_version {
             return Err(PersistError::Io(std::io::Error::new(
                 std::io::ErrorKind::AlreadyExists,

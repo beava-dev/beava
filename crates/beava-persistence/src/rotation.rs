@@ -79,9 +79,12 @@ pub fn rotate(
     // Flush + sync_data the current segment before rotating.
     writer.sync_data()?;
 
-    // `WalWriter::open` uses create_new; if the file already exists
-    // (shouldn't, since next_start_lsn is the next free LSN) it errors
-    // loudly rather than overwriting committed segments.
+    // `WalWriter::open` will create a fresh segment iff one doesn't yet
+    // exist at `next_start_lsn`. If a header-only orphan from a prior
+    // mid-rotation crash sits at that LSN, `open` will REUSE it (see
+    // `WalWriter::open` rustdoc — orphan-recovery path). Anything other
+    // than a header-only orphan or a clean create errors loudly rather
+    // than overwriting committed segments.
     let new_writer = WalWriter::open(dir, next_start_lsn, registry_version)?;
     *writer = new_writer;
     let _ = segment::HEADER_SIZE; // keep the `segment` import live; const access has no runtime cost.
