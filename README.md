@@ -1,12 +1,19 @@
-# beava
+<p align="center">
+  <img src="beava-design-system/project/assets/readme-banner.png" alt="beava" width="100%"/>
+</p>
 
-A real-time feature server. Push events over HTTP or TCP, declare features in Python, query them at sub-millisecond latency.
-
-[![CI](https://github.com/beava-dev/beava/actions/workflows/ci.yml/badge.svg)](https://github.com/beava-dev/beava/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/beava-dev/beava.svg)](https://github.com/beava-dev/beava/releases/latest)
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+<p align="center">
+  <a href="https://github.com/beava-dev/beava/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/beava-dev/beava/ci.yml?branch=main&label=build" alt="build"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-7ca84a" alt="license Apache-2.0"/></a>
+  <a href="https://beava.dev"><img src="https://img.shields.io/badge/site-beava.dev-3a6a8a" alt="site beava.dev"/></a>
+  <a href="https://beava.dev/docs"><img src="https://img.shields.io/badge/docs-beava.dev%2Fdocs-3a6a8a" alt="docs"/></a>
+  <a href="https://discord.gg/Jnx89PN9"><img src="https://img.shields.io/badge/chat-discord-7ca84a" alt="discord"/></a>
+  <a href="https://github.com/beava-dev/beava/releases/latest"><img src="https://img.shields.io/github/v/release/beava-dev/beava?include_prereleases&label=release&color=d97757" alt="release"/></a>
+</p>
 
 ---
+
+A real-time feature server. Push events over HTTP or TCP, declare features in Python, query them at sub-millisecond latency.
 
 beava is a single-binary feature server for fraud detection, ad-tech, and behavioral analytics. Push events in over HTTP or TCP; beava tracks per-entity features (counters, velocities, distances, rates, distributions) updated atomically on every event; your application queries them at sub-millisecond latency to power live scoring rules.
 
