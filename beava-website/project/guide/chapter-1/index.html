@@ -434,15 +434,16 @@
               borderRadius: 8, padding: '12px 14px', margin: 0,
               overflowX: 'auto',
             }}>
-{'# docker — pinned tag, no install needed\n'}
-{'$ docker run -p 8080:8080 -v $(pwd)/data:/var/lib/beava beava/beava:v0\n'}
+{'# docker — rolling :edge tag built from main on every push\n'}
+{'$ docker run -p 8080:8080 -p 8090:8090 -v $(pwd)/data:/data beavadev/beava:edge\n'}
 {'\n'}
-{'# homebrew — native binary on macOS / Linux\n'}
-{'$ brew install beava && beava -c beava.yaml\n'}
+{'# from source (Rust toolchain required)\n'}
+{'$ cargo install --git https://github.com/beava-dev/beava beava-server\n'}
+{'$ beava -c beava.yaml\n'}
 {'\n'}
-{'# verify\n'}
-{'$ curl http://localhost:8080/health\n'}
-{'{"status":"ok","version":"0.1.0"}'}
+{'# verify (admin port — /health, /ready, /metrics, /registry)\n'}
+{'$ curl http://localhost:8090/health\n'}
+{'{"status":"ok"}'}
             </pre>
             <p style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: 'var(--fg3)', margin: '10px 0 0' }}>
               ~14 MB binary · ~62 ms cold start · zero config required · point any of the curl examples below at <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>localhost:8080</code> instead of the in-browser sim.
