@@ -1,25 +1,19 @@
 name: Deploy beava.dev to Hetzner
 
 on:
-  # Server-side change (crates/** etc.) → publish-edge-image rebuilds the
-  # image; this deploy waits for that workflow to finish before running so
-  # we never re-register a new pipeline shape against a stale image. The
-  # job-level `if:` guard skips the deploy when publish-edge fails.
+  # Single trigger path: deploy fires only after `Publish edge image to
+  # Docker Hub` succeeds. The previous setup also fired on push to main
+  # for website-only changes — but a single PR that touched BOTH server
+  # code (publish-edge paths) AND website paths fired both workflows in
+  # parallel, racing the deploy ahead of the new image.
+  #
+  # Trade-off: website-only commits no longer auto-deploy. publish-edge
+  # has been broadened (its path filter dropped) so it runs on every push
+  # to main; cache-hit builds finish in 2-3 min, then deploy chains.
   workflow_run:
     workflows: ["Publish edge image to Docker Hub"]
     types: [completed]
     branches: [main]
-  # Website-only change (no server rebuild needed) → fire on push, in
-  # parallel with anything else. Path filter must NOT include any path
-  # that publish-edge-image.yml also watches, otherwise both triggers
-  # fire on the same commit and race again.
-  push:
-    branches: [main]
-    paths:
-      - 'beava-website/project/**'
-      - 'beava-website/deploy/register_pipeline.py'
-      - 'python/**'
-      - '.github/workflows/deploy-hetzner.yml'
   workflow_dispatch:
 
 # Default-deny GITHUB_TOKEN. The deploy uses an SSH key (HETZNER_DEPLOY_KEY)
@@ -56,6 +50,33 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           ssh-keyscan -t ed25519,rsa 178.104.164.100 >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Pull latest beava image + restart container
+        # Without this step the box stays on whatever beava image was
+        # running at last manual upgrade — even if publish-edge built a
+        # newer :edge digest. `pull_policy: always` in the compose file
+        # only kicks in when `up -d` is invoked. Pull, then up -d
+        # --force-recreate to swap the running container atomically.
+        # `--no-deps` to leave caddy alone.
+        run: |
+          ssh -o StrictHostKeyChecking=no root@178.104.164.100 bash <<'REMOTE'
+            set -euo pipefail
+            cd /srv/beava-website/deploy
+            docker compose -f docker-compose.prod.yml pull beava
+            docker compose -f docker-compose.prod.yml up -d --force-recreate --no-deps beava
+            # Wait briefly for healthcheck.
+            for _ in $(seq 1 20); do
+              if docker run --rm --network beava-website-net curlimages/curl:latest \
+                  -sf --max-time 2 http://beava:8090/ready >/dev/null; then
+                echo "beava ready"
+                exit 0
+              fi
+              sleep 1
+            done
+            echo "beava failed to come up ready within 20s" >&2
+            docker logs --tail 40 beava-website-beava >&2
+            exit 1
+          REMOTE
 
       - name: rsync beava-website/project/ to /srv/beava-website/project/
         # No --delete: the Hetzner box has artifacts (e.g. _pagefind index built

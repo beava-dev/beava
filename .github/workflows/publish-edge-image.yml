@@ -1,14 +1,14 @@
 name: Publish edge image to Docker Hub
 
 on:
+  # Fire on every push to main — the image build is buildx-cached, so
+  # commits that don't touch crates/** finish in 2-3 minutes (layers
+  # cache-hit, manifest re-tags). Eliminates the trigger-race with
+  # deploy-hetzner.yml: deploy now chains exclusively off this workflow's
+  # completion via `workflow_run`, so this workflow's success is the
+  # single deploy gate.
   push:
     branches: [main]
-    paths:
-      - 'crates/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'deploy/Dockerfile.beava'
-      - '.github/workflows/publish-edge-image.yml'
   workflow_dispatch:
 
 # Default-deny GITHUB_TOKEN. Docker Hub auth is via DOCKERHUB_TOKEN;
