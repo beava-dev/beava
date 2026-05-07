@@ -56,8 +56,13 @@ benchmark/**/results/
 .DS_Store
 Thumbs.db
 
-# Claude Code (excluded from public OSS repo)
-/.claude/
+# Claude Code (mostly excluded from public OSS repo) — but ship the
+# project-specific PR review skill so contributors using Claude Code
+# get the same review surface as maintainers.
+/.claude/*
+!/.claude/skills/
+/.claude/skills/*
+!/.claude/skills/beava-pr-review/
 
 # MCP server config (personal, points to local gbrain instance)
 .mcp.json
