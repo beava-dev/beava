@@ -10,16 +10,16 @@
 
 ## Local checks
 
-Heavy CI is two-step:
-1. A code owner adds the `ok-to-test` label per `.github/CODEOWNERS` (gate).
-2. The PR owner manually runs **Actions → "PR Checks" → Run workflow**,
-   enters this PR's number, and clicks Run. The workflow validates the
-   label is still present at run time.
+Heavy CI is gated by the `ok-to-test` label (standard OSS pattern, like
+tokio/ruff/polars). A code owner adds the label per `.github/CODEOWNERS`
+and CI fires once. New commits do **not** auto-rerun — to revalidate the
+new tip, the code owner removes + re-adds the label (one-shot semantics).
 
-There is no auto-firing on push, PR open, or label-add — the label
-unlocks the gate; you trigger the run.
+For external/fork PRs, GitHub's native "Approve and run workflows" button
+also gates the first run (Settings → Actions → "Require approval for all
+outside collaborators"). Maintainer clicks Approve in the Checks tab.
 
-Run the same gates locally before requesting the run to save round-trips.
+Run the same gates locally before requesting the label to save round-trips.
 
 ### One-shot
 

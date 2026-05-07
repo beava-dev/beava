@@ -1,31 +1,39 @@
 name: PR Checks
 
+# Standard OSS gating pattern (tokio / ruff / polars / arrow):
+#
+#   1. Code owner adds the `ok-to-test` label per CODEOWNERS — the gate.
+#      `[labeled]` is the only auto-trigger, so adding the label fires
+#      CI once. New commits do NOT auto-rerun: to revalidate a new tip,
+#      a code owner removes + re-adds `ok-to-test` (one-shot semantics).
+#
+#   2. `workflow_dispatch` exists as a maintainer escape hatch — pass the
+#      PR number to manually run against any labeled PR.
+#
+#   3. Repo Settings → Actions → General → "Fork pull request workflows
+#      from outside collaborators" → "Require approval for all outside
+#      collaborators" provides the second gate: GitHub's native "Approve
+#      and run workflows" button shows up in the PR's Checks tab for
+#      first-time / fork contributors and a maintainer must click before
+#      any code from the fork executes.
+#
+# Job-level `if:` re-checks the label at run time, so removing the label
+# revokes permission for in-flight runs too.
 on:
-  # Manually triggered ONLY. The PR owner runs the workflow themselves
-  # against the PR's head ref. There is NO automatic firing on push,
-  # PR open, or label-add — adding `ok-to-test` only *unlocks* the gate
-  # below; it does not start a run.
-  #
-  # To trigger:
-  #   1. A code owner adds the `ok-to-test` label to the PR.
-  #   2. The PR owner goes to Actions → "PR Checks" → Run workflow,
-  #      enters the PR number, and clicks Run.
-  #
-  # The first job below validates the label is still present at run time
-  # (so removing the label revokes permission for future runs).
+  pull_request:
+    types: [labeled]
   workflow_dispatch:
     inputs:
       pr_number:
-        description: "PR number to test (must have ok-to-test label applied by a code owner)"
+        description: "PR number to test (must have ok-to-test label)"
         required: true
         type: string
 
 concurrency:
-  group: pr-${{ inputs.pr_number }}
+  group: pr-${{ github.event.pull_request.number || inputs.pr_number }}
   cancel-in-progress: true
 
 # Default-deny GITHUB_TOKEN (OWASP / GitHub-Actions hardening guide).
-# Read access is needed to look up the PR head ref + verify the label.
 permissions:
   contents: read
   pull-requests: read
@@ -35,23 +43,34 @@ env:
   RUSTFLAGS: "-D warnings"
 
 jobs:
-  # Gate job: looks up the PR's head SHA, verifies `ok-to-test` is present
-  # at run time, and exposes the SHA as an output for downstream checkout.
-  # Code-owner-only label control + run-time check = no stale-label exploits.
+  # Gate job: validates `ok-to-test` is present AT RUN TIME and resolves
+  # the PR's head SHA. Both event types route through here so jobs below
+  # check out the same SHA regardless of how they were triggered.
   gate:
     name: Verify ok-to-test label
     runs-on: ubuntu-latest
     timeout-minutes: 2
+    # For pull_request[labeled]: only the label-add we care about fires CI.
+    # For workflow_dispatch: gate job validates the PR has the label set.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       contains(github.event.pull_request.labels.*.name, 'ok-to-test'))
     outputs:
       head_sha: ${{ steps.lookup.outputs.head_sha }}
+      pr_number: ${{ steps.lookup.outputs.pr_number }}
     steps:
-      - name: Look up PR + verify label
+      - name: Resolve PR head SHA + verify label (run-time recheck)
         id: lookup
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          pr="${{ inputs.pr_number }}"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            pr="${{ inputs.pr_number }}"
+          else
+            pr="${{ github.event.pull_request.number }}"
+          fi
           json=$(gh pr view "$pr" --repo "$GITHUB_REPOSITORY" \
             --json labels,headRefOid,state)
           state=$(jq -r '.state' <<<"$json")
@@ -66,6 +85,7 @@ jobs:
           fi
           sha=$(jq -r '.headRefOid' <<<"$json")
           echo "head_sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$pr" >> "$GITHUB_OUTPUT"
           echo "✅ ok-to-test present; will test PR #$pr at $sha"
 
   rust:
