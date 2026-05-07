@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'beava-website/project/**'
+      - 'beava-website/deploy/site-metrics-pipeline.json'
       - '.github/workflows/deploy-hetzner.yml'
   workflow_dispatch:
 
@@ -51,14 +52,51 @@ jobs:
             beava-website/project/ \
             root@178.104.164.100:/srv/beava-website/project/
 
+      - name: Re-register pipeline if site-metrics-pipeline.json changed
+        # Always-run, idempotent: POST the SDK-shape pipeline payload to
+        # /register on the internal beava (port 8080, docker network).
+        # `force=true` allows schema-changing updates to land without a
+        # manual override. The JSON file is the source of truth — edit
+        # it in repo, push to main, the live registry updates.
+        run: |
+          # Ship the latest pipeline JSON.
+          rsync -av --no-perms --no-owner --no-group \
+            beava-website/deploy/site-metrics-pipeline.json \
+            root@178.104.164.100:/srv/beava-website/deploy/site-metrics-pipeline.json
+          # Wrap the file's nodes[] payload with `force: true` and POST it
+          # via a one-shot curlimages container on the docker network.
+          ssh -o StrictHostKeyChecking=no root@178.104.164.100 bash <<'REMOTE'
+            set -euo pipefail
+            cd /srv/beava-website/deploy
+            python3 -c '
+            import json, sys
+            with open("site-metrics-pipeline.json") as f:
+              p = json.load(f)
+            p["force"] = True
+            print(json.dumps(p))
+            ' > /tmp/register-payload.json
+            docker run --rm --network beava-website-net \
+              -v /tmp/register-payload.json:/r.json:ro \
+              curlimages/curl:latest -sS \
+              -X POST http://beava:8080/register \
+              -H "Content-Type: application/json" \
+              --data-binary @/r.json
+            rm -f /tmp/register-payload.json
+          REMOTE
+
       - name: Smoke test live origin
         # Hit the internal caddy on 127.0.0.1:8082 over SSH — verifies the
-        # static site responds 200. Runs after rsync so we catch a deploy
-        # that broke the homepage.
+        # static site responds 200, plus that the SiteMetrics row reads
+        # back. Runs after rsync + register so we catch any deploy that
+        # broke either layer.
         run: |
           ssh -o StrictHostKeyChecking=no root@178.104.164.100 \
             'curl -sf --max-time 5 -o /dev/null -w "homepage HTTP %{http_code}\n" http://127.0.0.1:8082/ && \
-             curl -sf --max-time 5 -o /dev/null -w "docs HTTP %{http_code}\n"     http://127.0.0.1:8082/docs/'
+             curl -sf --max-time 5 -o /dev/null -w "docs HTTP %{http_code}\n"     http://127.0.0.1:8082/docs/ && \
+             curl -sf --max-time 5 -X POST http://127.0.0.1:8082/api/get \
+                 -H "Content-Type: application/json" \
+                 -d "{\"table\":\"SiteMetrics\",\"key\":\"\"}" \
+                 -w "SiteMetrics row HTTP %{http_code}\n"'
 
       - name: Job summary
         if: always()
