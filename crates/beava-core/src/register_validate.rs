@@ -633,9 +633,10 @@ pub fn pre_check_unbounded_op_in_lifetime_mode(
 }
 
 /// Newtype wrapper: a `Vec<PayloadNode>` that has passed all validation rules.
-/// `compute_diff` accepts `&[PayloadNode]` via `as_slice()`. The endpoint
-/// extracts the inner vec via `into_inner()`. Carries compiled OpChains,
-/// propagated schemas, and compiled aggregation descriptors (Rule 10 + 11).
+/// `classify_register_diff` accepts `&[PayloadNode]` via `as_slice()`. The
+/// endpoint extracts the inner vec via `into_inner()`. Carries compiled
+/// OpChains, propagated schemas, and compiled aggregation descriptors
+/// (Rule 10 + 11).
 #[derive(Debug)]
 pub struct ValidatedPayload {
     pub(crate) nodes: Vec<PayloadNode>,

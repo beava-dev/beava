@@ -264,20 +264,20 @@ impl ApplyShard {
                 // `force=true` carries the explicit "drop existing state and
                 // replace fully" intent for any descriptor that already
                 // exists in the registry. We pre-remove every existing
-                // descriptor that the new payload would change so the
-                // legacy compute_diff inside `execute_register_with_wal`
-                // sees them as fully new (no `changed` entries → no
-                // `registration_conflict`). Two reasons we can't just gate
+                // descriptor that the new payload would change before
+                // invoking `execute_register_with_wal`, which delegates
+                // installation to `Registry::apply_registration` (silently
+                // skips descriptors already present by name). Without
+                // pre-removal, an additive change against an existing
+                // descriptor (e.g. NewField on an existing event source)
+                // would no-op silently. Two reasons we can't gate solely
                 // on `diff.destructive`:
                 //
-                //   1. `classify_register_diff` classifies new fields on an
-                //      existing event source and new aggregations in an
-                //      existing block as `additive`, not destructive. The
-                //      legacy `compute_diff` flags those same shapes as
-                //      `changed: [ConflictDetail]` (schema_mismatch,
-                //      ops_mismatch). Without pre-removal here, the legacy
-                //      path 409s with force silently dropped — the prod
-                //      bug behind the deploy-hetzner failure.
+                //   1. `classify_register_diff` classifies new fields on
+                //      an existing event source and new aggregations in
+                //      an existing block as `additive`, not destructive.
+                //      Pre-removal must cover them too — otherwise their
+                //      target descriptor stays put with the old shape.
                 //
                 //   2. `NewDescriptor` is the only additive variant we
                 //      skip — it's genuinely-new (not in current
@@ -285,7 +285,7 @@ impl ApplyShard {
                 //
                 // Pre-removal drops compiled chains, aggregations, feature
                 // index entries, and accumulated state for the named
-                // descriptors. That state loss is the documented force=true
+                // descriptors. That state loss is the documented `force=true`
                 // semantic; callers who want to add a field without losing
                 // state should send the request without `force` (additive
                 // path is allowed by `register_check_force_required`).
@@ -321,9 +321,9 @@ impl ApplyShard {
                         }
                     }
                     // Additive-against-existing: the descriptor already
-                    // exists, so the legacy `compute_diff` would flag it
-                    // as `changed` and 409 unconditionally. Pre-remove
-                    // here so it lands as a clean add.
+                    // exists, so `apply_registration` would skip-if-present
+                    // and silently drop the new field/agg. Pre-remove here
+                    // so the new shape lands as a clean add.
                     for entry in &diff.additive {
                         match entry {
                             beava_core::registry_diff::DiffEntry::NewField { event, .. } => {

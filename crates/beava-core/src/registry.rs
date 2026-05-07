@@ -362,8 +362,10 @@ impl Registry {
     /// schema.
     ///
     /// Precondition: `nodes` has passed `validate_payload` and
-    /// `compute_diff` yielded `changed = []` AND `added != []`. The caller
-    /// enforces this.
+    /// `classify_register_diff` yielded `destructive = []` AND at least one
+    /// `NewDescriptor` in `additive`. Existing descriptors with matching
+    /// names are silently skipped (insert-if-absent), so destructive
+    /// changes must have been pre-removed by the caller.
     ///
     /// Returns the new version number.
     pub fn apply_registration(
