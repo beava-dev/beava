@@ -823,6 +823,10 @@ pub struct ForceRequiredError {
 pub fn classify_register_diff(prev: &RegistryInner, new_payload: &[PayloadNode]) -> RegisterDiff {
     let mut additive: Vec<DiffEntry> = Vec::new();
     let mut destructive: Vec<DiffEntry> = Vec::new();
+    // Names of payload descriptors whose shape exactly matches what's in the
+    // current registry (no additive/destructive entry was pushed for them).
+    // Surfaced in the success/noop response per Phase 2 wire contract.
+    let mut already_present: Vec<String> = Vec::new();
 
     // ─── Phase 1: index the payload + current registry by name ────────────
     let mut payload_names: HashSet<String> = HashSet::new();
@@ -921,7 +925,11 @@ pub fn classify_register_diff(prev: &RegistryInner, new_payload: &[PayloadNode])
         }
 
         // Same name in both — descriptor potentially modified. Walk the
-        // shape diff and emit per-class entries.
+        // shape diff and emit per-class entries. If neither classify_*
+        // helper pushed anything, the descriptor matched exactly →
+        // record as already_present.
+        let additive_before = additive.len();
+        let destructive_before = destructive.len();
         match node {
             PayloadNode::Event(new_evt) => {
                 if let Some(prev_evt) = prev.events.get(&name) {
@@ -939,15 +947,20 @@ pub fn classify_register_diff(prev: &RegistryInner, new_payload: &[PayloadNode])
                 }
             }
         }
+        if additive.len() == additive_before && destructive.len() == destructive_before {
+            already_present.push(name);
+        }
     }
 
     // ─── Sort for idempotency (Phase 13.4 Plan 06 Task 6.d Test 4) ────────
     additive.sort_by_key(|e| e.sort_key());
     destructive.sort_by_key(|e| e.sort_key());
+    already_present.sort();
 
     RegisterDiff {
         additive,
         destructive,
+        already_present,
     }
 }
 
@@ -2934,6 +2947,165 @@ mod tests_structural {
             ErrorCode::DerivationUpstreamUnknown,
             "upstreams[2]",
         );
+    }
+}
+
+// ─── classify_register_diff unit tests ───────────────────────────────────────
+//
+// `classify_register_diff` is the canonical diff after the Plan 06 dual-system
+// consolidation: it returns `additive`, `destructive`, AND `already_present`,
+// replacing the legacy `compute_diff`. These tests cover the cases the
+// deleted `compute_diff` unit tests covered, plus the new `already_present`
+// invariants.
+
+#[cfg(test)]
+mod tests_classify_register_diff {
+    use super::*;
+    use crate::registry::EventDescriptor;
+    use crate::schema::{EventSchema, FieldType};
+    use std::collections::BTreeMap;
+
+    fn registry_with_event(name: &str, schema: EventSchema) -> RegistryInner {
+        let mut r = RegistryInner::default();
+        r.events.insert(
+            name.to_string(),
+            Arc::new(EventDescriptor {
+                name: name.to_string(),
+                schema,
+                dedupe_key: None,
+                dedupe_window_ms: None,
+                keep_events_for_ms: None,
+                cold_after_ms: None,
+                registered_at_version: 1,
+                name_arc: Arc::from(""),
+                apply_field_names: vec![],
+            }),
+        );
+        r.version = 1;
+        r
+    }
+
+    fn event_schema_amount_f64() -> EventSchema {
+        let mut fields = BTreeMap::new();
+        fields.insert("event_time".to_string(), FieldType::I64);
+        fields.insert("amount".to_string(), FieldType::F64);
+        EventSchema {
+            fields,
+            optional_fields: vec![],
+        }
+    }
+
+    fn event_node(name: &str, schema: EventSchema) -> PayloadNode {
+        PayloadNode::Event(EventDescriptor {
+            name: name.to_string(),
+            schema,
+            dedupe_key: None,
+            dedupe_window_ms: None,
+            keep_events_for_ms: None,
+            cold_after_ms: None,
+            registered_at_version: 0,
+            name_arc: Arc::from(""),
+            apply_field_names: vec![],
+        })
+    }
+
+    #[test]
+    fn empty_payload_against_empty_current_yields_empty_diff() {
+        let prev = RegistryInner::default();
+        let diff = classify_register_diff(&prev, &[]);
+        assert!(diff.additive.is_empty());
+        assert!(diff.destructive.is_empty());
+        assert!(diff.already_present.is_empty());
+    }
+
+    #[test]
+    fn brand_new_descriptor_is_additive_not_already_present() {
+        let prev = RegistryInner::default();
+        let payload = vec![event_node("A", event_schema_amount_f64())];
+        let diff = classify_register_diff(&prev, &payload);
+        assert_eq!(diff.additive.len(), 1);
+        assert!(matches!(
+            &diff.additive[0],
+            DiffEntry::NewDescriptor { name, .. } if name == "A"
+        ));
+        assert!(diff.destructive.is_empty());
+        assert!(diff.already_present.is_empty());
+    }
+
+    #[test]
+    fn identical_descriptor_is_already_present_only() {
+        let schema = event_schema_amount_f64();
+        let prev = registry_with_event("A", schema.clone());
+        let payload = vec![event_node("A", schema)];
+        let diff = classify_register_diff(&prev, &payload);
+        assert!(diff.additive.is_empty(), "additive: {:?}", diff.additive);
+        assert!(
+            diff.destructive.is_empty(),
+            "destructive: {:?}",
+            diff.destructive
+        );
+        assert_eq!(diff.already_present, vec!["A".to_string()]);
+    }
+
+    #[test]
+    fn added_field_on_existing_event_is_additive_not_already_present() {
+        let prev = registry_with_event("A", event_schema_amount_f64());
+        let mut new_schema = event_schema_amount_f64();
+        new_schema
+            .fields
+            .insert("session_id".to_string(), FieldType::Str);
+        let payload = vec![event_node("A", new_schema)];
+        let diff = classify_register_diff(&prev, &payload);
+        // NewField on the existing event source — additive, NOT already_present.
+        assert!(matches!(
+            diff.additive.as_slice(),
+            [DiffEntry::NewField { event, field, .. }] if event == "A" && field == "session_id"
+        ));
+        assert!(diff.destructive.is_empty());
+        assert!(
+            diff.already_present.is_empty(),
+            "modified descriptor must not appear in already_present, got: {:?}",
+            diff.already_present
+        );
+    }
+
+    #[test]
+    fn type_change_on_existing_event_is_destructive_not_already_present() {
+        let prev = registry_with_event("A", event_schema_amount_f64());
+        let mut new_schema = event_schema_amount_f64();
+        // f64 → i64 on `amount`
+        new_schema
+            .fields
+            .insert("amount".to_string(), FieldType::I64);
+        let payload = vec![event_node("A", new_schema)];
+        let diff = classify_register_diff(&prev, &payload);
+        assert!(diff.additive.is_empty());
+        assert!(matches!(
+            diff.destructive.as_slice(),
+            [DiffEntry::TypeChange { field, .. }] if field == "A.amount"
+        ));
+        assert!(diff.already_present.is_empty());
+    }
+
+    #[test]
+    fn mixed_payload_partitions_correctly() {
+        // Current: A (amount: f64). Payload: A unchanged + B brand-new + C
+        // with a renamed field. Expected: additive has NewDescriptor(B); B
+        // and C don't appear in already_present (B is new, C is changed); A
+        // appears in already_present.
+        let prev = registry_with_event("A", event_schema_amount_f64());
+        let payload = vec![
+            event_node("A", event_schema_amount_f64()),
+            event_node("B", event_schema_amount_f64()),
+        ];
+        let diff = classify_register_diff(&prev, &payload);
+        assert_eq!(diff.additive.len(), 1);
+        assert!(matches!(
+            &diff.additive[0],
+            DiffEntry::NewDescriptor { name, .. } if name == "B"
+        ));
+        assert!(diff.destructive.is_empty());
+        assert_eq!(diff.already_present, vec!["A".to_string()]);
     }
 }
 

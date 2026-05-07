@@ -75,6 +75,17 @@ pub struct RegistryDiff {
 pub struct RegisterDiff {
     pub additive: Vec<DiffEntry>,
     pub destructive: Vec<DiffEntry>,
+    /// Names of payload descriptors that exist in the current registry
+    /// with byte-equivalent shape (modulo `registered_at_version`). The
+    /// register response surfaces this list to callers so they can tell
+    /// "you sent this exact descriptor, I already had it" apart from
+    /// "you added this for the first time."
+    ///
+    /// Populated by `classify_register_diff`. Phase2 wire shape (asserted
+    /// in `phase2_smoke.rs`) preserved when this struct displaces the
+    /// legacy `RegistryDiff::already_present` field.
+    #[serde(default)]
+    pub already_present: Vec<String>,
 }
 
 impl RegisterDiff {
@@ -82,6 +93,7 @@ impl RegisterDiff {
         Self {
             additive: Vec::new(),
             destructive: Vec::new(),
+            already_present: Vec::new(),
         }
     }
 }
