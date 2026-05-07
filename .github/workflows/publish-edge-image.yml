@@ -1,4 +1,4 @@
-name: Publish edge image to ghcr.io
+name: Publish edge image to Docker Hub
 
 on:
   push:
@@ -11,11 +11,10 @@ on:
       - '.github/workflows/publish-edge-image.yml'
   workflow_dispatch:
 
-# Default-deny GITHUB_TOKEN (OWASP / GitHub-Actions hardening). Elevate
-# only what's needed: read source + push the image to GHCR.
+# Default-deny GITHUB_TOKEN. Docker Hub auth is via DOCKERHUB_TOKEN;
+# nothing on GitHub is mutated by this job.
 permissions:
   contents: read
-  packages: write
 
 concurrency:
   # One image build at a time per branch — avoid two concurrent pushes
@@ -34,12 +33,11 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GHCR
+      - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -50,8 +48,8 @@ jobs:
           # `:edge` always tracks the latest main commit; `:sha-<sha>`
           # gives an immutable handle for rollback / pinning.
           tags: |
-            ghcr.io/beava-dev/beava:edge
-            ghcr.io/beava-dev/beava:sha-${{ github.sha }}
+            beavadev/beava:edge
+            beavadev/beava:sha-${{ github.sha }}
           # Buildx layer cache speeds up subsequent runs.
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -59,9 +57,9 @@ jobs:
       - name: Job summary
         run: |
           cat >> "$GITHUB_STEP_SUMMARY" <<EOF
-          ## ghcr.io image published
-          - \`ghcr.io/beava-dev/beava:edge\` (rolling)
-          - \`ghcr.io/beava-dev/beava:sha-${{ github.sha }}\` (immutable)
-          - Pull: \`docker pull ghcr.io/beava-dev/beava:edge\`
-          - Run:  \`docker run -p 8080:8080 ghcr.io/beava-dev/beava:edge\`
+          ## Docker Hub image published
+          - \`beavadev/beava:edge\` (rolling)
+          - \`beavadev/beava:sha-${{ github.sha }}\` (immutable)
+          - Pull: \`docker pull beavadev/beava:edge\`
+          - Run:  \`docker run -p 8080:8080 beavadev/beava:edge\`
           EOF
