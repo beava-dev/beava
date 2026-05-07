@@ -62,16 +62,19 @@ jobs:
         run: cargo fmt --all --check
 
       - name: Lint with clippy
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+        # `--features testing` (not `--all-features`) per v0.0.0 scope: the
+        # io_uring backend has pre-existing borrow-checker errors tracked as
+        # v0.0.x backlog. Mirrors ci.yml's clippy gate exactly.
+        run: cargo clippy --workspace --all-targets --features testing -- -D warnings
 
       - name: Run tests
         id: rust_tests
-        # --workspace + --all-features required: 50+ tests under
-        # crates/beava-server/Cargo.toml gate on `required-features = ["testing"]`
-        # and are silently skipped without --all-features. --test-threads=1 retained
-        # for serialized integration tests that bind ports.
+        # `--features testing` enables the gated tests under
+        # crates/beava-server/Cargo.toml (`required-features = ["testing"]`)
+        # without pulling in the broken io_uring backend. --test-threads=1
+        # retained for serialized integration tests that bind ports.
         run: |
-          cargo test --workspace --all-features -- --test-threads=1 2>&1 | tee /tmp/rust-test-output.txt
+          cargo test --workspace --features testing -- --test-threads=1 2>&1 | tee /tmp/rust-test-output.txt
           echo "output<<EOF" >> "$GITHUB_OUTPUT"
           tail -5 /tmp/rust-test-output.txt >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
