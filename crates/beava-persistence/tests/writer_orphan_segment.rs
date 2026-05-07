@@ -93,7 +93,10 @@ fn open_reuses_header_only_orphan_segment() {
     let recs: Vec<_> = r.collect::<Result<_, _>>().expect("read records");
     assert_eq!(recs.len(), 1, "exactly one record after reuse");
     assert_eq!(recs[0].lsn, start_lsn);
-    assert_eq!(recs[0].payload, format!("{{\"lsn\":{start_lsn}}}").as_bytes());
+    assert_eq!(
+        recs[0].payload,
+        format!("{{\"lsn\":{start_lsn}}}").as_bytes()
+    );
 }
 
 /// Reuse must NOT corrupt existing records. If a segment at `start_lsn=N`

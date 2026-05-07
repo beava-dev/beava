@@ -4,7 +4,7 @@
 //! group-commit fsync worker's responsibility (`fsync_worker.rs`).
 
 use std::fs::{File, OpenOptions};
-use std::io::{BufWriter, Write};
+use std::io::{BufWriter, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use crate::error::PersistError;
@@ -14,9 +14,19 @@ use crate::{Lsn, WalRecord};
 
 /// An append-only WAL segment writer.
 ///
-/// `open` creates a NEW segment file (errors if the target file already
-/// exists); rotation in `rotation::rotate` handles opening subsequent
-/// segments.
+/// `open` creates a NEW segment file at `dir/wal-{start_lsn:016x}.log`.
+/// If the file already exists, `open` will REUSE it iff the file is
+/// exactly the segment header (no records yet) and the on-disk header
+/// matches the requested `(start_lsn, registry_version)`. This handles
+/// the deploy-time crashloop case where a previous boot wrote the
+/// header but was killed before appending any record (see
+/// `tests/writer_orphan_segment.rs`).
+///
+/// Any other on-disk state — non-empty segment, truncated pre-header
+/// file, mismatched header — is refused. We never silently overwrite
+/// segments that may carry committed data.
+///
+/// Subsequent segments are opened by `rotation::rotate`.
 pub struct WalWriter {
     file: BufWriter<File>,
     path: PathBuf,
@@ -27,10 +37,28 @@ impl WalWriter {
     pub fn open(dir: &Path, start_lsn: Lsn, registry_version: u32) -> Result<Self, PersistError> {
         std::fs::create_dir_all(dir)?;
         let path = dir.join(segment::segment_filename(start_lsn));
-        let file = OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .open(&path)?;
+
+        // Happy path: segment doesn't exist yet — create + write header.
+        match Self::create_new(&path, start_lsn, registry_version) {
+            Ok(writer) => Ok(writer),
+            // Recovery path: a previous boot wrote the header but was killed
+            // before appending any record (e.g. SIGKILL during
+            // `docker compose up --force-recreate`). The orphan segment
+            // sits at the same `start_lsn` recovery determined this boot,
+            // so `create_new` returns AlreadyExists. Try to reuse it.
+            Err(PersistError::Io(e)) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                Self::reuse_orphan(&path, start_lsn, registry_version)
+            }
+            Err(other) => Err(other),
+        }
+    }
+
+    fn create_new(
+        path: &Path,
+        start_lsn: Lsn,
+        registry_version: u32,
+    ) -> Result<Self, PersistError> {
+        let file = OpenOptions::new().create_new(true).write(true).open(path)?;
         let mut bw = BufWriter::new(file);
         segment::write_header(&mut bw, start_lsn, registry_version)?;
         // Flush the header before any append so a reader opened concurrently
@@ -38,7 +66,67 @@ impl WalWriter {
         bw.flush()?;
         Ok(Self {
             file: bw,
-            path,
+            path: path.to_owned(),
+            bytes_since_header: 0,
+        })
+    }
+
+    /// Reuse an existing segment file iff it is exactly the header (no
+    /// records yet) and the header matches the requested
+    /// `(start_lsn, registry_version)`. Anything else surfaces a
+    /// structured error — we will NOT overwrite a segment whose
+    /// contents we can't verify.
+    fn reuse_orphan(
+        path: &Path,
+        start_lsn: Lsn,
+        registry_version: u32,
+    ) -> Result<Self, PersistError> {
+        let mut file = OpenOptions::new().read(true).write(true).open(path)?;
+        let len = file.metadata()?.len();
+        if len != segment::HEADER_SIZE {
+            // Either committed records (len > HEADER_SIZE) or a torn
+            // pre-header file (len < HEADER_SIZE). Both are out of scope
+            // for orphan-reuse — refuse so the operator can investigate.
+            // We surface AlreadyExists (the original create_new error)
+            // because the file existed and we declined to clobber it;
+            // adding a dedicated variant is a separate concern.
+            return Err(PersistError::Io(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                format!(
+                    "WAL segment {} exists with {len} bytes (expected exactly the {} byte header — \
+                     the orphan-segment recovery path only handles header-only files; this segment \
+                     either contains committed records or is a torn pre-header write. Refusing to \
+                     overwrite.)",
+                    path.display(),
+                    segment::HEADER_SIZE,
+                ),
+            )));
+        }
+
+        // Header-sized file: validate it before reuse. If magic / version /
+        // start_lsn / registry_version don't match the request, refuse.
+        file.seek(SeekFrom::Start(0))?;
+        let (existing_start_lsn, existing_registry_version) = segment::read_header(&mut file)?;
+        if existing_start_lsn != start_lsn || existing_registry_version != registry_version {
+            return Err(PersistError::Io(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                format!(
+                    "WAL segment {} header records (start_lsn={existing_start_lsn}, \
+                     registry_version={existing_registry_version}) but boot is asking for \
+                     (start_lsn={start_lsn}, registry_version={registry_version}). Recovery state \
+                     has diverged from the orphan; refusing to reuse.",
+                    path.display(),
+                ),
+            )));
+        }
+
+        // Validated header-only orphan. Position at end-of-header for
+        // the first append; bytes_since_header starts at 0 (matches the
+        // semantics of a freshly-created segment).
+        file.seek(SeekFrom::End(0))?;
+        Ok(Self {
+            file: BufWriter::new(file),
+            path: path.to_owned(),
             bytes_since_header: 0,
         })
     }
