@@ -136,4 +136,29 @@ No TLS in v0 — terminate at nginx, Envoy, or Cloudflare if you need it. No aut
 - [crates/beava-bench/README.md](crates/beava-bench/README.md) — benchmark harness, reproduce the numbers
 - [examples/](examples/) — vertical demos in Python
 
-[Apache 2.0](LICENSE) · [CHANGELOG](CHANGELOG.md) · [SECURITY](SECURITY.md) · [CONTRIBUTING](CONTRIBUTING.md)
+## Community & open-source commitment
+
+[The open-source project should be the real system](https://beava.dev/docs/vision/open-source/) — something
+you can clone, run, test, operate, and trust as your use case grows. A managed
+beava service can remove operational burden later, but the open-source binary is
+the real product. TiDB-style commitment to open source. Apache-2.0, no
+open-core lock-in.
+
+Six concrete commitments (also tracked on the [open-source vision page](https://beava.dev/docs/vision/open-source/)):
+
+| Commitment | Where it lives |
+|---|---|
+| **Public RFCs** | [RFC index](https://beava.dev/docs/community/rfcs/) — RFC-001 through RFC-009 (tiered storage, table ingestion, joins, OOO events, replay, online migration, retention, latency-vs-throughput, HA) |
+| **Weekly dev calls** | [Schedule + summaries](https://beava.dev/docs/community/dev-calls/) |
+| **Practical examples** | [examples/](examples/) — fraud, ad-tech, ecommerce vertical demos |
+| **Reproducible benchmarks** | [crates/beava-bench/README.md](crates/beava-bench/README.md) + [methodology](https://beava.dev/docs/vision/benchmarks/) — workload shape, hardware, durability mode, repro command |
+| **Clear contribution paths** | [CONTRIBUTING.md](CONTRIBUTING.md) (build/test/PR), [GOVERNANCE.md](GOVERNANCE.md) (who decides, what stays Apache-2.0 forever), [MAINTAINERS.md](MAINTAINERS.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) |
+| **Transparent infrastructure** | This repo: full source, full WAL/snapshot/durability path, full benchmark harness — no managed-only features in v0 |
+
+Other ways in:
+
+- **GitHub Discussions:** [github.com/beava-dev/beava/discussions](https://github.com/beava-dev/beava/discussions) — questions, design ideas, "is this a bug?"
+- **Discord:** [discord.gg/Jnx89PN9](https://discord.gg/Jnx89PN9) — drop-in chat with maintainers
+- **Security reports:** [SECURITY.md](SECURITY.md) — private disclosure to `hoang@beava.dev`
+
+[Apache 2.0](LICENSE) · [CHANGELOG](CHANGELOG.md) · [SECURITY](SECURITY.md) · [CONTRIBUTING](CONTRIBUTING.md) · [GOVERNANCE](GOVERNANCE.md) · [MAINTAINERS](MAINTAINERS.md) · [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md)
