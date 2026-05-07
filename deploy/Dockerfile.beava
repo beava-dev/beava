@@ -29,9 +29,24 @@ RUN useradd -r -s /bin/false -u 65532 beava && \
 COPY --from=builder /build/target/release/beava /usr/local/bin/beava
 RUN chmod +x /usr/local/bin/beava
 
+# Bundle a sane default config so `docker run beavadev/beava:edge` boots
+# without requiring a host-side mount. Operators in production override
+# by mounting their own at /app/beava.yaml (the existing
+# beava-website/deploy/docker-compose.prod.yml already does this).
+RUN printf '%s\n' \
+    'listen_addr: "0.0.0.0:8080"' \
+    'admin_addr: "0.0.0.0:8090"' \
+    'log_level: info' \
+    '' \
+    'durability:' \
+    '  wal_dir: /data/wal' \
+    '  snapshot_dir: /data/snapshots' \
+    > /app/beava.yaml && chown beava:beava /app/beava.yaml
+
 USER beava
 WORKDIR /data
 EXPOSE 8080 8090
 
-# Default: read /app/beava.yaml. Operators mount their own config there.
+# Default: read /app/beava.yaml. Image ships a sane default at that
+# path; operators override by bind-mounting their own.
 CMD ["/usr/local/bin/beava", "-c", "/app/beava.yaml"]
