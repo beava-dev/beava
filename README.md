@@ -1,5 +1,7 @@
 <p align="center">
-  <img src="beava-design-system/project/assets/readme-banner.png" alt="beava" width="100%"/>
+  <a href="https://beava.dev">
+    <img src="beava-design-system/project/assets/readme-banner.png" alt="beava" width="100%"/>
+  </a>
 </p>
 
 <p align="center">
