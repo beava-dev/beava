@@ -2,27 +2,36 @@
 
 > Pick one. They're the same binary.
 
-## pip (recommended)
+> Pre-release: install paths go through GitHub. `pip install beava`,
+> `brew install beava-dev/tap/beava`, and the prebuilt Docker image will
+> light up at the v0.0.0 cut.
+
+## pip (from GitHub)
 
 ```bash
-pip install beava
+pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"
 ```
 
 The Python SDK ships with the server binary embedded. `bv.App()` discovers and runs it on an ephemeral port. This is what you want for development, tests, and most production deployments.
 
-## Docker
+## Docker (build from source)
 
 ```bash
-docker run -p 8080:8080 ghcr.io/beava-dev/beava:latest
+git clone https://github.com/beava-dev/beava
+cd beava
+docker build -f deploy/Dockerfile.beava -t beava:dev .
+docker run -p 8080:8080 -v $PWD/beava.example.yaml:/app/beava.yaml beava:dev
 ```
 
 Push and query against `:8080`. Mount a volume at `/data` to persist the WAL and snapshots.
 
-## Homebrew (macOS, Linux)
+## Cargo (build from source)
 
 ```bash
-brew install beava-dev/tap/beava
-beava -c beava.yaml      # binds 127.0.0.1:8080 by default (admin :8090)
+git clone https://github.com/beava-dev/beava
+cd beava
+cargo build --release -p beava-server
+./target/release/beava -c beava.example.yaml
 ```
 
 The binary takes a single YAML config (default `./beava.yaml`); ports come

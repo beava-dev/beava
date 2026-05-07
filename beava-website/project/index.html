@@ -236,14 +236,16 @@
       );
     };
 
+    // Pre-release: pip / brew / docker-prebuilt all light up at v0.0.0.
+    // Until then, install paths go through GitHub.
     const INSTALL_TABS = [
-      { id: 'brew',   label: 'brew',   cmd: 'brew install beava' },
-      { id: 'curl',   label: 'curl',   cmd: 'curl -fsSL beava.dev/install.sh | sh' },
-      { id: 'docker', label: 'docker', cmd: 'docker run -p 8080:8080 beava/beava:latest' },
+      { id: 'pip',    label: 'pip',    cmd: 'pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"' },
+      { id: 'cargo',  label: 'cargo',  cmd: 'cargo install --git https://github.com/beava-dev/beava beava-server' },
+      { id: 'docker', label: 'docker', cmd: 'git clone https://github.com/beava-dev/beava && cd beava && docker build -f deploy/Dockerfile.beava -t beava .' },
     ];
 
     const InstallTabs = () => {
-      const [tabId, setTabId] = React.useState('brew');
+      const [tabId, setTabId] = React.useState('pip');
       const [copied, setCopied] = React.useState(false);
       const tab = INSTALL_TABS.find(t => t.id === tabId);
       const copy = () => {

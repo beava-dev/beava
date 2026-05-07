@@ -117,21 +117,28 @@
 <blockquote>
 <p>Pick one. They're the same binary.</p>
 </blockquote>
-<h2 id="pip-recommended" tabindex="-1"><a class="header-anchor" href="#pip-recommended" aria-hidden="true">#</a> pip (recommended)</h2>
-<pre><code class="language-bash">pip install beava
+<blockquote><p>Pre-release: install paths go through GitHub. <code>pip install beava</code>,
+<code>brew install beava-dev/tap/beava</code>, and the prebuilt Docker image will
+light up at the v0.0.0 cut.</p></blockquote>
+<h2 id="pip-from-github" tabindex="-1"><a class="header-anchor" href="#pip-from-github" aria-hidden="true">#</a> pip (from GitHub)</h2>
+<pre><code class="language-bash">pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"
 </code></pre>
-<p>The Python SDK ships with the server binary embedded. <code>bv.App()</code> discovers and runs it on an ephemeral port. This is what you want for development, tests, and most production deployments.</p>
-<h2 id="docker" tabindex="-1"><a class="header-anchor" href="#docker" aria-hidden="true">#</a> Docker</h2>
-<pre><code class="language-bash">docker run -p 8080:8080 ghcr.io/beava-dev/beava:latest
+<p>The Python SDK ships with the server binary embedded. <code>bv.App()</code> discovers and runs it on an ephemeral port.</p>
+<h2 id="docker" tabindex="-1"><a class="header-anchor" href="#docker" aria-hidden="true">#</a> Docker (build from source)</h2>
+<pre><code class="language-bash">git clone https://github.com/beava-dev/beava
+cd beava
+docker build -f deploy/Dockerfile.beava -t beava:dev .
+docker run -p 8080:8080 -v $PWD/beava.example.yaml:/app/beava.yaml beava:dev
 </code></pre>
-<p>Push and query against <code>:8080</code>. Mount a volume at <code>/data</code> to persist the WAL and snapshots.</p>
-<h2 id="homebrew-macos-linux" tabindex="-1"><a class="header-anchor" href="#homebrew-macos-linux" aria-hidden="true">#</a> Homebrew (macOS, Linux)</h2>
-<pre><code class="language-bash">brew install beava-dev/tap/beava
-beava -c beava.yaml      # binds 127.0.0.1:8080 by default (admin :8090)
+<p>Push and query against <code>:8080</code>.</p>
+<h2 id="cargo-from-source" tabindex="-1"><a class="header-anchor" href="#cargo-from-source" aria-hidden="true">#</a> Cargo (build from source)</h2>
+<pre><code class="language-bash">git clone https://github.com/beava-dev/beava
+cd beava
+cargo build --release -p beava-server
+./target/release/beava -c beava.example.yaml
 </code></pre>
 <p>The binary takes a single YAML config (default <code>./beava.yaml</code>); ports come
-from <code>listen_addr</code> / <code>admin_addr</code> keys, or env vars
-<code>BEAVA_LISTEN_ADDR</code> / <code>BEAVA_ADMIN_ADDR</code>. There is no <code>serve</code> subcommand.</p>
+from <code>listen_addr</code> / <code>admin_addr</code> keys.</p>
 <h2 id="verify" tabindex="-1"><a class="header-anchor" href="#verify" aria-hidden="true">#</a> Verify</h2>
 <pre><code class="language-bash">$ beava --version
 beava 0.0.0
