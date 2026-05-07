@@ -10,16 +10,12 @@
 
 ## Local checks
 
-Heavy CI is gated by the `ok-to-test` label (standard OSS pattern, like
-tokio/ruff/polars). A code owner adds the label per `.github/CODEOWNERS`
-and CI fires once. New commits do **not** auto-rerun — to revalidate the
-new tip, the code owner removes + re-adds the label (one-shot semantics).
+CI auto-fires on every PR (tokio/ruff/polars/deno standard). For external
+fork PRs, GitHub's native "Approve and run workflows" button gates the
+first run — a maintainer clicks Approve in the Checks tab. Internal PRs
+auto-run.
 
-For external/fork PRs, GitHub's native "Approve and run workflows" button
-also gates the first run (Settings → Actions → "Require approval for all
-outside collaborators"). Maintainer clicks Approve in the Checks tab.
-
-Run the same gates locally before requesting the label to save round-trips.
+Run the same gates locally before opening the PR to save round-trips.
 
 ### One-shot
 
@@ -56,7 +52,7 @@ cd beava-website && npm install && npm run build
 ## Verification
 
 Paste the summary block from `bash .github/scripts/check.sh` here so the
-reviewer can see the local run passed before they label `ok-to-test`:
+reviewer can see the local run passed:
 
 ```text
 PASS  cargo fmt --all --check  (1s)
