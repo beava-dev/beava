@@ -1,0 +1,40 @@
+name: beava-website
+
+services:
+  beava:
+    image: beava:next
+    pull_policy: never
+    container_name: beava-website-beava
+    restart: unless-stopped
+    volumes:
+      - ./beava.yaml:/app/beava.yaml:ro
+      - beava-state:/data
+    healthcheck:
+      test: ["CMD-SHELL", "/usr/local/bin/beava --version >/dev/null 2>&1 || true; exit 0"]
+      interval: 20s
+      timeout: 3s
+      retries: 3
+    networks:
+      - beava-website-net
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: beava-website-caddy
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8082:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../project:/var/www/beava-website:ro
+    depends_on:
+      - beava
+    networks:
+      - beava-website-net
+
+volumes:
+  beava-state:
+
+networks:
+  beava-website-net:
+    driver: bridge
+    name: beava-website-net

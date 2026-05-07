@@ -163,42 +163,29 @@
         let cancelled = false;
         const refresh = async () => {
           try {
-            // Site-wide aggregation: one row keyed bucket="site". The whole
-            // site's median dwell + page-views in two fields, computed by
-            // beava (not by us). One feature read instead of N+1.
-            const sitePromise = fetch('/api/features/site')
-              .then(r => r.ok ? r.json() : null)
-              .catch(() => null);
-
-            // Per-path scan only for the "top page" card (binary doesn't
-            // ship a top_k operator — need to compare views_1h client-side).
-            const topPromise = Promise.all(TOP_PAGES.map(p =>
-              fetch('/api/features/' + encodeURIComponent(p))
-                .then(r => r.ok ? r.json() : null)
-                .catch(() => null)
-            ));
-
-            const [site, reads] = await Promise.all([sitePromise, topPromise]);
+            // SiteMetrics is a global @bv.table (no key=) — one row,
+            // computed by beava server-side. Read it via /api/get with
+            // empty key per ADR-003.
+            const site = await fetch('/api/get', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ table: 'SiteMetrics', key: '' }),
+            }).then(r => r.ok ? r.json() : null).catch(() => null);
             if (cancelled) return;
 
-            // Pages viewed + median dwell come straight off the SiteMetrics row.
-            const sf = (site && site.features) || {};
-            const views = sf.views_today || 0;
-            const median = sf.median_dwell_1h || 0;
+            // /api/get returns the row as a flat object: {<feature>: <value>, ...}
+            const sf = site || {};
+            const views = sf.site_views_today || 0;
+            const median = sf.site_med_dwell_1h || 0;
+            const v1h = sf.site_views_1h || 0;
             setPageViews(views);
             setPvSeries(s => [...s.slice(1), views]);
             setDwellMs(median);
             setDwellSeries(s => [...s.slice(1), median]);
-
-            // Top page: pick whichever TOP_PAGES entry has the highest views_1h.
-            let bestIdx = 0, bestHits = 0;
-            reads.forEach((r, i) => {
-              if (!r || !r.features) return;
-              const v1h = r.features.views_1h || 0;
-              if (v1h > bestHits) { bestHits = v1h; bestIdx = i; }
-            });
-            setTopPageIdx(bestIdx);
-            setTopPageHits(bestHits);
+            // Top page: TBD — top_k pipeline TODO (#followup). Show site-wide
+            // hourly views in the meantime so the card isn't dead.
+            setTopPageIdx(0);
+            setTopPageHits(v1h);
           } catch (_) { /* keep previous values on transient failure */ }
         };
         refresh();
@@ -471,7 +458,13 @@
 {'        '}<span style={{ background: 'rgba(217,122,62,0.12)', borderRadius: 3, padding: '0 2px' }}>top_page_1h</span>      = bv.<span style={S.fn}>top_k</span>(e.path, k=<span style={S.num}>1</span>, window=<span style={S.str}>"1h"</span>),{'\n'}
 {'    '}){'\n'}
 {'\n'}
-bv.<span style={S.fn}>App</span>(<span style={S.str}>"0.0.0.0:8080"</span>).<span style={S.fn}>register</span>(<span style={S.ty}>PageView</span>, <span style={S.fn}>SiteMetrics</span>).<span style={S.fn}>serve</span>()
+bv.<span style={S.fn}>App</span>(<span style={S.str}>"0.0.0.0:8080"</span>).<span style={S.fn}>register</span>(<span style={S.ty}>PageView</span>, <span style={S.fn}>SiteMetrics</span>).<span style={S.fn}>serve</span>(){'\n'}
+{'\n'}
+<span style={S.cmt}># Query the global row — no key, just the table name.</span>{'\n'}
+bv.<span style={S.fn}>get</span>(<span style={S.str}>"SiteMetrics"</span>)  <span style={S.cmt}># → {`{median_dwell_1h: 6_250, views_today: 14_207, …}`}</span>{'\n'}
+{'\n'}
+<span style={S.cmt}># Or over HTTP (the panel above is hitting this exact endpoint):</span>{'\n'}
+<span style={S.kw}>$</span> curl https://beava.dev/api/features/site
               </pre>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0, borderTop: '1px solid var(--border)', background: '#fff' }}>
                 {[

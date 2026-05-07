@@ -1,0 +1,32 @@
+{
+  "nodes": [
+    {
+      "kind": "event",
+      "name": "PageView",
+      "schema": {
+        "fields": {"path": "str", "dwell_ms": "i64"},
+        "optional_fields": []
+      }
+    },
+    {
+      "kind": "derivation",
+      "name": "SiteMetrics",
+      "output_kind": "table",
+      "upstreams": ["PageView"],
+      "ops": [{
+        "op": "group_by",
+        "keys": [],
+        "agg": {
+          "site_views_today": {"op": "count", "params": {"windowed": "24h"}},
+          "site_views_1h": {"op": "count", "params": {"windowed": "1h"}},
+          "site_med_dwell_1h": {"op": "quantile", "params": {"field": "dwell_ms", "q": 0.5, "windowed": "1h"}}
+        }
+      }],
+      "schema": {
+        "fields": {"site_views_today": "i64", "site_views_1h": "i64", "site_med_dwell_1h": "f64"},
+        "optional_fields": []
+      },
+      "table_primary_key": []
+    }
+  ]
+}

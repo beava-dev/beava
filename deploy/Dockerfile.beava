@@ -1,0 +1,37 @@
+# Build the beava-server binary from the current Cargo workspace.
+# Two-stage: rust:slim builds the release binary, then a tiny debian
+# runtime hosts it. Output image: beava:local.
+FROM rust:1.83-slim AS builder
+
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy workspace manifests + lockfile + crates.
+COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
+COPY crates ./crates
+
+RUN cargo build --release -p beava-server
+
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    libssl3 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd -r -s /bin/false -u 65532 beava && \
+    mkdir -p /data /app && chown -R beava:beava /data /app
+
+COPY --from=builder /build/target/release/beava /usr/local/bin/beava
+RUN chmod +x /usr/local/bin/beava
+
+USER beava
+WORKDIR /data
+EXPOSE 8080 8090
+
+# Default: read /app/beava.yaml. Operators mount their own config there.
+CMD ["/usr/local/bin/beava", "-c", "/app/beava.yaml"]

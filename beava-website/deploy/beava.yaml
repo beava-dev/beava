@@ -1,0 +1,8 @@
+# beava-website-beava — config for the on-page-tracking instance behind beava.dev.
+listen_addr: "0.0.0.0:8080"
+admin_addr: "0.0.0.0:8090"
+log_level: info
+
+durability:
+  wal_dir: /data/wal
+  snapshot_dir: /data/snapshots

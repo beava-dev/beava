@@ -1,0 +1,53 @@
+# Internal caddy — serves the static beava.dev site and proxies /api/* to
+# beava-website-beava (v2 binary on port 8080 + admin sidecar on 8090).
+# Bound to 127.0.0.1:8082 on the host; the public beava-learn-caddy
+# reverse-proxies beava.dev here and terminates TLS.
+
+:80 {
+    encode zstd gzip
+
+    # Push events. /api/push/<stream> -> beava:8080/push/<stream>.
+    handle /api/push/* {
+        uri strip_prefix /api
+        reverse_proxy beava:8080
+    }
+
+    # Read features. /api/get -> beava:8080/get (POST body shape per SDK
+    # contract: {table, key, features?}).
+    handle /api/get {
+        rewrite * /get
+        reverse_proxy beava:8080
+    }
+    handle /api/get/* {
+        uri strip_prefix /api
+        reverse_proxy beava:8080
+    }
+
+    # Admin endpoints (read-only): /api/registry, /api/health.
+    handle /api/registry {
+        rewrite * /registry
+        reverse_proxy beava:8090
+    }
+    handle /api/health {
+        rewrite * /health
+        reverse_proxy beava:8090
+    }
+
+    # Health probe for the public caddy's upstream check.
+    handle /__up {
+        respond "ok" 200
+    }
+
+    # Static site — clean URLs map /foo/ to /foo/index.html.
+    handle {
+        root * /var/www/beava-website
+        try_files {path} {path}/ {path}/index.html =404
+        file_server
+    }
+
+    log {
+        output stdout
+        format console
+        level INFO
+    }
+}
