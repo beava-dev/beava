@@ -62,6 +62,22 @@ if [[ "$FAST" -eq 0 ]]; then
 fi
 
 if [[ -d python && -f python/pyproject.toml ]]; then
+  if command -v ruff >/dev/null 2>&1; then
+    run "ruff check python/" \
+      bash -c 'cd python && ruff check .'
+  else
+    SUMMARY+=("SKIP  ruff check python/  (ruff not installed)")
+  fi
+  if command -v mypy >/dev/null 2>&1; then
+    # Advisory — strict mypy will likely flag pre-existing items.
+    if (cd python && mypy beava) >>"$OUT" 2>&1; then
+      SUMMARY+=("PASS  mypy --strict beava/")
+    else
+      SUMMARY+=("WARN  mypy --strict beava/  (advisory; not blocking)")
+    fi
+  else
+    SUMMARY+=("SKIP  mypy --strict beava/  (mypy not installed)")
+  fi
   run "pytest python/tests" \
     bash -c 'cd python && python -m pytest tests/ -q'
 fi

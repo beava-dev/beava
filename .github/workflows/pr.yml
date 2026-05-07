@@ -116,8 +116,16 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          pip install pytest
+          pip install pytest ruff mypy
           pip install -e python/
+
+      - name: ruff check
+        run: cd python && ruff check .
+
+      - name: mypy --strict (advisory)
+        # Drop continue-on-error once the codebase is green under strict.
+        continue-on-error: true
+        run: cd python && mypy beava
 
       - name: Run Python tests (verbose)
         id: python_tests
