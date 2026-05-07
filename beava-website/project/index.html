@@ -532,9 +532,12 @@ bv.<span style={S.fn}>get</span>(<span style={S.str}>"SiteMetrics"</span>)  <spa
     const FinalCTA = () => (
       <section style={{ padding: '96px 24px', background: 'var(--beava-cream-deep)', borderTop: '1px solid var(--border)' }}>
         <div style={{ maxWidth: 920, margin: '0 auto', textAlign: 'center', position: 'relative' }}>
-          <img src="/assets/logo-mark.png" alt="" width={120} height={120}
-            className="beava-finalcta-mascot"
-            style={{ position: 'absolute', top: -28, right: -8, transform: 'rotate(6deg)', display: 'block', filter: 'drop-shadow(0 6px 14px rgba(26,23,20,0.10))' }}/>
+          {/* Canonical brand lockup — geometric mascot + serif italic wordmark.
+              Same lockup as nav, footer, and the README banner. */}
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 14, marginBottom: 18 }}>
+            <img src="/assets/mascot-mark-geometric-transparent.png" alt="" width={56} height={56} style={{ display: 'block' }}/>
+            <span style={{ fontFamily: 'var(--font-serif)', fontWeight: 600, fontStyle: 'italic', fontSize: 48, letterSpacing: '-0.025em', lineHeight: 1, color: 'var(--fg1)' }}>beava</span>
+          </div>
           <Eyebrow>Three ways in</Eyebrow>
           <h2 style={{ fontFamily: 'var(--font-serif)', fontWeight: 600, fontSize: 'clamp(36px, 4.5vw, 52px)', lineHeight: 1.1, letterSpacing: '-0.02em', color: 'var(--fg1)', margin: '12px 0 16px', textWrap: 'balance' }}>
             Install it. Read Chapter 1. Or just lurk.

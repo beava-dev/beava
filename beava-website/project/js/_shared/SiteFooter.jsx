@@ -37,8 +37,8 @@ const SiteFooter = ({ maxWidth = 1200 }) => (
       <div className="bv-foot-grid" style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr', gap: 40, marginBottom: 48 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-            <img src="/assets/logo-mark.png" width={36} height={36} alt=""/>
-            <span style={{ fontFamily: 'var(--font-serif)', fontWeight: 700, fontSize: 24, letterSpacing: '-0.01em', color: 'var(--fg1)' }}>beava</span>
+            <img src="/assets/mascot-mark-geometric-transparent.png" width={36} height={36} alt="" style={{ display: 'block' }}/>
+            <span style={{ fontFamily: 'var(--font-serif)', fontWeight: 600, fontStyle: 'italic', fontSize: 28, letterSpacing: '-0.025em', lineHeight: 1, color: 'var(--fg1)' }}>beava</span>
             <span style={{
               fontFamily: 'var(--font-mono)', fontSize: 10.5, fontWeight: 600,
               color: 'var(--accent)', background: 'var(--beava-orange-wash)',
