@@ -1,4 +1,4 @@
-# Beava
+# beava
 
 A real-time feature server. Push events over HTTP or TCP, declare features in Python, query them at sub-millisecond latency.
 
@@ -8,7 +8,7 @@ A real-time feature server. Push events over HTTP or TCP, declare features in Py
 
 ---
 
-Beava is a single-binary feature server for fraud detection, ad-tech, and behavioral analytics. Push events in over HTTP or TCP; Beava tracks per-entity features (counters, velocities, distances, rates, distributions) updated atomically on every event; your application queries them at sub-millisecond latency to power live scoring rules.
+beava is a single-binary feature server for fraud detection, ad-tech, and behavioral analytics. Push events in over HTTP or TCP; beava tracks per-entity features (counters, velocities, distances, rates, distributions) updated atomically on every event; your application queries them at sub-millisecond latency to power live scoring rules.
 
 Think **Redis for stateful streaming features**, with 50+ purpose-built aggregation primitives instead of do-it-yourself Lua scripts.
 
@@ -55,11 +55,11 @@ That's it. **No broker, no ETL, no schema registry, no separate stream / batch p
 
 Full walkthrough: [beava.dev/docs](https://beava.dev/docs).
 
-## Why Beava
+## Why beava
 
 Replaces Postgres triggers + Redis counters + the cron job that heals drift. Same pipeline from laptop to production.
 
-**Performance:** 684,812 sustained events/sec on a single Apple-M4 core[^1] — simple-fraud pipeline, TCP transport, msgpack wire, parallel=16, 60s sustained run. Run multiple Beava instances for higher throughput (Redis-cluster style; no in-process sharding).
+**Performance:** 684,812 sustained events/sec on a single Apple-M4 core[^1] — simple-fraud pipeline, TCP transport, msgpack wire, parallel=16, 60s sustained run. Run multiple beava instances for higher throughput (Redis-cluster style; no in-process sharding).
 
 **Memory:** ~7 KB per entity for a rich 30-feature pack → ~700 GB for 100M entities. Size your box; in-memory only — no SSD overflow.
 
@@ -69,7 +69,7 @@ Replaces Postgres triggers + Redis counters + the cron job that heals drift. Sam
 
 ## Wire surface
 
-Beava binds two listeners:
+beava binds two listeners:
 
 - **HTTP/JSON on `127.0.0.1:8080`** — curl-compatible debugging path. See [docs/http-api](https://beava.dev/docs/http-api).
 - **Framed TCP on `127.0.0.1:8081`** — sub-millisecond fast-path. JSON or msgpack content. See [docs/wire-spec](https://beava.dev/docs/wire-spec).
