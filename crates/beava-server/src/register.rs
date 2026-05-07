@@ -14,7 +14,7 @@ use beava_core::{
     register_validate::validate_payload,
     register_validate::ErrorCode,
     registry::Registry,
-    registry_diff::{compute_diff, ConflictDetail, PayloadNode},
+    registry_diff::{ConflictDetail, PayloadNode},
 };
 use beava_persistence::{PersistError, RecordType, WalSink};
 use serde::{Deserialize, Serialize};
@@ -252,23 +252,50 @@ async fn execute_register_inner(
         validated.into_parts();
     let registered_descriptors: Vec<String> = nodes.iter().map(|n| n.name().to_string()).collect();
 
-    let diff = compute_diff(&current_snapshot, &nodes);
+    // Use the new (Phase 13.4 Plan 06) categorized diff. apply_shard's
+    // force-handling block pre-removes every existing descriptor the
+    // payload would change (destructive + additive-against-existing,
+    // when force=true) BEFORE this function runs. By the time we get
+    // here, classify against the post-pre-removal snapshot should never
+    // produce destructive entries — every remaining diff is additive
+    // (NewDescriptor) or already_present (exact match).
+    let diff =
+        beava_core::register_validate::classify_register_diff(&current_snapshot, &nodes);
 
-    if !diff.changed.is_empty() {
+    // Defensive: if destructive entries reach here, the caller bypassed
+    // apply_shard's pre-flight (or it has a bug). Surface as Conflict so
+    // the caller sees a clear 409 instead of silently writing inconsistent
+    // state. Should be unreachable in normal flow; the legacy Conflict
+    // variant goes away in step 3 once we've confirmed it stays cold.
+    if !diff.destructive.is_empty() {
         warn!(
-            kind = "register.conflict",
+            kind = "register.unexpected_destructive_after_preflight",
             version = current_snapshot.version,
-            changed = ?diff.changed.iter().map(|c| &c.name).collect::<Vec<_>>(),
-            "register conflict"
+            destructive = ?diff.destructive,
+            "execute_register saw destructive entries — apply_shard pre-flight should have pre-removed them"
         );
         return RegisterOutcome::Conflict {
             version: current_snapshot.version,
-            added: diff.added,
-            changed: diff.changed,
+            added: vec![],
+            changed: vec![],
         };
     }
 
-    if diff.added.is_empty() {
+    // Net-new descriptors are entries with `kind: new_descriptor`. Other
+    // additive variants (NewField, NewAgg) shouldn't appear here in normal
+    // flow — apply_shard pre-removes their target descriptor with
+    // force=true so they re-land here as NewDescriptor against the
+    // post-removal snapshot.
+    let added: Vec<String> = diff
+        .additive
+        .iter()
+        .filter_map(|e| match e {
+            beava_core::registry_diff::DiffEntry::NewDescriptor { name, .. } => Some(name.clone()),
+            _ => None,
+        })
+        .collect();
+
+    if added.is_empty() {
         info!(
             kind = "register.noop",
             version = current_snapshot.version,
@@ -324,14 +351,14 @@ async fn execute_register_inner(
     info!(
         kind = "register.success",
         version = new_version,
-        added = ?diff.added,
+        added = ?added,
         already_present_count = diff.already_present.len(),
         "register succeeded"
     );
     RegisterOutcome::Success {
         version: new_version,
         registered_descriptors,
-        added: diff.added,
+        added,
         already_present: diff.already_present,
     }
 }
