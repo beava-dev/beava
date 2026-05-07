@@ -1,312 +1,236 @@
-# beava Python SDK
+---
+title: Python SDK
+description: The canonical authoring UX for beava — `@bv.event` / `@bv.table`, the `bv.col` expression DSL, 53 op helpers, and the `App` client.
+sidebarTitle: Python
+---
 
-> **Status:** Authoritative for v0. Documents the **post-13.5 target** Python
-> SDK shape — Phase 13.5 implements the rewrite. Cross-language semantics
-> live in [shared.md](shared.md); wire-level body shapes live in
-> [docs/wire-spec.md](../wire-spec.md).
-> **Last reviewed:** 2026-05-03 (Phase 13.0).
+# Python SDK
 
-## Overview
-
-Python is the **canonical authoring UX** for beava (per project memory
-`project_v2_devex_first` + `project_beava_product`). Feature engineers reach
-for Python first; the TypeScript and Go SDKs are ports of the Python surface
-into idiomatic JS / Go. Wire semantics are identical across languages
-(per [shared.md](shared.md)); per-language idioms differ where the language
-demands them.
-
-The v0 Python public surface is:
-
-- The `bv.App` client class (the 7 lifecycle methods plus context-manager support).
-- Two decorators: `@bv.event` (event source / derivation) and `@bv.table` (aggregation-output, per [ADR-001](../../.planning/decisions/ADR-001-bv-table-partial-overturn.md)).
-- The `bv.col(...)` expression DSL (operator-overloaded AST).
-- 53 op helper functions in the `bv.*` namespace, named per Polars conventions per [ADR-002](../../.planning/decisions/ADR-002-polars-op-rename.md) — `bv.mean` / `bv.var` / `bv.std` / `bv.n_unique` / `bv.quantile` (NOT `bv.avg` / `bv.variance` / etc.).
-- `beava.test` fixtures for pytest integration.
-
-This doc describes the **v0-target** shape that Phase 13.5 will land. The
-current `python/beava/_agg.py` is incomplete (`@bv.table` is stubbed out
-per Plan 12.7-06; only 32 of the 53 op helpers are present; `app.batch_get`
-and `app.reset` are not yet wired). The forward-looking shape documented
-here is what the SDK rewrite ships.
-
-> **Module name:** install via `pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"` until v0.0.0 GA (when `beava` publishes to PyPI). Import as `import beava as bv`.
-
-## Module structure
-
-```
-beava/                     # core flat namespace
-├── __init__.py            # public exports: App, event, table, col, lit, count, sum, mean, ...
-├── _app.py                # App class + transport dispatch
-├── _events.py             # @bv.event decorator (class + function form)
-├── _table.py              # @bv.table decorator (function form, per ADR-001)
-├── _agg.py                # 53 op helpers (count / sum / mean / ... / z_score)
-├── _col.py                # bv.col(...) + bv.lit(...) + operator overloading
-├── _errors.py             # exceptions (RegistrationError, BinaryNotFoundError)
-├── _types.py              # bv.Optional[T], bv.Field(...), type vocab
-├── _wire.py               # frame codec, opcodes
-├── _transport.py          # HTTP / TCP / Embed transports + URL-scheme dispatch
-└── _embed.py              # binary discovery + spawn
-
-beava/test/                # test fixtures (separate submodule)
-├── fixture                # pytest fixture factory
-├── replay                 # replay events for deterministic tests
-└── assert_features_eq     # assertion helper
-
-beava/cli/                 # CLI subcommands (Redis-style: beava bench, beava demo, etc.)
-```
-
-## App class
+beava's Python SDK is the **front door** for declaring pipelines and pushing
+events. Authoring (decorators, the `bv.col` DSL, op helpers) is Python-only;
+the same `App` client is also available in TypeScript and Go for
+[communicate-only use](shared.md) (push events, query features, ship a
+pre-compiled JSON pipeline).
 
 ```python
 import beava as bv
 
+@bv.event
+class Click:
+    user_id: str
+    page: str
+
+@bv.table(key="user_id")
+def UserClicks(c: Click):
+    return c.group_by("user_id").agg(visits=bv.count(window="1h"))
+
+with bv.App() as app:                # spawn local beava binary
+    app.register(Click, UserClicks)
+    app.push("Click", {"user_id": "alice", "page": "/home"})
+    app.push("Click", {"user_id": "alice", "page": "/pricing"})
+    print(app.get("UserClicks", "alice"))   # {'visits': 2}
+```
+
+## Install
+
+```bash
+pip install tally
+```
+
+<Note>
+The PyPI package is currently published as **`tally`** (the codename); the
+import name is **`beava`**. The PyPI rename to `beava` lands at v0.0.0 GA.
+</Note>
+
+Python 3.10+ (PEP 604 union syntax used throughout the SDK).
+
+## App
+
+```python
 class App:
     def __init__(
         self,
         url: str | None = None,
         *,
         timeout: float = 30.0,
+        test_mode: bool = False,
     ) -> None: ...
-
-    # Context manager
-    def __enter__(self) -> "App": ...
-    def __exit__(self, *exc: object) -> None: ...
-
-    # Lifecycle
-    def close(self) -> None: ...
-
-    # Public API (7 wire-mapped methods)
-    def register(
-        self,
-        *descriptors: object,
-        force: bool = False,
-        dry_run: bool = False,
-    ) -> dict[str, object]: ...
-    def push(self, event_name: str, fields: dict[str, object]) -> dict[str, object]: ...
-    def get(self, table: str, key: str | list[str | int | bool]) -> dict[str, object]: ...
-    def batch_get(
-        self,
-        requests: list[tuple[str, str | list[str | int | bool]]],
-    ) -> list[dict[str, object]]: ...
-    def reset(self) -> None: ...
-    def ping(self) -> dict[str, object]: ...
 ```
 
-Each public method maps 1:1 to a wire opcode:
+The constructor selects the transport from the URL scheme:
 
-| Method | Wire opcode | Wire spec section |
-|--------|-------------|-------------------|
-| `app.register(...)` | `OP_REGISTER` (`0x0001`) | [wire-spec § OP_REGISTER](../wire-spec.md#op_register-0x0001) |
-| `app.push(...)` | `OP_PUSH` (`0x0010`) | [wire-spec § OP_PUSH](../wire-spec.md#op_push-0x0010) |
-| `app.get(...)` | `OP_GET` (`0x0020`) | [wire-spec § OP_GET](../wire-spec.md#op_get-0x0020) |
-| `app.batch_get(...)` | `OP_BATCH_GET` (`0x0024`) | [wire-spec § OP_BATCH_GET](../wire-spec.md#op_batch_get-0x0024) |
-| `app.reset()` | `OP_RESET` (`0x0040`) | [wire-spec § OP_RESET](../wire-spec.md#op_reset-0x0040) |
-| `app.ping()` | `OP_PING` (`0x0000`) | [wire-spec § OP_PING](../wire-spec.md#op_ping-0x0000) |
-| `app.close()` | (lifecycle) | n/a — closes transport + terminates embed subprocess. |
+| `url=` | Transport | Use case |
+|---|---|---|
+| `None` (default) | Embed — spawns local `beava` binary on ephemeral ports | Tests, local dev |
+| `http://...` / `https://...` | HTTP/1.1 + JSON | curl-friendly, LB-friendly |
+| `tcp://...` | Custom-framed TCP | Low-latency fast-path |
 
-### Constructor
+`timeout` is a transport-level I/O timeout in seconds. `test_mode=True` only
+applies in embed mode — sets `BEAVA_TEST_MODE=1` in the spawned binary's
+environment so test-only opcodes (`OP_RESET`) are accepted. Setting
+`test_mode=True` against a network URL emits a `UserWarning` and is ignored.
 
-`bv.App(url=None, *, timeout=30.0)` — the URL controls transport selection
-per [shared.md § Wire transports](shared.md#wire-transports):
-
-- `http://...` / `https://...` → HTTP/JSON transport.
-- `tcp://...` → custom-framed TCP transport.
-- `None` (default) → embed mode; spawns local `beava` binary on ephemeral ports.
-
-`timeout` is a transport-level I/O timeout in seconds (default 30.0).
-
-**Embed mode requires the context manager:**
+<Warning>
+**Embed mode requires the context manager.** Calling any wire method on
+`bv.App()` outside a `with` block raises `RuntimeError`. Network-mode
+`App` instances may use `with` or be closed manually via `app.close()`.
+</Warning>
 
 ```python
-with bv.App() as app:                    # spawns the binary, binds to ephemeral ports
-    app.register(Txn, UserFeatures)
-    app.push("Txn", {"user_id": "alice", "amount": 42.50})
-    print(app.get("UserFeatures", "alice"))
-# subprocess terminated on exit
+with bv.App() as app:                       # embed
+    app.register(Click)
+    app.push("Click", {"user_id": "alice", "page": "/home"})
+
+app = bv.App("http://localhost:8080")       # network — no `with` required
+try:
+    app.push("Click", {"user_id": "alice", "page": "/home"})
+finally:
+    app.close()
 ```
 
-Calling `register(...)` on an embed-mode `App` outside a `with` block raises
-`RuntimeError`. Explicit-URL `App` instances may use `with` or be closed
-manually via `app.close()`; both are idempotent.
+### Method summary
 
-**Embed-mode disk lifecycle (`test_mode=True` and the default
-embed-spawn path):** Each embed spawn allocates a unique tmpdir under
-`$TMPDIR/beava-embed-<pid>-<unix-ms>-<hex>/` holding the binary's
-`./wal` and `./snapshots` sub-dirs. The path is registered with
-`atexit.register(shutil.rmtree, ..., ignore_errors=True)`, so the dir
-is reaped at Python interpreter shutdown — long-running test processes
-(e.g. a pytest session that spawns 100s of embed apps) do not leak
-disk. SIGKILL'd Python processes leave the dir for the OS tmpfs reaper
-to handle (typical `$TMPDIR` aging is days). Users of `App(test_mode=True)`
-do not need to register their own cleanup; the SDK handles it.
+Each public method maps 1:1 to one wire opcode. See the
+[HTTP API doc](../http-api.md) for the underlying request/response shapes.
+
+| Method | Opcode | Purpose |
+|---|---|---|
+| `app.register(*descriptors, force=False, dry_run=False)` | `OP_REGISTER` | Declare event sources, derivations, tables. |
+| `app.push(event_name, fields)` | `OP_PUSH` | Push one event. Fire-and-forget (acks=1). |
+| `app.get(table, key=None, features=None)` | `OP_GET` | Single-row feature read. |
+| `app.batch_get(requests)` | `OP_BATCH_GET` | Heterogeneous batched read. |
+| `app.reset()` | `OP_RESET` | Wipe state + WAL. **Test-mode only.** |
+| `app.ping()` | `OP_PING` | Liveness probe + version discovery. |
+| `app.close()` | (lifecycle) | Close transport; terminate embed subprocess. |
 
 ### `app.register(*descriptors, force=False, dry_run=False)`
 
-**Wire opcode:** `OP_REGISTER` (`0x0001`).
+Validates the descriptor list locally (DAG / schema checks; zero network I/O),
+topo-sorts upstreams before dependents, compiles the JSON payload, and
+dispatches.
 
-Validates the descriptor list locally (DAG / schema checks; zero network
-I/O), topo-sorts upstreams before dependents, compiles the `OP_REGISTER`
-JSON payload, and dispatches.
+- `*descriptors` — descriptor objects produced by `@bv.event` or `@bv.table`.
+- `force=True` — accept destructive schema changes (e.g., field type
+  changes). Default `False` — destructive changes raise
+  `RegistrationError(code="registration_conflict")`.
+- `dry_run=True` — validate + return the diff without applying.
+  `registry_version` is unchanged.
 
-**Args:**
+Returns the server response: `{status, registry_version, added, removed?, changed?, diff?}`.
 
-- `*descriptors`: one or more descriptor objects returned by `@bv.event`,
-  `@bv.table`, or fluent op chains (e.g.,
-  `Txn.filter(bv.col("amount") > 100).named("BigTxn")`).
-- `force` (kwarg): if `True`, accept destructive schema changes (e.g.,
-  field type changes). Default `False` — destructive changes raise
-  `RegistrationError(code="registration_conflict")` (HTTP `409`).
-- `dry_run` (kwarg): if `True`, return the diff without applying. Response
-  carries `{added, removed, changed, diff}`; `registry_version` is unchanged.
+Raises `RegistrationError` (with `.code`, `.path`, `.message`, `.errors`) on
+validation failure. Common codes:
 
-**Returns:** server response dict, e.g.
-`{"status": "ok", "registry_version": 1, "added": ["Txn", "UserFeatures"]}`.
+| Code | When |
+|---|---|
+| `registration_conflict` | Destructive change without `force=True`. |
+| `schema_invalid` | Descriptor missing a required field or violates structural constraints. |
+| `cycle` / `missing_upstream` | Descriptor list forms a cycle, or references an undeclared upstream. |
+| `unknown_op` | `agg.<feature>.op` is not in the operator catalogue. Use [Polars-aligned names](#operator-catalog) (e.g. `mean` not `avg`). |
+| `invalid_descriptor` | A raw chain (`EventDerivation`) was passed without being wrapped in `@bv.event def …`. |
 
-**Raises:**
-
-- `RegistrationError` — local validation failed OR server returned 4xx / 5xx.
-  `.code` carries the structured error code per [shared.md § ValidationError envelope](shared.md#validationerror-envelope);
-  `.errors` lists all `ValidationError` entries when the server returns
-  multiple problems.
-- `RuntimeError` — App is closed, or embed-mode used without context manager.
+The full structured-code list is in [docs/error-codes.md](../error-codes.md).
 
 ### `app.push(event_name, fields)`
 
-**Wire opcode:** `OP_PUSH` (`0x0010`).
+Push one event. `event_name` matches a registered `@bv.event` class /
+function name. `fields` is a flat dict matching the registered schema —
+type coercion is permissive on the JSON boundary (string `"42"` for an
+`i64` field is accepted).
 
-Push a single event into a registered event source. `event_name` matches
-the source's class name (or function name, for derivation-form sources).
+Returns `{ack_lsn, registry_version}`. If the event is registered with a
+`dedupe_key` + `dedupe_window`, duplicates within the window return the
+prior `ack_lsn` plus `idempotent_replay: true`.
 
-**Args:**
+### `app.get(table, key=None, features=None)`
 
-- `event_name`: string matching a registered event source.
-- `fields`: dict mapping schema field names to values. Field types must
-  match the registered schema (string-to-int and similar coercions are
-  accepted in v0 per the wire spec).
+Single-row feature read. Returns the **row-shape** — a flat dict of
+feature name → value.
 
-**Returns:** dict carrying `ack_lsn` (server-assigned monotonic Log
-Sequence Number) and `registry_version`. Idempotent re-pushes (matching
-`dedupe_key` within `dedupe_window`) return the prior `ack_lsn` plus
-`idempotent_replay: true`.
+- `table` — name of a registered table.
+- `key` — string for single-key tables; `list[str | int | bool]` for
+  composite-key tables. Pass `None` (the default) for global tables, which
+  are keyless ([per-entity vs global](#global-aggregation)).
+- `features` — optional `list[str]` filter; omit to return all features.
 
-**Raises:**
-
-- `ValidationError` (push variant) — `schema_mismatch`, `missing_field`,
-  `unknown_event`. See [docs/error-codes.md](../error-codes.md) (forward-ref
-  Plan 13.0-12) for the full list.
-- `RuntimeError` — App is closed, or embed-mode used without context manager.
-
-### `app.get(table, key)`
-
-**Wire opcode:** `OP_GET` (`0x0020`).
-
-Single-row feature read. Returns the **row-shape** — a flat dict of feature
-name → value — for the requested `(table, key)` pair.
-
-**Args:**
-
-- `table`: name of a registered table (declared via `@bv.table`).
-- `key`: either a string (single-key tables) or a list of `[str | int | bool]`
-  for composite-key tables.
-
-**Returns:** `dict[str, Any]` mapping feature name to value. **Cold-start**
-(no events ever pushed for this key) returns `{}` — this is **not** an
-error per [shared.md § FeatureResult shape](shared.md#featureresult-shape).
-
-**Raises:**
-
-- `ValidationError` — `unknown_table`, `feature_not_in_table`, `key_shape_mismatch`.
-- `RuntimeError` — App is closed, or embed-mode used without context manager.
+<Tip>
+**Cold-start returns `{}`** — an empty dict, not an error, not a 404. A
+key with no events is just a key with no data, per the Redis-shaped
+contract. `unknown_table` IS an error (raises `RegistrationError`).
+</Tip>
 
 ### `app.batch_get(requests)`
 
-**Wire opcode:** `OP_BATCH_GET` (`0x0024`).
-
-Heterogeneous batch lookup. Equivalent to N parallel `app.get(...)` calls in
-a single round-trip; the server processes them in order, and the response
-list preserves request order.
-
-**Args:**
-
-- `requests`: list of `(table, key)` tuples. Different `table` values may
-  appear in the same batch.
-
-**Returns:** `list[dict[str, Any]]` matching request order. Per-entry
-cold-start is `{}`.
-
-**Raises:**
-
-- `ValidationError` — same set as `app.get(...)` plus `batch_too_large`
-  (when more than `max_batch_size` entries; default 10000). Per
-  [shared.md § Error semantics](shared.md#error-semantics), v0 has **no
-  partial success** — any single bad entry fails the whole batch.
-
-### `app.reset()`
-
-**Wire opcode:** `OP_RESET` (`0x0040`).
-
-Wipe all in-memory state and truncate the WAL. **Destructive — only call
-on a beava instance bound to test data.** Used by `beava.test.fixture` to
-clear state between tests.
-
-**Returns:** `None`.
-
-**Raises:**
-
-- `RuntimeError` — server config has `enable_reset_op=false` (production
-  operators set this to forbid resets).
-
-### `app.ping()`
-
-**Wire opcode:** `OP_PING` (`0x0000`).
-
-Health probe + version discovery.
-
-**Returns:** dict carrying `server_version` (semver string, e.g. `"0.0.0"`)
-and `registry_version` (monotonic counter; clients use as a cache key
-when caching feature schemas).
-
-### `app.close()`
-
-Close the underlying transport (idempotent). For embed-mode `App`
-instances, this also terminates the subprocess (SIGTERM, then SIGKILL
-after 5 seconds).
-
-`__exit__` calls `close()` automatically; manually-managed `App` instances
-should call `app.close()` in a `finally` block.
-
-## Decorators
-
-### @bv.event
-
-The `@bv.event` decorator declares an **event source** (push-shaped) or a
-**derivation** (chain of stateless ops on top of an event source).
-
-#### Class form — event source
+Heterogeneous batch lookup. Equivalent to N parallel `get(...)` calls in
+one round-trip; the response list preserves request order.
 
 ```python
-import beava as bv
+app.batch_get([
+    ("UserClicks", "alice"),                              # 2-tuple form
+    ("UserClicks", "bob", ["visits"]),                    # 3-tuple form — feature filter
+    ("AccountByCard", ["acct123", "card_v1"]),            # composite key
+])
+```
 
+Each entry is a `(table, key)` 2-tuple OR a `(table, key, features)`
+3-tuple where `features` is the same `list[str] | None` filter as in
+`app.get`. Mix forms freely.
+
+<Warning>
+**No partial success.** If any single entry fails validation (bad
+table, bad key shape), the entire batch returns one error envelope with
+the offending index in `path` (e.g. `requests[2].table`). Re-issue
+without the bad entry. Cap is 10 000 entries — exceeding raises
+`batch_too_large`.
+</Warning>
+
+### `app.reset()`, `app.ping()`, `app.close()`
+
+- `reset()` — wipe in-memory state + truncate WAL. Synchronous; the next
+  push observes the cleared state. Server must have `test_mode` enabled
+  (the production default rejects with `reset_disabled_in_production`).
+- `ping()` — returns `{server_version, registry_version}`. Use
+  `registry_version` as a cache key for schema-dependent client state.
+- `close()` — idempotent. For embed-mode `App` instances, also terminates
+  the subprocess (SIGTERM, then SIGKILL after 5 seconds).
+
+## `@bv.event`
+
+Declare an event source (push-shaped) or a derivation (chain on top of an
+event source). Two forms:
+
+### Class form — event source
+
+```python
 @bv.event
 class Txn:
     user_id: str
     amount: float
     merchant: str
-    ip: bv.Optional[str]              # nullable per shared.md § Field types
+    ip: bv.Optional[str]                  # nullable
 ```
 
-The class body declares the event's **schema** via Python type annotations.
-Supported field types are the 6-element vocabulary from
-[shared.md § Field types](shared.md#field-types). Use `bv.Optional[T]` (NOT
-`typing.Optional[T]`) for nullable fields.
+The class body declares the schema via type annotations. The 6-element
+field-type vocabulary is shared across SDKs:
+
+| Wire | Python |
+|---|---|
+| `str` | `str` |
+| `i64` | `int` |
+| `f64` | `float` |
+| `bool` | `bool` |
+| `bytes` | `bytes` |
+| `datetime` | `datetime.datetime` |
+
+Use `bv.Optional[T]` (NOT `typing.Optional[T]`) for nullable fields.
 
 **Per-source kwargs:**
 
 ```python
 @bv.event(
     keep_events_for="30d",        # event retention; default None (unbounded)
-    cold_after="1d",              # cold-entity TTL per V0-MEM-GOV-01; default None
-    dedupe_key="trace_id",        # field name for idempotent replay
+    cold_after="1d",              # cold-entity TTL; default None
+    dedupe_key="trace_id",        # field used for idempotent replay
     dedupe_window="5m",           # dedup TTL
 )
 class Login:
@@ -315,20 +239,21 @@ class Login:
     trace_id: str
 ```
 
-| Kwarg | Type | Default | Behavior |
-|-------|------|---------|----------|
-| `keep_events_for` | duration string | `None` | Event-retention TTL. `None` = unbounded (windowed ops still bound state on their windows). |
-| `cold_after` | duration string | `None` | Per-source cold-entity TTL per V0-MEM-GOV-01 (Phase 12.8). Range: `[1s, 365d]`; `"forever"` is REJECTED — use `cold_after=None` for unbounded retention. |
-| `dedupe_key` | field name | `None` | Field used for idempotent-replay matching. Must be in schema. |
-| `dedupe_window` | duration string | `None` | Dedup TTL — re-pushes within this window with matching `dedupe_key` are treated as idempotent replays. |
+| Kwarg | Type | Default | Behaviour |
+|---|---|---|---|
+| `keep_events_for` | duration | `None` | Event-retention TTL. Windowed ops still bound state on their windows independently. |
+| `cold_after` | duration | `None` | Per-source cold-entity eviction TTL. Range `[1s, 365d]`; `"forever"` is rejected — use `None`. |
+| `dedupe_key` | field name | `None` | Field used for idempotent-replay matching. Must be in the schema. |
+| `dedupe_window` | duration | `None` | Dedup TTL — re-pushes within this window with matching `dedupe_key` are idempotent. |
 
-**`event_time` is NOT supported in v0** per
-`project_redis_shaped_no_event_time_ever`. The server stamps wall-clock
-processing time on every push; declaring an `event_time` field on the
-class raises `TypeError`. Same for the `tolerate_delay` and
-`event_time_field` kwargs — they raise `TypeError` at decoration time.
+<Note>
+**Event-time is not supported in v0.** beava stamps wall-clock processing
+time on every push. Declaring an `event_time` field (or passing
+`tolerate_delay` / `event_time_field` kwargs) raises `TypeError` at
+decoration time.
+</Note>
 
-#### Function form — event derivation
+### Function form — derivation
 
 ```python
 @bv.event
@@ -336,20 +261,17 @@ def BigTxn(txn: Txn):
     return txn.filter(bv.col("amount") > 100)
 ```
 
-The function form takes one or more **annotated parameters** referencing
-upstream `@bv.event`-decorated descriptors and returns a chain expression.
-The decorator extracts the chain, names it (function name → derivation
-name), and registers it as a derivation node with `output_kind=event`.
+The function form takes annotated parameters referencing upstream
+`@bv.event`-decorated descriptors and returns a chain expression. The
+decorator extracts the chain and registers it as a derivation node with
+`output_kind=event`.
 
-The chain methods supported on event descriptors are documented under
-[Pipeline DSL](#pipeline-dsl-chained-methods-on-eventtable) below.
+## `@bv.table`
 
-The function-form parameter annotations are resolved against the same
-declaration-site contract documented under
-[Supported `@bv.event` declaration sites](#supported-bvevent-declaration-sites)
-below — module-level + enclosing closure + caller-frame locals.
+Aggregation-output decorator. v0 has no `app.upsert` / `app.delete` /
+`app.retract` — tables are populated **only** by upstream aggregations.
 
-### @bv.table (function form, per ADR-001)
+### Per-entity table
 
 ```python
 @bv.event
@@ -370,389 +292,214 @@ def UserTxnFeatures(txn: Txn):
     )
 ```
 
-The `@bv.table(key=...)` decorator wraps a function whose body returns
-`events.group_by(...).agg(...)` into a **named, keyed derivation** with
-`output_kind=table`. This is the **partial overturn** of the events-only
-commitment per [ADR-001](../../.planning/decisions/ADR-001-bv-table-partial-overturn.md):
+`key=` accepts a string OR a list of strings (composite key). The function
+body MUST return `events.group_by(...).agg(...)`.
 
-- `@bv.table(key=...)` is REVIVED as the aggregation-output decorator.
-- `app.upsert(...)`, `app.delete(...)`, `app.retract(...)` REMAIN absent.
-- Tables are populated **only** by upstream aggregation derivations — they
-  are NOT user-mutable.
-- MVCC, `TemporalStore`, retraction propagation, and session windows
-  REMAIN killed.
+### Global aggregation
 
-**Args:**
-
-- `key`: string OR list of strings (composite key). The list form declares
-  a composite-key table; entries on the wire follow the same order as
-  the list.
-
-**Function body:** the body MUST return `events.group_by(...).agg(...)`.
-The decorator captures the chain, names the result (function name →
-table name), and emits a derivation node with `output_kind=table`.
-
-**Class form is v0.1+** — only function form is supported in v0.
-
-#### Supported `@bv.event` declaration sites
-
-`@bv.event` and `@bv.table` need to resolve their parameter annotations
-back to the actual upstream class objects. This works under PEP 563
-(`from __future__ import annotations`) by following a documented
-resolution order. Any name found by one of the sites below resolves
-correctly; names that don't appear in any of these scopes raise a
-`NameError`-style failure at decoration time.
-
-| # | Site | Mechanism | Example |
-|---|---|---|---|
-| 1 | Module-level (canonical) | `fn.__globals__` | `@bv.event class Click: ...` at module top |
-| 2 | Enclosing closure cells | `fn.__closure__` + `fn.__code__.co_freevars` | Inner-class captured by the decorated fn body |
-| 3 | Caller-frame `f_locals` (user-code) | Walked outward from the decoration site by FILE IDENTITY (any frame outside `python/beava/_table.py` and `python/beava/_events.py`); first-seen wins; depth-bounded to 32 frames | Function-local class declared inside a pytest test fn or class method |
-
-**Module-level (priority 1, canonical):**
+Omit the `key=` kwarg (or use `@bv.table` bare, with no parens) for a
+**single-row, no-entity-dimension** aggregation:
 
 ```python
-@bv.event
-class Click:
-    user_id: str
-    page: str
+@bv.table
+def TotalClicks(clicks: Click):
+    return clicks.agg(total=bv.count(window="forever"))
 
-@bv.table(key="user_id")
-def UserClicks(c: Click):
-    return c.group_by("user_id").agg(n=bv.count(window="forever"))
+app.get("TotalClicks")          # → {"total": N}, no entity arg
 ```
 
-This is the mypy-friendly default; prefer it whenever possible.
-
-**Function-local (priority 3, pytest-fixture pattern):**
+Three equivalent forms compile to the same wire shape (`key: []` on
+register, `key: ""` sentinel on get):
 
 ```python
-def test_user_clicks():
-    @bv.event
-    class Click:                 # local to this fn — never reaches module scope
-        user_id: str
-
-    @bv.table(key="user_id")
-    def UserClicks(c: Click):
-        return c.group_by("user_id").agg(n=bv.count(window="forever"))
-
-    # ... use UserClicks in the test ...
+clicks.agg(total=bv.count(...))                  # shortest
+clicks.group_by().agg(total=bv.count(...))       # explicit empty group_by
+@bv.table                                        # decorator with no key=
+def Foo(c): return c.agg(total=bv.count(...))
 ```
 
-The resolver finds `Click` by walking outward through the call stack
-(skipping its own internal frames) until it lands on the test fn's frame,
-where `Click` is in `f_locals`.
+All 53 operators work with both per-entity and global aggregation. Use
+cases: dashboards (global throughput, p95), anomaly detection on global
+rates, cross-entity aggregations (total spend across all users).
 
-**Inner-class via closure (priority 2, factory pattern):**
+`app.get` arity:
+
+| Table type | Call | Cold-start |
+|---|---|---|
+| Per-entity | `app.get(table, key)` | `{}` |
+| Global | `app.get(table)` | `{}` |
+
+Mismatched arity raises `KeyError`.
+
+### Where can `@bv.event` / `@bv.table` be declared?
+
+The decorators resolve parameter annotations back to upstream class
+objects. Resolution order:
+
+1. **Module-level** (canonical, mypy-friendly) — `fn.__globals__`.
+2. **Closure cells** (factory pattern) — `fn.__closure__` + `co_freevars`.
+3. **Caller-frame `f_locals`** (test-fixture pattern) — walks outward
+   from the decoration site by file identity (any frame outside
+   `python/beava/_table.py` and `_events.py`); first-seen wins; bounded
+   to 32 frames.
+
+Lambdas are not supported (the resolver needs a real `def`). Names
+imported via `from x import *` after the decorator runs aren't found.
+
+## Pipeline DSL chain methods
+
+Polars-style chain on event descriptors and derivations:
+
+| Method | Returns | Description |
+|---|---|---|
+| `events.filter(expr)` | derivation | Keep rows where `expr` is True. |
+| `events.select(*cols)` | derivation | Keep only the named fields. |
+| `events.drop(*cols)` | derivation | Remove the named fields. |
+| `events.rename(**mapping)` | derivation | Rename fields. |
+| `events.with_columns(**exprs)` | derivation | Add or overwrite derived fields. |
+| `events.map(**exprs)` | derivation | Alias for `with_columns`. |
+| `events.cast(**type_map)` | derivation | Change field types (`{"str", "int", "float", "bool"}`). |
+| `events.fillna(**defaults)` | derivation | Replace nulls with defaults. |
+| `events.group_by(*keys)` | groupby | Start an aggregation. Empty for global. |
+| `groupby.agg(**named_features)` | derivation | Compile to an aggregation node. |
+
+Full ambiguity matrix and FORBIDDEN patterns:
+[pipeline-dsl/compilation-rules](../pipeline-dsl/compilation-rules.md).
+
+## Expression DSL — `bv.col` / `bv.lit`
 
 ```python
-@bv.event
-class Click:
-    user_id: str
-
-def make_user_clicks_table():
-    @bv.table(key="user_id")
-    def UserClicks(c: Click):    # Click captured as a free variable
-        return c.group_by("user_id").agg(n=bv.count(window="forever"))
-
-    return UserClicks
+bv.col("amount") > 100                                 # comparison
+bv.col("user_id") == "alice"                           # equality
+(bv.col("amount") > 100) & (bv.col("status") == "ok")  # AND  — use & not `and`
+(bv.col("amount") > 100) | (bv.col("status") == "ok")  # OR   — use | not `or`
+~(bv.col("flag"))                                      # NOT  — use ~ not `not`
+bv.col("amount").isnull()                              # null check
+bv.col("status").cast("int")                           # type cast
+bv.col("a") + bv.col("b") * 2                          # arithmetic
+bv.lit(42)                                             # explicit literal
 ```
 
-The decorated fn `UserClicks` references `Click` from the enclosing
-scope. Python compiles `Click` into the fn's `__closure__` cells; the
-resolver inspects the cells directly. This pattern is also robust to
-`@functools.lru_cache`-wrapped factories — the cache wraps the OUTER
-factory, not the inner decorated fn, so the closure cells survive.
+Python's `and` / `or` / `not` keywords cannot be overloaded — use the
+bitwise symbols `&` / `|` / `~`. Operator precedence usually requires
+parenthesising each comparison.
 
-**Class-method (priority 3, unittest pattern):**
+`bv.lit(value)` accepts `int | float | str | bool | None` and is useful
+for constant columns and for forcing explicit literal coercion:
 
 ```python
-class TestSuite:
-    def make_table(self):
-        @bv.event
-        class Click:
-            user_id: str
-
-        @bv.table(key="user_id")
-        def UserClicks(c: Click):
-            return c.group_by("user_id").agg(n=bv.count(window="forever"))
-
-        return UserClicks
+events.with_columns(source=bv.lit("web"))                       # constant column
+events.with_columns(rate=bv.col("count") / bv.lit(60.0))        # force float division
+events.filter(bv.col("amount") > bv.lit(100))                   # explicit literal
 ```
 
-Same priority-3 mechanism as the function-local pattern; the resolver
-walks back to the method body's frame.
+The implicit operator-overloading coercion (`bv.col("x") > 100`) still
+works; `bv.lit` is for the cases where explicit construction matters
+(constant columns, type-coercion, cross-language parity with TS/Go which
+lack Python's flexible operator overloading).
 
-**Not supported:**
+Full grammar and edge cases:
+[pipeline-dsl/expressions](../pipeline-dsl/expressions.md).
 
-- Lambdas: `@bv.table` requires a real `def` body — the upstream-proxy
-  call needs a fn object, and lambdas are limited to a single
-  expression.
-- Names imported via `from x import *` *after* the decorator runs: the
-  resolver runs at decoration time; if the name doesn't exist yet, it
-  can't be found.
-
-## bv.sum signature (Q1 Path B locked)
+### `bv.sum(field: str, ...)` accepts string column names only
 
 ```python
 def sum(field: str, *, window: str | None = None, where: bv.Col | None = None) -> AggDescriptor: ...
 ```
 
-> **Locked per Q1 Path B** ([13.0-CONTEXT.md](../../.planning/phases/13.0-design-contract-spec-docs/13.0-CONTEXT.md)).
-> The Python `bv.sum(field: str, ...)` signature accepts a string column name
-> **only**. Inline expressions are **FORBIDDEN**.
-
-### What is FORBIDDEN
+<Warning>
+**Inline expressions as the field arg are forbidden.** This locks the
+signature at parity with TS / Go (which are communicate-only and don't
+have an expression layer at all).
 
 ```python
-# FORBIDDEN — inline boolean-cast expression as the field arg.
-bv.sum(bv.col("is_fraud").cast(int), window="1h")     # ✗ raises RegistrationError
-bv.sum(bv.col("amount") * 2, window="1h")             # ✗ same
+bv.sum(bv.col("is_fraud").cast(int), window="1h")     # raises RegistrationError
+bv.sum(bv.col("amount") * 2, window="1h")             # same
 ```
+</Warning>
 
-Why: v0 keeps the `bv.sum(field: str)` shape stable across all 3 SDKs (TS
-`bv.sum("field", { window: "1h" })`, Go `beava.Sum("field", beava.Window("1h"))`).
-Allowing arbitrary `_ExprAST` field args in Python only would split the
-contract — TS and Go would either need feature-parity (extra wire surface)
-or stay narrower (unequal SDKs). Locking the signature to `field: str`
-keeps every SDK at parity and keeps the wire contract minimal.
-
-The SDK raises `RegistrationError(code="schema_mismatch")` at register-time
-when the field arg is not a string.
-
-### Recommended pattern: two-stage `with_columns` + `sum`
-
-The canonical pattern for **conditional counts** (e.g., "count of fraud
-events per user per hour") uses a two-stage chain — derive a typed column
-with `with_columns(...)` first, then sum the typed column:
+The canonical pattern for conditional counts is two-stage —
+`with_columns` to derive the typed column, then `sum` on the derived
+column:
 
 ```python
 @bv.table(key="user_id")
 def UserFraudCounts(txn: Txn):
     return (
-        txn.with_columns(flag_int=bv.col("is_fraud").cast(int))   # stage 1: derive int column
+        txn.with_columns(flag_int=bv.col("is_fraud").cast(int))
            .group_by("user_id")
-           .agg(c=bv.sum("flag_int", window="1h"))                # stage 2: sum the int column
+           .agg(c=bv.sum("flag_int", window="1h"))
     )
 ```
 
-The `with_columns` call writes a derived field (`flag_int` here) into the
-event row before the `group_by(...)` keys it. The aggregation then sums a
-plain `i64` field, exactly as the wire shape expects.
-
-> **See:** [`docs/pipeline-dsl/compilation-rules.md`](../pipeline-dsl/compilation-rules.md)
-> § Boolean-sum recipe (Plan 13.0-12 — forward reference) for the canonical
-> worked example, the corresponding wire JSON, and the ambiguity-matrix
-> FORBIDDEN row that locks this rule across all 3 SDKs.
-
-This narrowing applies **symmetrically** across the
-[TypeScript SDK](typescript.md) and the [Go SDK](go.md). All three express
-the same rule with idiomatic syntax:
-
-| Language | Forbidden | Recommended |
-|----------|-----------|-------------|
-| Python | `bv.sum(bv.col("flag").cast(int), window="1h")` | `events.with_columns(flag_int=bv.col("flag").cast(int)).group_by(...).agg(c=bv.sum("flag_int", window="1h"))` |
-| TypeScript | `bv.sum(bv.col("flag").cast("int"), { window: "1h" })` | `events.withColumns({ flag_int: bv.col("flag").cast("int") }).groupBy(...).agg({ c: bv.sum("flag_int", { window: "1h" }) })` |
-| Go | `beava.Sum(beava.Col("flag").Cast("int"), beava.Window("1h"))` | `events.WithColumns(map[string]beava.Expr{ "flag_int": beava.Col("flag").Cast("int") }).GroupBy(...).Agg(...)` |
-
-## Pipeline DSL (chained methods on Event/Table)
-
-Per [docs/pipeline-dsl/overview.md](../pipeline-dsl/overview.md) (Plan
-13.0-12 — forward reference), the v0-supported chain methods on event
-descriptors and event derivations are Polars-style:
-
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `events.filter(expr)` | `EventDerivation` | Keep only rows where `expr` is True. |
-| `events.select(*cols)` | `EventDerivation` | Keep only the named fields. |
-| `events.drop(*cols)` | `EventDerivation` | Remove the named fields. |
-| `events.rename(**mapping)` | `EventDerivation` | Rename fields per mapping. |
-| `events.with_columns(**exprs)` | `EventDerivation` | Add or overwrite derived fields. |
-| `events.map(**exprs)` | `EventDerivation` | Alias for `with_columns` (legacy). |
-| `events.cast(**type_map)` | `EventDerivation` | Change field types; targets in `{"str", "int", "float", "bool"}`. |
-| `events.fillna(**defaults)` | `EventDerivation` | Replace null values. |
-| `events.group_by(*keys)` | `GroupBy` | Start an aggregation pipeline. |
-| `groupby.agg(**named_features)` | derivation | Compile to an aggregation derivation node. |
-
-The full ambiguity matrix (chained filters, select-then-group-by,
-multi-agg, FORBIDDEN patterns like `with_columns AFTER group_by`) lives at
-[`docs/pipeline-dsl/compilation-rules.md`](../pipeline-dsl/compilation-rules.md).
-
-## Expression DSL (bv.col)
-
-```python
-bv.col("amount") > 100                               # comparison: amount > 100
-bv.col("user_id") == "alice"                         # equality: user_id == 'alice'
-(bv.col("amount") > 100) & (bv.col("status") == "ok")  # conjunction (use & for and)
-(bv.col("amount") > 100) | (bv.col("status") == "ok")  # disjunction (use | for or)
-~(bv.col("flag"))                                    # negation (use ~ for not)
-bv.col("amount").isnull()                            # null check
-bv.col("status").cast("int")                         # type cast
-bv.col("a") + bv.col("b") * 2                        # arithmetic
-bv.lit(42)                                           # literal value
-```
-
-Operator overloading details:
-
-- `+`, `-`, `*`, `/` — arithmetic.
-- `>`, `>=`, `<`, `<=`, `==`, `!=` — comparison (always returns `bool`).
-- `&`, `|`, `~` — boolean combinators (`and`, `or`, `not`). Python's
-  `and` / `or` / `not` keywords cannot be overloaded; use the bitwise
-  symbols.
-- `.isnull()` — equivalent to `(x == null)`.
-- `.cast("type")` — emits `cast(x, type)` where the target name renders
-  as a bare identifier (validated against `{"str", "int", "float", "bool"}`).
-
-Cross-link: [`docs/pipeline-dsl/expressions.md`](../pipeline-dsl/expressions.md)
-(Plan 13.0-12) for the full grammar and edge cases.
-
-`bv.lit(value)` wraps a Python value as a literal AST node, useful for
-explicit literal coercion or for the rare case where Python operator
-precedence requires it.
-
-## Public expression literals (`bv.lit`) — per ADR-003
-
-Per [ADR-003](../../.planning/decisions/ADR-003-global-aggregation-and-bv-lit.md), `bv.lit(value)` is exposed as a public factory function in the `bv` namespace. The signature accepts `int | float | str | bool | None`:
-
-```python
-def lit(value: int | float | str | bool | None) -> Expr: ...
-```
-
-Use cases:
-
-```python
-# Constant column — add a fixed-value column to an event derivation
-events.with_columns(source=bv.lit("web"))
-
-# Force float division — both operands could be ints, but bv.lit makes float explicit
-events.with_columns(rate=bv.col("count") / bv.lit(60.0))
-
-# Explicit literal in filter (equivalent to implicit operator-overloading coercion)
-events.filter(bv.col("amount") > bv.lit(100))
-```
-
-The implicit operator-overloading coercion (`bv.col("x") > 100`) still works — `bv.lit` is for cases where explicit construction matters (constant columns, type-coercion patterns, cross-language parity with TS/Go SDKs that lack Python's flexible operator overloading).
-
-`bv.lit` lands in Phase 13.5 (`python/beava/__init__.py`, ~5 LOC). Acceptance gate: `python/tests/v0/test_lit.py` (Plan 13.0-16, 5 tests).
-
-## Global aggregation — per ADR-003
-
-Per [ADR-003](../../.planning/decisions/ADR-003-global-aggregation-and-bv-lit.md), beava ships first-class **global aggregation** alongside the per-entity surface. Declare a global table by omitting the `key=` kwarg on `@bv.table`:
-
-```python
-@bv.event
-class Click:
-    user_id: str
-    page: str
-
-@bv.table   # no key= → global table
-def TotalClicks(clicks) -> bv.Table:
-    return clicks.agg(total=bv.count(window="forever"))
-
-app = bv.App()
-app.register(Click, TotalClicks)
-app.push("Click", {"user_id": "alice", "page": "/home"})
-app.push("Click", {"user_id": "bob",   "page": "/home"})
-
-app.get("TotalClicks")  # → {"total": 2}, no entity arg
-```
-
-**Three equivalent forms** compile to the same wire payload (all use `key: []`):
-
-```python
-clicks.agg(total=bv.count(...))                 # shortest — direct .agg() shorthand
-clicks.group_by().agg(total=bv.count(...))      # explicit empty group_by
-@bv.table                                       # decorator with no key=
-def Foo(c): return c.agg(total=bv.count(...))
-```
-
-All 53 operators work with both per-entity and global aggregation — same op semantics, different state-keying dimension. See [`docs/concepts/global-aggregation.md`](../concepts/global-aggregation.md) for the full conceptual treatment (when to use global vs per-entity, performance characteristics, composition with `cold_after=`).
-
-**`App.get` arity contract:**
-
-| Table type | Call shape | Cold-start return |
-|---|---|---|
-| Per-entity table | `app.get(table_name, entity_id)` (2 args required) | `{}` for unknown entity |
-| Global table | `app.get(table_name)` (1 arg required) | `{}` until first event |
-
-Mismatched arity raises `KeyError` with a clear message indicating the table's expected arity. The Python SDK enforces this at call-site (no silent wrong-shape behavior).
-
-**Use cases for global aggregation:**
-
-- Operator dashboards (total throughput, current entity count, global p95)
-- Anomaly detection on global rates ("is the GLOBAL signup rate spiking?")
-- Top-K-globally features ("top 10 hottest pages on the platform")
-- Cross-entity aggregations ("total spend across all users in last hour")
-
-**Implementation deferred** to Phase 13.5 (~110 LOC: `bv.lit` export + `events.group_by()` empty allowance + `events.agg(**aggs)` shorthand + `@bv.table` no-`key=` form + `App.get(table_name)` 1-arg overload). The wire-level signal is `key: []` (empty array) on the register payload + sentinel `key: ""` (empty string) on the GET request — see [`docs/wire-spec.md`](../wire-spec.md) § Global tables. Acceptance gate: `python/tests/v0/test_global.py` (Plan 13.0-16, 8 tests).
-
 ## Operator catalog
 
-The `bv.*` namespace exposes 53 op helper functions, organised into 8
-families. Each helper returns an `AggDescriptor`; `groupby.agg(...)`
-consumes them by keyword to name the resulting feature column. Ops are
-named per [ADR-002](../../.planning/decisions/ADR-002-polars-op-rename.md)
-(Polars conventions).
+The `bv.*` namespace exposes 53 operator helpers. Each returns an
+`AggDescriptor` consumed by `groupby.agg(...)` to name the resulting
+feature column. Names follow Polars conventions —  `mean` / `var` /
+`std` / `n_unique` / `quantile` (not `avg` / `variance` / etc.).
 
-| Family | Ops | Doc |
-|--------|-----|-----|
-| Core (8) | count, sum, mean, min, max, var, std, ratio | [docs/operators/core/](../operators/core/) |
-| Sketch (5) | n_unique, quantile, top_k, bloom_member, entropy | [docs/operators/sketch/](../operators/sketch/) |
-| Point/ordinal (5) | first, last, first_n, last_n, lag | [docs/operators/point-ordinal/](../operators/point-ordinal/) |
-| Recency (10) | first_seen, last_seen, age, has_seen, time_since, time_since_last_n, streak, max_streak, negative_streak, first_seen_in_window | [docs/operators/recency/](../operators/recency/) |
-| Decay (6) | ewma (alias ema), ewvar, ew_zscore, decayed_sum, decayed_count, twa | [docs/operators/decay/](../operators/decay/) |
-| Velocity (9) | rate_of_change, inter_arrival_stats, burst_count, delta_from_prev, trend, trend_residual, outlier_count, value_change_count, z_score | [docs/operators/velocity/](../operators/velocity/) |
-| Bounded-buffer (7) | histogram, hour_of_day_histogram, dow_hour_histogram, seasonal_deviation, event_type_mix, most_recent_n, reservoir_sample | [docs/operators/buffer-geo/](../operators/buffer-geo/) |
-| Geo (4) | geo_velocity, geo_distance, geo_spread, distance_from_home | [docs/operators/buffer-geo/](../operators/buffer-geo/) |
+<CardGroup cols={2}>
+  <Card title="Core (8)" icon="hash" href="/operators/core/">
+    `count`, `sum`, `mean`, `min`, `max`, `var`, `std`, `ratio`
+  </Card>
+  <Card title="Sketch (5)" icon="chart-bar" href="/operators/sketch/">
+    `n_unique`, `quantile`, `top_k`, `bloom_member`, `entropy`
+  </Card>
+  <Card title="Point/ordinal (5)" icon="list-ol" href="/operators/point-ordinal/">
+    `first`, `last`, `first_n`, `last_n`, `lag`
+  </Card>
+  <Card title="Recency (10)" icon="clock" href="/operators/recency/">
+    `first_seen`, `last_seen`, `age`, `has_seen`, `time_since`, `time_since_last_n`, `streak`, `max_streak`, `negative_streak`, `first_seen_in_window`
+  </Card>
+  <Card title="Decay (6)" icon="wave-square" href="/operators/decay/">
+    `ewma` (alias `ema`), `ewvar`, `ew_zscore`, `decayed_sum`, `decayed_count`, `twa`
+  </Card>
+  <Card title="Velocity (9)" icon="gauge-high" href="/operators/velocity/">
+    `rate_of_change`, `inter_arrival_stats`, `burst_count`, `delta_from_prev`, `trend`, `trend_residual`, `outlier_count`, `value_change_count`, `z_score`
+  </Card>
+  <Card title="Buffer (7)" icon="layer-group" href="/operators/buffer-geo/">
+    `histogram`, `hour_of_day_histogram`, `dow_hour_histogram`, `seasonal_deviation`, `event_type_mix`, `most_recent_n`, `reservoir_sample`
+  </Card>
+  <Card title="Geo (4)" icon="map-pin" href="/operators/buffer-geo/">
+    `geo_velocity`, `geo_distance`, `geo_spread`, `distance_from_home`
+  </Card>
+</CardGroup>
 
-Total: 8+5+5+10+6+9+7+4 = **54** entries. The `ema` row is an alias for
-`ewma` (same server-side op), so the 53 unique server-side ops plus the
-`ema` alias produce the 54-row catalogue table.
+### Deprecation aliases
 
-Per ADR-002, the renamed ops have **deprecation aliases** in v0:
+Five renamed ops ship deprecation aliases that emit `DeprecationWarning`
+and will be removed in v0.1:
 
-| New (v0 canonical) | Old (deprecated, raises `DeprecationWarning`) |
-|---------------------|----------------------------------------------|
-| `bv.mean(...)` | `bv.avg(...)` |
-| `bv.var(...)` | `bv.variance(...)` |
-| `bv.std(...)` | `bv.stddev(...)` |
-| `bv.n_unique(...)` | `bv.count_distinct(...)` |
-| `bv.quantile(...)` | `bv.percentile(...)` |
+| Canonical | Deprecated alias |
+|---|---|
+| `bv.mean` | `bv.avg` |
+| `bv.var` | `bv.variance` |
+| `bv.std` | `bv.stddev` |
+| `bv.n_unique` | `bv.count_distinct` |
+| `bv.quantile` | `bv.percentile` |
 
-Old names ship as deprecation aliases in v0.0.x and are **removed in v0.1**.
-
-Per-op signatures, semantics, and worked examples live on each per-op
-page under [`docs/operators/<family>/<op>.md`](../operators/) (Plans
-13.0-05 through 13.0-11 — forward references).
-
-## Exceptions
-
-The public exception hierarchy (from `python/beava/_errors.py`):
+## Bundled demos — `bv.demo`
 
 ```python
-class RegistrationError(Exception):
-    code: str                          # structured error code (one of 9 ValidationError kinds)
-    path: str                          # JSON-pointer-style path to offending field
-    message: str                       # human-readable message
-    errors: list[ValidationError]      # all errors when server returns multiple
+demo = bv.demo("fraud")          # also: "adtech", "ecommerce"
+# → {"name": "fraud", "schema": [<descriptors>], "events": [<events>]}
 
-class BinaryNotFoundError(Exception):
-    pass                               # raised by embed mode when binary not on PATH
-
-@dataclass(frozen=True)
-class ValidationError:
-    kind: str                          # one of VALIDATION_ERROR_KINDS
-    path: str
-    message: str
+with bv.App() as app:
+    app.register(*demo["schema"])
+    for ev in demo["events"]:
+        app.push(ev["event_name"], ev["fields"])
 ```
 
-The 9 valid `ValidationError.kind` values are documented in
-[shared.md § ValidationError envelope](shared.md#validationerror-envelope).
-The full alphabetised structured-code list with HTTP status mapping lives
-at [`docs/error-codes.md`](../error-codes.md) (Plan 13.0-12 — forward
-reference).
+`bv.demo(name)` loads a bundled dataset shipped at
+`python/beava/demos/<name>/{schema.json, events.jsonl}`. Returns
+`{name, schema, events}`. Raises `ValueError` on unknown name (lists the
+valid choices), `RuntimeError` if the bundled files are missing from
+this install.
 
-## bv.test fixtures
+Useful for end-to-end smoke tests, reproductions, and live demos.
+
+## Test fixtures — `beava.test`
 
 ```python
 import pytest
@@ -778,43 +525,59 @@ def test_count_per_user(app):
     app.push("Txn", {"user_id": "bob"})
 
     assert_features_eq(app.get("Counts", "alice"), {"c": 2})
-    assert_features_eq(app.get("Counts", "bob"), {"c": 1})
+    assert_features_eq(app.get("Counts", "bob"),   {"c": 1})
 ```
 
 `beava.test.fixture(reset_each=True)`:
 
-- Yields an embed-mode `App` instance (binary spawned on ephemeral ports).
-- If `reset_each=True` (default), calls `app.reset()` between tests via
-  `OP_RESET` to clear in-memory state and truncate the WAL.
-- Cleans up the subprocess on test session teardown.
+- Yields an embed-mode `App` (binary spawned on ephemeral ports).
+- If `reset_each=True` (default), calls `app.reset()` between tests.
+- Cleans up the subprocess on session teardown.
 
-`beava.test.assert_features_eq(got, want)` — assertion helper that
-compares feature dicts with helpful diff output. Tolerant of float
-near-equality (relative tolerance `1e-9`) for sketch-based ops like
-`quantile` and `n_unique`.
+`assert_features_eq(got, want)` — assertion helper with helpful diff
+output and float near-equality (relative tolerance `1e-9`) for sketch ops
+like `quantile` and `n_unique`.
 
-## Versioning + compatibility
+## Errors
 
-- **Python versions:** Python 3.10+ (PEP 604 union syntax used throughout).
-- **Wire compatibility:** v0 SDKs talk to v0 servers. Cross-version
-  compatibility (newer SDK ↔ older server, etc.) is reserved for v0.1+.
-- **API stability:** the public surface in this doc is **frozen for v0**.
-  Adding new optional kwargs is non-breaking; removing or renaming
-  surface is breaking.
-- **Deprecation policy:** ADR-002-renamed op aliases (`bv.avg` etc.) ship
-  in v0.0.x and are removed in v0.1. The `DeprecationWarning` includes
-  the new name.
+```python
+class RegistrationError(Exception):
+    code: str                         # one of the structured error codes
+    path: str                         # JSON-pointer-style path to the offending field
+    message: str                      # human-readable explanation
+    errors: list[ValidationError]     # all errors when the server returns multiple
 
-## Plan-level traceability
+class BinaryNotFoundError(Exception):
+    """Raised by embed mode when the beava binary is not on PATH."""
 
-This document is authored by Plan 13.0-04 (Wave 1). Downstream consumers:
+@dataclass(frozen=True)
+class ValidationError:
+    kind: str                         # one of 9 frozen kinds
+    path: str
+    message: str
+```
 
-- [`docs/sdk-api/typescript.md`](typescript.md) — TS SDK port mirrors this surface.
-- [`docs/sdk-api/go.md`](go.md) — Go SDK port mirrors this surface.
-- **Phase 13.5** — Python SDK rewrite reads this doc as the canonical
-  surface; lands the v0-target shape (full `_agg.py` 53 helpers, full
-  `_app.py` with `batch_get` / `reset`, `@bv.table` revival).
-- **Phase 13.6** — TS + Go SDK ports use this doc as the parity reference.
+The 9 `ValidationError.kind` values are documented in
+[shared.md § ValidationError envelope](shared.md#validationerror-envelope).
+The full alphabetised structured-code list (with HTTP status mapping) is in
+[error-codes.md](../error-codes.md).
 
-For the full Phase 13.0 plan tree, see
-[`.planning/phases/13.0-design-contract-spec-docs/13.0-PLAN.md`](../../.planning/phases/13.0-design-contract-spec-docs/13.0-PLAN.md).
+Error message text follows a forward-looking framing — messages say "X is
+not supported in v0", not "X has been removed". This avoids implying a
+previous-version reference for users who never saw older revisions.
+
+## Cross-language parity
+
+The Python SDK is the canonical authoring UX. The TypeScript and Go SDKs
+ship the **communicate** surface only — no decorators, no expression DSL,
+no op helpers. Authoring flow:
+
+1. Author the pipeline in Python via the DSL.
+2. Compile to JSON (via `app.register_json(...)` or by serialising
+   descriptors).
+3. Ship that JSON to a TypeScript / Go application — they pass it through
+   to `app.register(...)` verbatim.
+
+See [shared.md](shared.md) for the cross-language contract: wire transports,
+window grammar, key shape, error envelope, and the per-language signature
+table.
