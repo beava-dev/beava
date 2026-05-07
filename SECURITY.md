@@ -10,7 +10,7 @@ Only the latest release on `main` receives security fixes during pre-1.0.
 
 ## Reporting a Vulnerability
 
-Email **security@beava.dev** with details. Do NOT open a public GitHub issue for
+Email **hoang@beava.dev** with details. Do NOT open a public GitHub issue for
 security vulnerabilities.
 
 You can also file a private security advisory at
@@ -40,4 +40,4 @@ reverse-proxy TLS termination) are in scope.
 
 ## Contact
 
-Security: security@beava.dev
+Security: hoang@beava.dev
