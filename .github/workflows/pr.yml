@@ -2,11 +2,11 @@ name: PR Checks
 
 on:
   pull_request:
-    # No `synchronize` — pushing new commits does NOT auto-rerun the
-    # heavy gate. A code owner must remove + re-add `ok-to-test` to
-    # re-validate the new tip. Explicit re-approval per commit, no
-    # CI burn from rapid pushes.
-    types: [opened, reopened, labeled]
+    # ONLY `labeled` — workflow fires exactly when a code owner adds
+    # `ok-to-test`. PR open/reopen/push do NOT trigger anything; the
+    # label IS the trigger. To re-run after new commits, remove + re-add
+    # the label (one-shot per label-add, no auto-rerun on push).
+    types: [labeled]
     branches: [main]
 
 concurrency:
