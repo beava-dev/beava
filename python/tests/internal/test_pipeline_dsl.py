@@ -99,7 +99,7 @@ def test_event_function_form_creates_derivation() -> None:
 
 
 def test_event_with_event_time_field_raises_TypeError() -> None:
-    """Per docs/sdk-api/python.md: declaring event_time field raises TypeError (no event-time in v0)."""
+    """Declaring event_time field raises TypeError, no event-time in v0 (docs/sdk-api/python.md)."""
     with pytest.raises(TypeError, match="event_time"):
         @bv.event
         class HasEventTime:

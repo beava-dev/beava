@@ -44,7 +44,7 @@ def test_first_per_user_high_volume(app):
 
     rng = random.Random(60)
     first_seen: dict[str, str] = {}
-    for i in range(500):
+    for _ in range(500):
         user = rng.choice(ENTITIES)
         device = f"device-{rng.randint(0, 19):02d}"
         if user not in first_seen:

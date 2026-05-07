@@ -124,7 +124,8 @@ def _run_ts(scenario_path: Path) -> list[dict]:
     )
     if proc.returncode != 0:
         raise RuntimeError(
-            f"TS adapter failed (exit {proc.returncode}):\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}"
+            f"TS adapter failed (exit {proc.returncode}):\n"
+            f"STDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}"
         )
     return json.loads(proc.stdout.strip())["results"]
 
@@ -140,13 +141,15 @@ def _run_go(scenario_path: Path) -> list[dict]:
     )
     if proc.returncode != 0:
         raise RuntimeError(
-            f"Go adapter failed (exit {proc.returncode}):\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}"
+            f"Go adapter failed (exit {proc.returncode}):\n"
+            f"STDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}"
         )
     return json.loads(proc.stdout.strip())["results"]
 
 
 _ENGINE_ALIGNMENT_MARKERS = (
-    "unsupported_node_kind",  # engine still rejects kind:"table" (Phase 12.7 strip not yet reverted)
+    # engine still rejects kind:"table" (Phase 12.7 strip not yet reverted)
+    "unsupported_node_kind",
     "missing field `fields`",  # engine event-descriptor schema doesn't match docs/wire-spec.md
     "missing field `keys`",  # engine /get expects {table, keys, features} not {table, key}
     "unknown_field_v0",  # engine push body doesn't accept {fields: ...} wrapper

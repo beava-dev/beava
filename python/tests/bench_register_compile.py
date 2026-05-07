@@ -23,9 +23,9 @@ import json
 from typing import Any
 
 import pytest
+from beava._validate import topo_sort, validate_descriptors
 
 import beava as bv
-from beava._validate import topo_sort, validate_descriptors
 
 # ---------------------------------------------------------------------------
 # 10-descriptor DAG — module-level so @bv.event function-form annotations

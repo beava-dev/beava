@@ -9,7 +9,6 @@ import pytest
 
 import beava as bv
 
-
 # ─── Decay helpers ─────────────────────────────────────────────────────────────
 
 

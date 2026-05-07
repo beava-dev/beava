@@ -59,7 +59,6 @@ import pytest
 
 import beava as bv
 
-
 # D-01 USER-LOCKED message stable-prefix (substring match resilient to
 # whitespace tweaks; the verbatim em-dash continuation lives downstream).
 _D01_PREFIX = (

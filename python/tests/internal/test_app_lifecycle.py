@@ -20,7 +20,6 @@ import pytest
 
 import beava as bv
 
-
 # ─── Real-engine fixture (Phase 13.5.1 D-05 USER-LOCKED replacement) ─────────
 
 
@@ -208,7 +207,7 @@ def test_close_is_idempotent() -> None:
 
 
 def test_embed_mode_requires_context_manager() -> None:
-    """Calling register on an embed-mode App outside `with` raises RuntimeError per docs/sdk-api/python.md."""
+    """Embed-mode App.register() outside `with` raises RuntimeError (docs/sdk-api/python.md)."""
     a = bv.App()  # embed mode, no `with`
     with pytest.raises(RuntimeError, match="context manager"):
         a.register()

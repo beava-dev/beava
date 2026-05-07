@@ -18,7 +18,6 @@ import pytest
 import beava as bv
 from beava._events import EventDerivation
 
-
 # ---------------------------------------------------------------------------
 # @bv.table function form
 # ---------------------------------------------------------------------------

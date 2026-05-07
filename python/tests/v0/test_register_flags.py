@@ -27,7 +27,6 @@ from typing import Any
 import pytest
 
 import beava as bv
-
 from beava._errors import RegistrationError
 
 from ._helpers import _engine_available

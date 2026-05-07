@@ -33,7 +33,6 @@ import json
 import os
 import shutil
 import signal
-import statistics
 import subprocess
 import sys
 import tempfile

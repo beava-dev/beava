@@ -12,10 +12,8 @@ import json
 import struct
 import threading
 from socket import AF_INET, SOCK_STREAM, socket
-from typing import Any
 
 import pytest
-
 
 # ─── Codec helpers (mirrors _wire.py) ────────────────────────────────────────
 

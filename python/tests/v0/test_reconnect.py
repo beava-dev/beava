@@ -36,7 +36,6 @@ from __future__ import annotations
 import socket
 import subprocess
 import time
-from typing import Any
 
 import pytest
 
