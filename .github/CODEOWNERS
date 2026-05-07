@@ -1,0 +1,30 @@
+# Code owners for beava-dev/beava.
+#
+# Anyone listed here is automatically requested for review on PRs that
+# touch a matching path. Used together with branch protection on `main`
+# to require a code-owner approval before checks run + before merge.
+#
+# Format: <pattern> <owner>... — see
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-security/customizing-your-repository/about-code-owners
+
+# Catch-all: every PR needs sign-off from the listed maintainers.
+*                                @petrpan26
+
+# Crates / Rust source — same maintainers, but listed explicitly so
+# reviews land on the right people once the team grows.
+/crates/                         @petrpan26
+/Cargo.toml                      @petrpan26
+/Cargo.lock                      @petrpan26
+
+# Python SDK — gate alongside the wire format the binary speaks.
+/python/                         @petrpan26
+
+# CI / deploy infra — extra-careful path, owners-only edits in practice.
+/.github/                        @petrpan26
+/deploy/                         @petrpan26
+/beava-website/deploy/           @petrpan26
+
+# Pipeline JSON drives a live re-register on the Hetzner box (per the
+# auto-register step in deploy-hetzner.yml). Schema changes are
+# user-visible, so route them deliberately.
+/beava-website/deploy/site-metrics-pipeline.json   @petrpan26

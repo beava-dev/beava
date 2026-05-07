@@ -2,6 +2,9 @@ name: PR Checks
 
 on:
   pull_request:
+    # `labeled` is in the trigger list so adding `ok-to-test` re-fires
+    # the workflow without needing a fresh push.
+    types: [opened, synchronize, reopened, labeled]
     branches: [main]
 
 concurrency:
@@ -17,8 +20,22 @@ env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
 
+# Heavy checks are gated behind the `ok-to-test` label, which only users
+# with write access (i.e. code owners per .github/CODEOWNERS) can apply.
+# PRs from the repo owner / org members with write access run the gate
+# automatically. External contributors need a code owner to add the
+# label after review.
+#
+# To run: as a code owner, click "Labels" on the PR sidebar → check
+# `ok-to-test`. Workflow re-fires immediately (we're listening to the
+# `labeled` activity type above).
+
 jobs:
   rust:
+    if: |
+      github.event.pull_request.head.repo.full_name == github.repository
+      || contains(github.event.pull_request.labels.*.name, 'ok-to-test')
+
     name: Rust (fmt, clippy, test, release build)
     runs-on: ubuntu-latest
     timeout-minutes: 15
