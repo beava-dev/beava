@@ -326,9 +326,7 @@ impl ApplyShard {
                     // here so it lands as a clean add.
                     for entry in &diff.additive {
                         match entry {
-                            beava_core::registry_diff::DiffEntry::NewField {
-                                event, ..
-                            } => {
+                            beava_core::registry_diff::DiffEntry::NewField { event, .. } => {
                                 to_remove.push(event.clone());
                             }
                             beava_core::registry_diff::DiffEntry::NewAgg { table, .. } => {
