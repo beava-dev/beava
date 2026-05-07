@@ -1,6 +1,18 @@
 name: Deploy beava.dev to Hetzner
 
 on:
+  # Server-side change (crates/** etc.) → publish-edge-image rebuilds the
+  # image; this deploy waits for that workflow to finish before running so
+  # we never re-register a new pipeline shape against a stale image. The
+  # job-level `if:` guard skips the deploy when publish-edge fails.
+  workflow_run:
+    workflows: ["Publish edge image to Docker Hub"]
+    types: [completed]
+    branches: [main]
+  # Website-only change (no server rebuild needed) → fire on push, in
+  # parallel with anything else. Path filter must NOT include any path
+  # that publish-edge-image.yml also watches, otherwise both triggers
+  # fire on the same commit and race again.
   push:
     branches: [main]
     paths:
@@ -22,11 +34,18 @@ concurrency:
 
 jobs:
   rsync:
+    # When triggered by workflow_run, only run on a successful upstream.
+    # Other triggers (push, workflow_dispatch) always run.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # When triggered by workflow_run, GitHub checks out the workflow
+          # file's branch (main) by default, but for clarity make it explicit.
+          ref: main
 
       - name: Setup SSH agent
         uses: webfactory/ssh-agent@v0.9.0
