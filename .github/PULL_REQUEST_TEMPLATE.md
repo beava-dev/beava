@@ -17,8 +17,10 @@ before pushing — saves a round-trip.
 ### One-shot
 
 ```bash
-bash .github/scripts/check.sh        # full: fmt + clippy + tests + pytest
-bash .github/scripts/check.sh --fast # skip cargo test (~10× faster)
+bash .github/scripts/check.sh           # full: fmt + clippy + tests + pytest
+bash .github/scripts/check.sh --fast    # skip cargo test (~10× faster)
+bash .github/scripts/check.sh --rust    # rust gates only
+bash .github/scripts/check.sh --python  # python gates only (ruff + mypy + pytest)
 ```
 
 The script prints a `PASS / FAIL` summary you can paste below as proof.
@@ -31,8 +33,8 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets --features testing -- -D warnings
 cargo nextest run --features testing --no-fail-fast    # or: cargo test --workspace --features testing
 
-# Python SDK
-cd python && python -m pytest tests/ -v
+# Python SDK (honors pyproject testpaths = tests/v0 — the gated suite)
+cd python && python -m pytest -v
 
 # Docker image (matches publish-edge-image.yml)
 docker build -f deploy/Dockerfile.beava -t beava:dev .
@@ -53,7 +55,9 @@ reviewer can see the local run passed before they label `ok-to-test`:
 PASS  cargo fmt --all --check  (1s)
 PASS  cargo clippy --workspace --all-targets --features testing -- -D warnings  (37s)
 PASS  cargo nextest run --features testing --no-fail-fast  (84s)
-PASS  pytest python/tests  (12s)
+PASS  ruff check python/  (0s)
+PASS  mypy --strict beava/
+PASS  pytest python (v0 acceptance suite)  (13s)
 ```
 
 <!-- Replace the example block above with your real output. -->

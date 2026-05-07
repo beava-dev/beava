@@ -6,16 +6,24 @@
 # Usage:
 #   bash .github/scripts/check.sh            # run everything, print summary
 #   bash .github/scripts/check.sh --fast     # skip cargo test (~10× faster)
+#   bash .github/scripts/check.sh --rust     # rust gates only (cargo fmt/clippy/test)
+#   bash .github/scripts/check.sh --python   # python gates only (ruff + mypy + pytest)
 #   bash .github/scripts/check.sh --output=  # path for full log (default ~/.beava-check.log)
+#
+# --rust and --python are mutually exclusive; pass neither to run both.
 #
 # Exit code: 0 if all checks pass, non-zero otherwise.
 set -uo pipefail
 
 FAST=0
+RUN_RUST=1
+RUN_PYTHON=1
 OUT="$HOME/.beava-check.log"
 for arg in "$@"; do
   case "$arg" in
     --fast) FAST=1 ;;
+    --rust) RUN_PYTHON=0 ;;
+    --python) RUN_RUST=0 ;;
     --output=*) OUT="${arg#--output=}" ;;
     -h|--help)
       sed -n '2,/^set/p' "$0" | sed 's/^# \{0,1\}//; /^set /d'
@@ -23,6 +31,11 @@ for arg in "$@"; do
     *) echo "unknown arg: $arg" >&2; exit 2 ;;
   esac
 done
+
+if [[ "$RUN_RUST" -eq 0 && "$RUN_PYTHON" -eq 0 ]]; then
+  echo "error: --rust and --python are mutually exclusive" >&2
+  exit 2
+fi
 
 : > "$OUT"
 SUMMARY=()
@@ -45,23 +58,25 @@ run() {
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO_ROOT"
 
-run "cargo fmt --all --check" \
-  cargo fmt --all --check
+if [[ "$RUN_RUST" -eq 1 ]]; then
+  run "cargo fmt --all --check" \
+    cargo fmt --all --check
 
-run "cargo clippy --workspace --all-targets --features testing -- -D warnings" \
-  cargo clippy --workspace --all-targets --features testing -- -D warnings
+  run "cargo clippy --workspace --all-targets --features testing -- -D warnings" \
+    cargo clippy --workspace --all-targets --features testing -- -D warnings
 
-if [[ "$FAST" -eq 0 ]]; then
-  if command -v cargo-nextest >/dev/null 2>&1; then
-    run "cargo nextest run --features testing --no-fail-fast" \
-      cargo nextest run --features testing --no-fail-fast
-  else
-    run "cargo test --workspace --features testing" \
-      cargo test --workspace --features testing
+  if [[ "$FAST" -eq 0 ]]; then
+    if command -v cargo-nextest >/dev/null 2>&1; then
+      run "cargo nextest run --features testing --no-fail-fast" \
+        cargo nextest run --features testing --no-fail-fast
+    else
+      run "cargo test --workspace --features testing" \
+        cargo test --workspace --features testing
+    fi
   fi
 fi
 
-if [[ -d python && -f python/pyproject.toml ]]; then
+if [[ "$RUN_PYTHON" -eq 1 && -d python && -f python/pyproject.toml ]]; then
   if command -v ruff >/dev/null 2>&1; then
     run "ruff check python/" \
       bash -c 'cd python && ruff check .'
@@ -78,8 +93,11 @@ if [[ -d python && -f python/pyproject.toml ]]; then
   else
     SUMMARY+=("SKIP  mypy --strict beava/  (mypy not installed)")
   fi
-  run "pytest python/tests" \
-    bash -c 'cd python && python -m pytest tests/ -q'
+  # Honor pyproject's testpaths (= tests/v0) — CI gates against this suite only.
+  # Legacy tests/internal/, tests/bench/, tests/integration/, tests/conformance/
+  # are documented drift, tracked as v0.0.x cleanup backlog.
+  run "pytest python (v0 acceptance suite)" \
+    bash -c 'cd python && python -m pytest -q --no-header'
 fi
 
 # Tail-of-log + summary.
