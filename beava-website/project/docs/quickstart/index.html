@@ -115,20 +115,17 @@
 <article class="docs-prose">
 <h1>Beava Quickstart</h1>
 <blockquote>
-<p><code>pip install tally</code> -&gt; first feature in 60 seconds.</p>
+<p><code>pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"</code> -&gt; first feature in 60 seconds.</p>
 </blockquote>
 <p>Beava is a real-time feature server. You declare aggregations in plain Python,
 push events over HTTP, and query computed features by entity key --
 sub-millisecond -- with <code>curl</code> alone or any HTTP client.</p>
-<p><img src="/assets/quickstart-demo.svg" alt="Beava quickstart: pip install tally, push events, query fresh per-campaign features" loading="lazy" class="doc-img"></p>
+<p><img src="/assets/quickstart-demo.svg" alt="Beava quickstart: pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python", push events, query fresh per-campaign features" loading="lazy" class="doc-img"></p>
 <h2 id="install" tabindex="-1"><a class="header-anchor" href="#install" aria-hidden="true">#</a> Install</h2>
-<pre><code class="language-bash">pip install tally
+<pre><code class="language-bash">pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"
 </code></pre>
 <blockquote>
-<p><strong>Pre-release naming.</strong> The PyPI package is currently published as <code>tally</code>
-(the project's repo codename). The <code>beava</code> package name is reserved for
-v0.0.0 GA. Until then, install <code>tally</code> and import as <code>import beava as bv</code>
-(the import name is already <code>beava</code>).</p>
+<p><strong>Pre-release.</strong> Install from main until v0.0.0 GA, when <code>beava</code> publishes to PyPI. Import name is <code>beava</code> in both cases.</p>
 </blockquote>
 <p>The pip package ships the Python SDK. The <code>beava</code> server binary is bundled and
 discovered automatically by <code>bv.App()</code> (no separate install). For production

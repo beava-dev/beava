@@ -145,7 +145,7 @@ app.register(LoginAttempt, IpSignals, UserSignals)`;
     };
 
     const RegisterAndQuery = () => {
-      const install = `pip install tally\npython fraud_pipeline.py`;
+      const install = `pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"\npython fraud_pipeline.py`;
       const push = `curl -X POST https://your-beava/events/LoginAttempt \\
   -H 'Content-Type: application/json' \\
   -d '{
@@ -174,7 +174,7 @@ app.register(LoginAttempt, IpSignals, UserSignals)`;
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg3)', marginBottom: 8, letterSpacing: '0.03em' }}>1. install + run</div>
               <div style={{ position: 'relative' }}>
                 <pre className="code-well" style={{ fontSize: 14, padding: '18px 22px', lineHeight: 1.65, margin: 0 }}>
-                  <span className="cmt">$ </span>pip install tally{'\n'}
+                  <span className="cmt">$ </span>pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"{'\n'}
                   <span className="cmt">$ </span>python fraud_pipeline.py
                 </pre>
                 <CopyBtn text={install}/>

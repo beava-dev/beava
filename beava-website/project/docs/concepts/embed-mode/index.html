@@ -118,9 +118,7 @@
 ephemeral ports. This is <strong>embed mode</strong> — beava-the-server runs in-process
 under your Python interpreter for the lifetime of the <code>App</code>. There is no
 remote infrastructure, no port allocation, and no setup. You go from
-<code>pip install tally</code> to a registered, queryable feature server in one line.
-(The PyPI package is currently published as <code>tally</code>; <code>beava</code> is reserved
-for v0.0.0 GA. Import is <code>import beava as bv</code> either way.)</p>
+<code>pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"</code> to a registered, queryable feature server in one line.</p>
 <p>Embed mode exists for notebooks, scripts, pytest fixtures, and the
 <code>bv.demo()</code> quickstart. It is not how you ship to production.</p>
 <h2 id="how-it-works" tabindex="-1"><a class="header-anchor" href="#how-it-works" aria-hidden="true">#</a> How it works</h2>
@@ -163,12 +161,10 @@ repo.</p>
 <p><strong>Raise <code>BinaryNotFoundError</code></strong> with install guidance:</p>
 <pre><code class="language-text">beava binary not found. Install with one of:
   brew install beava
-  pip install tally[server]
+  pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"
   docker pull beava/beava
 Or set BEAVA_BINARY=/path/to/beava.
 </code></pre>
-<p>(Note: until v0.0.0 GA the PyPI package is published as <code>tally</code>. The
-server-extras name will switch back to <code>beava[server]</code> at GA.)</p>
 </li>
 </ol>
 <p>The 4-step order is fixed — see
@@ -191,10 +187,9 @@ Python process.</li>
 </ul>
 <h2 id="when-to-use-embed-mode" tabindex="-1"><a class="header-anchor" href="#when-to-use-embed-mode" aria-hidden="true">#</a> When to use embed mode</h2>
 <ul>
-<li><strong>Quickstart and <code>bv.demo()</code></strong> — <code>pip install tally</code> and have a working
+<li><strong>Quickstart and <code>bv.demo()</code></strong> — <code>pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"</code> and have a working
 feature server in one line. No installer, no <code>docker run</code>, no port
-conflict. (PyPI package is currently <code>tally</code>; will switch to <code>beava</code>
-at v0.0.0 GA.)</li>
+conflict.</li>
 <li><strong>Pytest fixtures.</strong> <code>bv.test.fixture(reset_each=True)</code> spawns a fresh
 embed per test, gives each test an isolated server, tears down on
 teardown. Per-test isolation without the test author managing

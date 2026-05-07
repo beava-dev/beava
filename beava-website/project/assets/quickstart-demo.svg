@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 540" font-family="ui-monospace, 'JetBrains Mono', Menlo, Monaco, Consolas, monospace" font-size="13">
   <title>Beava quickstart — pip install, push events, query fresh features</title>
-  <desc>Terminal screenshot showing pip install tally, running an adtech demo, and querying live aggregated features per campaign.</desc>
+  <desc>Terminal screenshot showing pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python", running an adtech demo, and querying live aggregated features per campaign.</desc>
 
   <!-- Window chrome -->
   <rect x="0" y="0" width="880" height="540" rx="12" ry="12" fill="#1f1a17"/>
@@ -15,8 +15,8 @@
   <!-- Body -->
   <g transform="translate(28 60)" fill="#f6eed9">
     <!-- pip install -->
-    <text x="0" y="14"><tspan fill="#b85c20">$</tspan> pip install tally</text>
-    <text x="0" y="36" fill="#8a6a54">Successfully installed tally-0.0.0</text>
+    <text x="0" y="14"><tspan fill="#b85c20">$</tspan> pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"</text>
+    <text x="0" y="36" fill="#8a6a54">Successfully installed beava</text>
 
     <!-- python demo run -->
     <text x="0" y="68"><tspan fill="#b85c20">$</tspan> python3 examples/python/adtech.py</text>

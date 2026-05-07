@@ -61,8 +61,8 @@
             <p><strong>Define events. Maintain tables. Query fresh state.</strong></p>
 
             <h2 id="install">Install beava</h2>
-            <Code lang="bash">{`pip install tally`}</Code>
-            <p>(The PyPI package is currently published as <code>tally</code> — the project's repo codename. The <code>beava</code> package name is reserved for the v0.0.0 GA cut. The Python import is <code>import beava as bv</code> regardless.)</p>
+            <Code lang="bash">{`pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"`}</Code>
+            <p>(Pre-release: install from main until v0.0.0 GA, when <code>beava</code> publishes to PyPI. Import name is <code>beava</code> in both cases.)</p>
             <p>Start a local beava server:</p>
             <Code lang="bash">{`beava -c beava.yaml`}</Code>
             <p>beava is designed to start small. For local development, a single beava process should be enough to define pipelines, push events, and query features.</p>

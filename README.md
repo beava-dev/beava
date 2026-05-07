@@ -23,16 +23,18 @@ Think **Redis for stateful streaming features**, with 50+ purpose-built aggregat
 
 ## 60-second quickstart
 
+Pre-release: install everything from main. PyPI / crates.io / Homebrew tap publish on the v0.0.0 cut.
+
 ```bash
-# Server
-brew install beava-dev/beava/beava           # macOS
-# or: curl https://beava.dev/install.sh | sh # Linux + macOS
-# or: docker run -p 8080:8080 -p 8081:8081 beavadev/beava
+# Server (Docker — published from main on every push)
+docker run -p 8080:8080 -p 8081:8081 beavadev/beava:edge
 
-beava --data-dir ./.beava/                   # in another terminal
+# Or build from source
+cargo install --git https://github.com/beava-dev/beava beava-server
+beava --data-dir ./.beava/
 
-# Python SDK (PyPI publish coming v0.0.x; install from git for now)
-pip install git+https://github.com/beava-dev/beava.git@v0.0.0#subdirectory=python
+# Python SDK (from main — PyPI 'beava' reserved for v0.0.0 GA)
+pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"
 ```
 
 ```python
@@ -80,8 +82,8 @@ Replaces Postgres triggers + Redis counters + the cron job that heals drift. Sam
 
 beava binds two listeners:
 
-- **HTTP/JSON on `127.0.0.1:8080`** — curl-compatible debugging path. See [docs/http-api](https://beava.dev/docs/http-api).
-- **Framed TCP on `127.0.0.1:8081`** — sub-millisecond fast-path. JSON or msgpack content. See [docs/wire-spec](https://beava.dev/docs/wire-spec).
+- **HTTP/JSON on `127.0.0.1:8080`** — curl-compatible debugging path.
+- **Framed TCP on `127.0.0.1:8081`** — sub-millisecond fast-path. JSON or msgpack content.
 
 ### HTTP
 
@@ -140,34 +142,16 @@ No TLS in v0 — terminate at nginx, Envoy, or Cloudflare if you need it. No aut
 
 ## Learn more
 
-- [beava.dev/docs](https://beava.dev/docs) — full reference
-- [beava.dev/guide](https://beava.dev/guide) — fraud, adtech, ecommerce use-case guides
-- [crates/beava-bench/README.md](crates/beava-bench/README.md) — benchmark harness, reproduce the numbers
+- [beava.dev](https://beava.dev) — site, docs, guides, RFCs, dev calls
 - [examples/](examples/) — vertical demos in Python
+- [crates/beava-bench/README.md](crates/beava-bench/README.md) — benchmark harness, reproduce the numbers
 
 ## Community & open-source commitment
 
-[The open-source project should be the real system](https://beava.dev/docs/vision/open-source/) — something
-you can clone, run, test, operate, and trust as your use case grows. A managed
-beava service can remove operational burden later, but the open-source binary is
-the real product. TiDB-style commitment to open source. Apache-2.0, no
-open-core lock-in.
+The open-source project is the real system — something you can clone, run, test, operate, and trust as your use case grows. A managed beava service can remove operational burden later, but the open-source binary is the real product. TiDB-style commitment to open source. Apache-2.0, no open-core lock-in.
 
-Six concrete commitments (also tracked on the [open-source vision page](https://beava.dev/docs/vision/open-source/)):
-
-| Commitment | Where it lives |
-|---|---|
-| **Public RFCs** | [RFC index](https://beava.dev/docs/community/rfcs/) — RFC-001 through RFC-009 (tiered storage, table ingestion, joins, OOO events, replay, online migration, retention, latency-vs-throughput, HA) |
-| **Weekly dev calls** | [Schedule + summaries](https://beava.dev/docs/community/dev-calls/) |
-| **Practical examples** | [examples/](examples/) — fraud, ad-tech, ecommerce vertical demos |
-| **Reproducible benchmarks** | [crates/beava-bench/README.md](crates/beava-bench/README.md) + [methodology](https://beava.dev/docs/vision/benchmarks/) — workload shape, hardware, durability mode, repro command |
-| **Clear contribution paths** | [CONTRIBUTING.md](CONTRIBUTING.md) (build/test/PR), [GOVERNANCE.md](GOVERNANCE.md) (who decides, what stays Apache-2.0 forever), [MAINTAINERS.md](MAINTAINERS.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) |
-| **Transparent infrastructure** | This repo: full source, full WAL/snapshot/durability path, full benchmark harness — no managed-only features in v0 |
-
-Other ways in:
-
-- **GitHub Discussions:** [github.com/beava-dev/beava/discussions](https://github.com/beava-dev/beava/discussions) — questions, design ideas, "is this a bug?"
-- **Discord:** [discord.gg/Jnx89PN9](https://discord.gg/Jnx89PN9) — drop-in chat with maintainers
-- **Security reports:** [SECURITY.md](SECURITY.md) — private disclosure to `hoang@beava.dev`
+- **Discussions:** [github.com/beava-dev/beava/discussions](https://github.com/beava-dev/beava/discussions)
+- **Discord:** [discord.gg/Jnx89PN9](https://discord.gg/Jnx89PN9)
+- **Security:** private disclosure to `hoang@beava.dev` (see [SECURITY.md](SECURITY.md))
 
 [Apache 2.0](LICENSE) · [CHANGELOG](CHANGELOG.md) · [SECURITY](SECURITY.md) · [CONTRIBUTING](CONTRIBUTING.md) · [GOVERNANCE](GOVERNANCE.md) · [MAINTAINERS](MAINTAINERS.md) · [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md)
