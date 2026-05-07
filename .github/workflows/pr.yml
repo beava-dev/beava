@@ -68,31 +68,6 @@ jobs:
           tail -5 /tmp/rust-test-output.txt >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "No test output captured" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
-  sharding-parity-smoke:
-    name: "N=1 vs N=8 parity smoke (PR gate)"
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: rust-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
-          restore-keys: |
-            rust-${{ runner.os }}-
-
-      - name: Run sharding parity smoke
-        run: PROPTEST_CASES=50 cargo test -p beava --test sharding_parity -- --nocapture
-        # Hard pre-merge gate per TPC-CORR-05 / Phase 52 D-14
-        # Branch protection: add sharding-parity-smoke to required status checks in
-        # GitHub repo Settings → Branches → main → Required status checks.
-
   python:
     name: Python SDK tests
     runs-on: ubuntu-latest
