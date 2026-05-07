@@ -1,0 +1,67 @@
+name: Publish edge image to ghcr.io
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'deploy/Dockerfile.beava'
+      - '.github/workflows/publish-edge-image.yml'
+  workflow_dispatch:
+
+# Default-deny GITHUB_TOKEN (OWASP / GitHub-Actions hardening). Elevate
+# only what's needed: read source + push the image to GHCR.
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  # One image build at a time per branch — avoid two concurrent pushes
+  # racing on the `:edge` tag.
+  group: publish-edge-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile.beava
+          push: true
+          # `:edge` always tracks the latest main commit; `:sha-<sha>`
+          # gives an immutable handle for rollback / pinning.
+          tags: |
+            ghcr.io/beava-dev/beava:edge
+            ghcr.io/beava-dev/beava:sha-${{ github.sha }}
+          # Buildx layer cache speeds up subsequent runs.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Job summary
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## ghcr.io image published
+          - \`ghcr.io/beava-dev/beava:edge\` (rolling)
+          - \`ghcr.io/beava-dev/beava:sha-${{ github.sha }}\` (immutable)
+          - Pull: \`docker pull ghcr.io/beava-dev/beava:edge\`
+          - Run:  \`docker run -p 8080:8080 ghcr.io/beava-dev/beava:edge\`
+          EOF
