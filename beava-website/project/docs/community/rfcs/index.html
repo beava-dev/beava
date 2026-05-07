@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="../../../styles/colors_and_type.css">
   <link rel="stylesheet" href="../../../styles/site.css">
   <link rel="stylesheet" href="../../../styles/docs-kit.css">
-  <link rel="icon" href="../../../assets/mascot-mark-geometric.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="shortcut icon" href="/assets/favicon.ico">
   <style>
     html, body { margin: 0; padding: 0; }
     body { background: var(--bg); color: var(--fg1); font-family: var(--font-sans); }
@@ -67,7 +67,7 @@
               <li><a href="/docs/community/rfcs/rfc-006-online-pipeline-migration/"><strong>RFC-006 — Online pipeline migration</strong></a>. Add features and modify windows without bouncing the process.</li>
               <li><a href="/docs/community/rfcs/rfc-007-event-log-retention/"><strong>RFC-007 — Event log retention</strong></a>. Keep raw events past the WAL window so a fresh node can replay the log to reconstruct itself.</li>
               <li><a href="/docs/community/rfcs/rfc-008-latency-vs-throughput/"><strong>RFC-008 — Latency vs throughput tradeoffs</strong></a>. Opt-in tiers (client batching, early ack, lockless reads) for workloads that don't need strict atomicity.</li>
-              <li><a href="/docs/community/rfcs/rfc-009-ha-deployment/"><strong>RFC-009 — HA deployment for single-node Beava</strong></a>. Active-passive WAL replication and automatic failover. Keeps the single-node programming model; eliminates the SPOF.</li>
+              <li><a href="/docs/community/rfcs/rfc-009-ha-deployment/"><strong>RFC-009 — HA deployment for single-node beava</strong></a>. Active-passive WAL replication and automatic failover. Keeps the single-node programming model; eliminates the SPOF.</li>
             </ul>
 
             <h2 id="when">What belongs in an RFC?</h2>

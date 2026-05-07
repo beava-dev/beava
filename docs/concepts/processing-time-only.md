@@ -1,6 +1,6 @@
 # Processing-Time Only (No Event-Time)
 
-Beava's only time source is server-side processing time — `now_ms()`
+beava's only time source is server-side processing time — `now_ms()`
 sampled at the moment the apply loop processes the event. There is no
 event-time, no watermark, no late-event handling, no out-of-order
 reordering, no time-travel queries. State is a function of arrival-order
@@ -54,17 +54,17 @@ feature. Three reasons:
    trigger semantics, late-firing semantics, garbage-collection windows).
    That subsystem buys you correctness in the face of out-of-order
    arrivals — a property whose value depends entirely on whether your
-   producers actually misorder events. Beava's target workload (fraud /
+   producers actually misorder events. beava's target workload (fraud /
    ad-tech / behavioral analytics) consumes from sources that are
    in-order or near-enough.
-2. **Mental model parity with Redis.** Beava is "Redis for stateful
+2. **Mental model parity with Redis.** beava is "Redis for stateful
    streaming features." Redis has no event-time and no one wants it to.
    Users push, users get, the answer is whatever the current state says.
-   Beava sits in the same operational slot.
+   beava sits in the same operational slot.
 3. **Eliminates a whole class of correctness bugs.** Watermark-driven
    pipelines have failure modes (early-firing, late-firing, allowed
    lateness misconfiguration, dropped events past the watermark) that
-   take significant operator skill to manage. Beava doesn't have them
+   take significant operator skill to manage. beava doesn't have them
    because the model doesn't admit them.
 
 The trade is real: if your use case is *historical replay with original

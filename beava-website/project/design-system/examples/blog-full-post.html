@@ -355,7 +355,7 @@
       <pre class="code"><button class="code-copy">◌ copy</button><span class="cmt"># your first pipeline — 3 lines of logic</span>
 <span class="kw">import</span> beava <span class="kw">as</span> bv
 
-<span class="fn">@bv.stream</span>
+<span class="fn">@bv.event</span>
 <span class="kw">class</span> <span class="t">PageView</span>:
     user_id: <span class="t">str</span>
     path:    <span class="t">str</span>
@@ -460,7 +460,7 @@ bv.<span class="fn">App</span>(<span class="str">"0.0.0.0:6400"</span>).<span cl
       <pre class="code"><button class="code-copy">◌ copy</button><span class="cmt"># a per-customer analytics dashboard</span>
 <span class="kw">import</span> beava <span class="kw">as</span> bv
 
-<span class="fn">@bv.stream</span>
+<span class="fn">@bv.event</span>
 <span class="kw">class</span> <span class="t">PageView</span>:
     user_id:  <span class="t">str</span>
     path:     <span class="t">str</span>

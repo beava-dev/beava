@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="../../../../styles/colors_and_type.css">
   <link rel="stylesheet" href="../../../../styles/site.css">
   <link rel="stylesheet" href="../../../../styles/docs-kit.css">
-  <link rel="icon" href="../../../../assets/mascot-mark-geometric.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="shortcut icon" href="/assets/favicon.ico">
   <style>
     html, body { margin: 0; padding: 0; }
     body { background: var(--bg); color: var(--fg1); font-family: var(--font-sans); }
@@ -56,7 +56,7 @@
             <span className="rfc-meta"><span className="dot"/>Status: Draft</span>
 
             <h2 id="summary">Summary</h2>
-            <p className="bv-lede">Beava's current data plane applies events one at a time and serializes reads against writes — clean to reason about, but leaves an order of magnitude of throughput on the table for workloads that don't need that strictness. Propose three opt-in knobs that let users trade strict atomicity for batch-shaped throughput, while keeping the strict default unchanged.</p>
+            <p className="bv-lede">beava's current data plane applies events one at a time and serializes reads against writes — clean to reason about, but leaves an order of magnitude of throughput on the table for workloads that don't need that strictness. Propose three opt-in knobs that let users trade strict atomicity for batch-shaped throughput, while keeping the strict default unchanged.</p>
 
             <h2 id="motivation">Motivation</h2>
             <p>The current programming model is genuinely strong: every event applies serially, every read sees a consistent snapshot, atomicity is the default. For fraud rules, rate limits, anything where read-after-write matters — this is exactly right.</p>

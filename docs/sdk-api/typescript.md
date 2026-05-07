@@ -1,4 +1,4 @@
-# Beava TypeScript SDK
+# beava TypeScript SDK
 
 > **Communicate-only SDK.** This SDK pushes events, registers pre-compiled JSON descriptors, and reads features. Pipeline authoring (event sources, expression DSL, op helpers) lives in the **Python SDK only** — see [python.md](python.md). Use Python's `bv.App.register_json(...)` (or hand-write the JSON per [docs/wire-spec.md OP_REGISTER](../wire-spec.md#op_register-0x0001)) to produce descriptors, then ship that JSON to your TypeScript app.
 
@@ -8,7 +8,7 @@
 
 ## Overview
 
-`@beava/sdk` is a wire-thin TypeScript client for the Beava real-time feature server. It targets Node.js 18+ (LTS) and is **ESM-only** (`"type": "module"`).
+`@beava/sdk` is a wire-thin TypeScript client for the beava real-time feature server. It targets Node.js 18+ (LTS) and is **ESM-only** (`"type": "module"`).
 
 - **Promise-based** — every wire-bound method returns a `Promise<T>`.
 - **No DSL** — `Descriptor` is an opaque `Record<string, unknown>` JSON blob; the SDK never parses or compiles authoring expressions.
@@ -21,8 +21,8 @@
 ```
 sdk/typescript/
 ├── src/
-│   ├── index.ts             # public exports: BeavaApp, errors, types, wire, transports
-│   ├── app.ts               # BeavaApp class with all 8 wire methods
+│   ├── index.ts             # public exports: beavaApp, errors, types, wire, transports
+│   ├── app.ts               # beavaApp class with all 8 wire methods
 │   ├── wire.ts              # frame codec + opcode constants (CT_JSON only in v0)
 │   ├── transport.ts         # HttpTransport (uses global fetch)
 │   ├── transport-tcp.ts     # TcpTransport (node:net, Redis-style FIFO)
@@ -34,12 +34,12 @@ sdk/typescript/
 
 There are deliberately **no** `events.ts` / `col.ts` / `agg.ts` / `table.ts` files — the TS SDK has no authoring layer. See [shared.md § Authoring vs communicate](shared.md#authoring-vs-communicate).
 
-## BeavaApp class
+## beavaApp class
 
 ```typescript
-import { BeavaApp } from "@beava/sdk";
+import { beavaApp } from "@beava/sdk";
 
-class BeavaApp {
+class beavaApp {
   constructor(url?: string, options?: { timeout?: number; test_mode?: boolean; binary_path?: string });
 
   // Wire methods (each returns a Promise<T>)
@@ -170,7 +170,7 @@ The SDK exports test helpers under `@beava/sdk` (no separate sub-export needed):
 - `teardownServer(handle)` / `teardownProcess(proc)` — graceful shutdown.
 - `discoverBinary()` — 4-step binary discovery (mirrors `python/beava/_embed.py`).
 
-Use `BeavaApp(undefined, { test_mode: true })` to spawn an embed-mode server in tests — it auto-spawns on the first wire call and auto-reaps on `close()`.
+Use `beavaApp(undefined, { test_mode: true })` to spawn an embed-mode server in tests — it auto-spawns on the first wire call and auto-reaps on `close()`.
 
 ## Versioning + compatibility
 

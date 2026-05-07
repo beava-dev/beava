@@ -90,7 +90,7 @@ the grammar.
 
 ## Boolean combinators: `& | ~`
 
-Python's keyword `and / or / not` cannot be operator-overloaded; Beava uses
+Python's keyword `and / or / not` cannot be operator-overloaded; beava uses
 `& / | / ~` instead and emits the keywords in the canonical grammar:
 
 ```python

@@ -1,6 +1,6 @@
 # Single-Threaded Apply
 
-Beava processes every event on a single OS thread — the apply loop. There
+beava processes every event on a single OS thread — the apply loop. There
 is no in-process apply sharding, no work-stealing scheduler, no per-core
 fan-out. Auxiliary threads exist (the WAL writer, the HTTP listener, the
 admin sidecar, the snapshot writer) but they sit beside the apply thread,
@@ -23,7 +23,7 @@ The single-thread model is correctness-by-construction:
   next read serializes against the same thread that did the write.
 - **No coordination overhead.** Cross-thread synchronization is
   expensive. A modern x86 atomic compare-and-swap is ~10-25 ns; a
-  contended cache line is 100+ ns. Beava's hottest path runs at ~300-400
+  contended cache line is 100+ ns. beava's hottest path runs at ~300-400
   ns/event, so coordination overhead would dominate.
 - **Predictable latency.** No scheduler jitter, no work-stealing
   starvation, no priority inversion across threads. P99 latency is a

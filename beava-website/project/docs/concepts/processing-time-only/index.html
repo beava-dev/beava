@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Processing-Time Only (No Event-Time) — beava docs</title>
-<meta name="description" content="Beava's only time source is server-side processing time — now_ms() sampled at the moment the apply loop processes the event. There is no event-time, no watermark, no late-event handling, no…">
+<meta name="description" content="beava's only time source is server-side processing time — now_ms() sampled at the moment the apply loop processes the event. There is no event-time, no watermark, no late-event handling, no…">
 <link rel="canonical" href="https://beava.dev/docs/concepts/processing-time-only/">
-<link rel="icon" href="/assets/mascot-mark-geometric.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="shortcut icon" href="/assets/favicon.ico">
 <link rel="stylesheet" href="/styles/colors_and_type.css">
 <link rel="stylesheet" href="/styles/site.css">
 <link rel="stylesheet" href="/styles/docs.css">
@@ -114,7 +114,7 @@
 <nav class="crumbs" aria-label="Breadcrumb"><a href="/docs/">Docs</a><span class="crumb-sep">›</span><span>Concepts</span><span class="crumb-sep">›</span><span class="crumb-cur">Processing-Time Only (No Event-Time)</span></nav>
 <article class="docs-prose">
 <h1>Processing-Time Only (No Event-Time)</h1>
-<p>Beava's only time source is server-side processing time — <code>now_ms()</code>
+<p>beava's only time source is server-side processing time — <code>now_ms()</code>
 sampled at the moment the apply loop processes the event. There is no
 event-time, no watermark, no late-event handling, no out-of-order
 reordering, no time-travel queries. State is a function of arrival-order
@@ -164,17 +164,17 @@ subsystem (allowed-lateness configuration, watermark generation,
 trigger semantics, late-firing semantics, garbage-collection windows).
 That subsystem buys you correctness in the face of out-of-order
 arrivals — a property whose value depends entirely on whether your
-producers actually misorder events. Beava's target workload (fraud /
+producers actually misorder events. beava's target workload (fraud /
 ad-tech / behavioral analytics) consumes from sources that are
 in-order or near-enough.</li>
-<li><strong>Mental model parity with Redis.</strong> Beava is &quot;Redis for stateful
+<li><strong>Mental model parity with Redis.</strong> beava is &quot;Redis for stateful
 streaming features.&quot; Redis has no event-time and no one wants it to.
 Users push, users get, the answer is whatever the current state says.
-Beava sits in the same operational slot.</li>
+beava sits in the same operational slot.</li>
 <li><strong>Eliminates a whole class of correctness bugs.</strong> Watermark-driven
 pipelines have failure modes (early-firing, late-firing, allowed
 lateness misconfiguration, dropped events past the watermark) that
-take significant operator skill to manage. Beava doesn't have them
+take significant operator skill to manage. beava doesn't have them
 because the model doesn't admit them.</li>
 </ol>
 <p>The trade is real: if your use case is <em>historical replay with original

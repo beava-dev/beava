@@ -8,7 +8,7 @@
 
 ## What pipelines are
 
-A Beava **pipeline** is a small Python program that:
+A beava **pipeline** is a small Python program that:
 
 1. Declares one or more **event sources** with `@bv.event`.
 2. Declares one or more **aggregation outputs** with `@bv.table` (per
@@ -101,7 +101,7 @@ class Txn:
 Field types come from the [shared.md § Field types](../sdk-api/shared.md#field-types)
 vocabulary: `str`, `i64` (Python `int`), `f64` (Python `float`), `bool`,
 `bytes`, `datetime`. `event_time` fields are **rejected at decoration time**
-per `project_redis_shaped_no_event_time_ever` — Beava is processing-time only;
+per `project_redis_shaped_no_event_time_ever` — beava is processing-time only;
 the server stamps wall-clock arrival time on every push.
 
 ### Function form (derived event)
@@ -233,7 +233,7 @@ predicate.
 
 ## What's not supported
 
-Beava v0 is **events-only** + **processing-time only**. The following
+beava v0 is **events-only** + **processing-time only**. The following
 surfaces are out of scope:
 
 - **Joins** (`event ↔ event`, `event ↔ table`, `table ↔ table`) — permanently

@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pipeline DSL Expressions (`bv.col`) — beava docs</title>
-<meta name="description" content="Beava — real-time feature server.">
+<meta name="description" content="beava — real-time feature server.">
 <link rel="canonical" href="https://beava.dev/docs/pipeline-dsl/expressions/">
-<link rel="icon" href="/assets/mascot-mark-geometric.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="shortcut icon" href="/assets/favicon.ico">
 <link rel="stylesheet" href="/styles/colors_and_type.css">
 <link rel="stylesheet" href="/styles/site.css">
 <link rel="stylesheet" href="/styles/docs.css">
@@ -184,7 +184,7 @@ arithmetic context. Cast first via <code>.cast(&quot;int&quot;)</code>.</li>
 literals on the right-hand side are auto-quoted and backslash-escaped per
 the grammar.</p>
 <h2 id="boolean-combinators" tabindex="-1"><a class="header-anchor" href="#boolean-combinators" aria-hidden="true">#</a> Boolean combinators: <code>&amp; | ~</code></h2>
-<p>Python's keyword <code>and / or / not</code> cannot be operator-overloaded; Beava uses
+<p>Python's keyword <code>and / or / not</code> cannot be operator-overloaded; beava uses
 <code>&amp; / | / ~</code> instead and emits the keywords in the canonical grammar:</p>
 <pre><code class="language-python">left = bv.col(&quot;amount&quot;) &gt; 100
 right = bv.col(&quot;merchant&quot;) == &quot;amazon&quot;

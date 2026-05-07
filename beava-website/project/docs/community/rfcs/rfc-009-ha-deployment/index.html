@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RFC-009 — HA deployment for single-node Beava · beava docs</title>
-  <meta name="description" content="Active-passive replication and automatic failover for single-instance Beava. Keeps the single-node programming model; eliminates the single point of failure for production deployments.">
+  <title>RFC-009 — HA deployment for single-node beava · beava docs</title>
+  <meta name="description" content="Active-passive replication and automatic failover for single-instance beava. Keeps the single-node programming model; eliminates the single point of failure for production deployments.">
   <link rel="stylesheet" href="../../../../styles/colors_and_type.css">
   <link rel="stylesheet" href="../../../../styles/site.css">
   <link rel="stylesheet" href="../../../../styles/docs-kit.css">
-  <link rel="icon" href="../../../../assets/mascot-mark-geometric.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="shortcut icon" href="/assets/favicon.ico">
   <style>
     html, body { margin: 0; padding: 0; }
     body { background: var(--bg); color: var(--fg1); font-family: var(--font-sans); }
@@ -48,17 +48,17 @@
               <span className="bv-crumb-sep">/</span>
               <a href="/docs/community/rfcs/">RFCs</a>
               <span className="bv-crumb-sep">/</span>
-              <span className="bv-crumb-cur">RFC-009 — HA deployment for single-node Beava</span>
+              <span className="bv-crumb-cur">RFC-009 — HA deployment for single-node beava</span>
             </div>
 
-            <h1>RFC-009 — HA deployment for single-node Beava</h1>
+            <h1>RFC-009 — HA deployment for single-node beava</h1>
             <span className="rfc-meta"><span className="dot"/>Status: Draft</span>
 
             <h2 id="summary">Summary</h2>
-            <p className="bv-lede">Run Beava as a primary plus a hot standby. The primary handles all reads and writes; the standby tails the primary's WAL in real time and is ready to take over within seconds on failure. Programming model stays single-node — clients still see one logical Beava — but the deployment is no longer a single point of failure.</p>
+            <p className="bv-lede">Run beava as a primary plus a hot standby. The primary handles all reads and writes; the standby tails the primary's WAL in real time and is ready to take over within seconds on failure. Programming model stays single-node — clients still see one logical beava — but the deployment is no longer a single point of failure.</p>
 
             <h2 id="motivation">Motivation</h2>
-            <p>Single-node Beava is the right choice for the programming model: one process, atomic apply, easy to reason about. But for any production deployment with real revenue or compliance pressure, "what happens when the box dies?" is the first question.</p>
+            <p>Single-node beava is the right choice for the programming model: one process, atomic apply, easy to reason about. But for any production deployment with real revenue or compliance pressure, "what happens when the box dies?" is the first question.</p>
             <p>Today the answer is: spin up a fresh box, restore from snapshot, replay WAL since the snapshot. RPO ≈ last fsync (seconds). RTO ≈ minutes-to-hours depending on snapshot size and replay throughput. That's acceptable for analytics; not acceptable for fraud-decisioning at a payments fintech.</p>
             <p>This RFC closes that gap without sharding apply or breaking the single-instance contract — by adding a hot standby that's already running and already caught up.</p>
             <h2 id="questions">Open questions</h2>
@@ -70,7 +70,7 @@
               <li><strong>Network failure isolation.</strong> If the primary can't reach standbys but clients can still reach the primary, what does sync mode do? Block writes? Degrade to async? Most systems block; users should opt in to either.</li>
               <li><strong>Cross-region.</strong> Async replication across regions for DR is a different shape (RPO seconds, RTO minutes, manual promotion). Probably out of scope for v0.x; revisit when there's demand.</li>
               <li><strong>Interaction with RFC-007 (event log retention).</strong> If raw events are retained, replication is a strict subset of replay — same machinery, different speed. Could share a lot of code.</li>
-              <li><strong>Beava Cloud implementation.</strong> The managed product can ship HA-by-default from day one using this design; self-hosters opt in. Cleanest commercial split — same binary, same primitives, the cloud just handles the operator overhead.</li>
+              <li><strong>beava Cloud implementation.</strong> The managed product can ship HA-by-default from day one using this design; self-hosters opt in. Cleanest commercial split — same binary, same primitives, the cloud just handles the operator overhead.</li>
             </ul>
 
             <div className="docs-help-callout">

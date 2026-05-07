@@ -1,4 +1,4 @@
-# Beava Wire Spec
+# beava Wire Spec
 
 > **Status:** Authoritative for v0. Engine and all SDKs (Python, TypeScript, Go) MUST conform to this spec.
 > **JSON Schema dialect:** [Draft 2020-12](https://json-schema.org/draft/2020-12/schema).
@@ -6,7 +6,7 @@
 
 ## Overview
 
-Beava speaks two transports — **HTTP/1.1 + JSON** for compatibility with curl, load balancers, WAFs, and any HTTP client; and a **custom-framed TCP** path for low-latency fast-path traffic. Both transports carry the **same logical opcode set** and the **same JSON body shapes**. Choosing one transport over the other is an operational decision (HTTP for reach + observability, TCP for tail latency); it is never a contract decision.
+beava speaks two transports — **HTTP/1.1 + JSON** for compatibility with curl, load balancers, WAFs, and any HTTP client; and a **custom-framed TCP** path for low-latency fast-path traffic. Both transports carry the **same logical opcode set** and the **same JSON body shapes**. Choosing one transport over the other is an operational decision (HTTP for reach + observability, TCP for tail latency); it is never a contract decision.
 
 Correlation on the TCP transport follows **Redis-style strict-FIFO**: the order of responses on a connection matches the order of requests, and there is no `request_id` or `correlation_id` field anywhere in the wire format. This keeps the protocol simple, eliminates an entire class of header-bookkeeping bugs in client implementations, and makes the framed envelope as small as possible.
 
@@ -365,7 +365,7 @@ Worked example: [`examples/wire/batch_get-heterogeneous.response.json`](../examp
 
 Wipe all in-memory state and truncate the WAL. **Destructive.** Per Phase 13.0 Q7 the value is `0x0040`, leaving `0x0030`–`0x003F` reserved for future direct-feature-write opcodes (`set`, `mset`, etc.).
 
-Use case: testing fixtures. `bv.test.fixture` and the `BeavaTestServer` harness reset between tests so the next test sees a clean slate. Production operators MUST NOT call `OP_RESET` on a beava instance bound to live data.
+Use case: testing fixtures. `bv.test.fixture` and the `beavaTestServer` harness reset between tests so the next test sees a clean slate. Production operators MUST NOT call `OP_RESET` on a beava instance bound to live data.
 
 **Request body shape:**
 

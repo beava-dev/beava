@@ -7,7 +7,7 @@ per entity. This is **lifetime mode**. It's the right answer for
 device," "lifetime average dwell time" — features whose semantics are the
 whole-history reduction, not a sliding window.
 
-Lifetime mode is the default when `window=` is absent. Beava enforces a
+Lifetime mode is the default when `window=` is absent. beava enforces a
 hard register-time contract on which operators are allowed to run lifetime:
 every lifetime op must declare a finite per-entity memory ceiling. The
 contract is V0-MEM-GOV-02; the enforcement is structural and runs before

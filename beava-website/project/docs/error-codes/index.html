@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Error Codes — beava docs</title>
-<meta name="description" content="Beava — real-time feature server.">
+<meta name="description" content="beava — real-time feature server.">
 <link rel="canonical" href="https://beava.dev/docs/error-codes/">
-<link rel="icon" href="/assets/mascot-mark-geometric.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="shortcut icon" href="/assets/favicon.ico">
 <link rel="stylesheet" href="/styles/colors_and_type.css">
 <link rel="stylesheet" href="/styles/site.css">
 <link rel="stylesheet" href="/styles/docs.css">
@@ -115,14 +115,14 @@
 <article class="docs-prose">
 <h1>Error Codes</h1>
 <blockquote>
-<p><strong>Status:</strong> Authoritative for v0. Documents every structured error code Beava
+<p><strong>Status:</strong> Authoritative for v0. Documents every structured error code beava
 emits across the wire (HTTP and TCP transports), the Python exception
 hierarchy, the 9 frozen <code>ValidationError.kind</code> values, and the HTTP status
 mapping. This document is the canonical reference for SDK error handling.
 <strong>Last reviewed:</strong> 2026-05-03 (Phase 13.0).</p>
 </blockquote>
 <h2 id="overview" tabindex="-1"><a class="header-anchor" href="#overview" aria-hidden="true">#</a> Overview</h2>
-<p>Every Beava error response — whether emitted over HTTP (any <code>4xx</code> / <code>5xx</code>) or
+<p>Every beava error response — whether emitted over HTTP (any <code>4xx</code> / <code>5xx</code>) or
 over TCP (the <code>OP_ERROR_RESPONSE = 0xFFFF</code> opcode) — carries a JSON body
 conforming to <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/schemas/error.schema.json"><code>error.schema.json</code></a>:</p>
 <pre><code class="language-json">{
@@ -425,7 +425,7 @@ registry — duplicates are impossible to disambiguate.</p>
 <p><strong>HTTP status:</strong> 400
 <strong>When:</strong> Register payload contains an <code>event_time_field</code> or <code>tolerate_delay_ms</code>
 key, OR an <code>@bv.event</code> schema declares an <code>event_time</code> field. Per
-<code>project_redis_shaped_no_event_time_ever</code> (locked 2026-04-30), Beava is
+<code>project_redis_shaped_no_event_time_ever</code> (locked 2026-04-30), beava is
 processing-time only; the server stamps wall-clock arrival time on every push.
 <strong>Path:</strong> <code>descriptors[&lt;i&gt;].event_time_field</code> or <code>descriptors[&lt;i&gt;].schema.event_time</code>.
 <strong>Recovery:</strong> Remove the <code>event_time</code> field / kwarg. Windowed operators bucket
@@ -556,7 +556,7 @@ SDK porter (cross-link: <a href="/docs/pipeline-dsl/expressions/#grammar-canonic
 <strong>When:</strong> SDK-detected join attempt (cross-event aggregation, <code>bv.col</code> reaching
 across event sources). Server-side equivalent is <code>feature_removed_no_joins_v0</code>.
 <strong>Path:</strong> <code>&lt;descriptor_name&gt;</code>.
-<strong>Recovery:</strong> Beava is Redis-shaped, processing-time only — no cross-stream
+<strong>Recovery:</strong> beava is Redis-shaped, processing-time only — no cross-stream
 joins ever (per <code>project_redis_shaped_no_event_time_ever</code>). Compose features
 client-side.</p>
 <h3 id="code-keyshapemismatch" tabindex="-1"><a class="header-anchor" href="#code-keyshapemismatch" aria-hidden="true">#</a> code = &quot;key_shape_mismatch&quot;</h3>
@@ -882,7 +882,7 @@ v0 users no migration applies.</li>
 </ul>
 <p>Examples (from the registered error library):</p>
 <ul>
-<li><code>unsupported_node_kind</code>: &quot;Node kind <code>upsert</code> is not supported in v0. Beava
+<li><code>unsupported_node_kind</code>: &quot;Node kind <code>upsert</code> is not supported in v0. beava
 v0 ships events-only (supported kinds: <code>event</code>, <code>table</code>,
 <code>derivation</code>)...&quot;</li>
 <li><code>event_time_not_supported_in_v0</code>: &quot;The <code>event_time_field</code> decorator key is

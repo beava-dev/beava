@@ -1,4 +1,4 @@
-# Beava Go SDK
+# beava Go SDK
 
 > **Communicate-only SDK.** This SDK pushes events, registers pre-compiled JSON descriptors, and reads features. Pipeline authoring (event sources, expression DSL, op helpers) lives in the **Python SDK only** — see [python.md](python.md). Use Python's `bv.App.register_json(...)` to produce descriptors, then ship that JSON to your Go service. Or hand-write the JSON per [docs/wire-spec.md OP_REGISTER](../wire-spec.md#op_register-0x0001).
 
@@ -8,7 +8,7 @@
 
 ## Overview
 
-The Beava Go SDK ships as `github.com/beava-dev/beava/sdk/go`. It is a wire-thin client targeting Go 1.22+, idiomatic Go patterns:
+The beava Go SDK ships as `github.com/beava-dev/beava/sdk/go`. It is a wire-thin client targeting Go 1.22+, idiomatic Go patterns:
 
 - **`context.Context`-aware** — every wire-bound method takes `ctx context.Context` as its first argument and respects `ctx.Done()` for cancellation.
 - **Functional options** — `App` and `Register` use options structs (`WithTimeout`, `WithTestMode`, `WithBinaryPath`, `WithForce`, `WithDryRun`).

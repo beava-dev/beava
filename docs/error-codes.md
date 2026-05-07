@@ -1,6 +1,6 @@
 # Error Codes
 
-> **Status:** Authoritative for v0. Documents every structured error code Beava
+> **Status:** Authoritative for v0. Documents every structured error code beava
 > emits across the wire (HTTP and TCP transports), the Python exception
 > hierarchy, the 9 frozen `ValidationError.kind` values, and the HTTP status
 > mapping. This document is the canonical reference for SDK error handling.
@@ -8,7 +8,7 @@
 
 ## Overview
 
-Every Beava error response — whether emitted over HTTP (any `4xx` / `5xx`) or
+Every beava error response — whether emitted over HTTP (any `4xx` / `5xx`) or
 over TCP (the `OP_ERROR_RESPONSE = 0xFFFF` opcode) — carries a JSON body
 conforming to [`error.schema.json`](../examples/wire/schemas/error.schema.json):
 
@@ -220,7 +220,7 @@ registry — duplicates are impossible to disambiguate.
 **HTTP status:** 400
 **When:** Register payload contains an `event_time_field` or `tolerate_delay_ms`
 key, OR an `@bv.event` schema declares an `event_time` field. Per
-`project_redis_shaped_no_event_time_ever` (locked 2026-04-30), Beava is
+`project_redis_shaped_no_event_time_ever` (locked 2026-04-30), beava is
 processing-time only; the server stamps wall-clock arrival time on every push.
 **Path:** `descriptors[<i>].event_time_field` or `descriptors[<i>].schema.event_time`.
 **Recovery:** Remove the `event_time` field / kwarg. Windowed operators bucket
@@ -381,7 +381,7 @@ SDK porter (cross-link: [expressions.md grammar](pipeline-dsl/expressions.md#gra
 **When:** SDK-detected join attempt (cross-event aggregation, `bv.col` reaching
 across event sources). Server-side equivalent is `feature_removed_no_joins_v0`.
 **Path:** `<descriptor_name>`.
-**Recovery:** Beava is Redis-shaped, processing-time only — no cross-stream
+**Recovery:** beava is Redis-shaped, processing-time only — no cross-stream
 joins ever (per `project_redis_shaped_no_event_time_ever`). Compose features
 client-side.
 
@@ -728,7 +728,7 @@ framing**:
 
 Examples (from the registered error library):
 
-- `unsupported_node_kind`: "Node kind `upsert` is not supported in v0. Beava
+- `unsupported_node_kind`: "Node kind `upsert` is not supported in v0. beava
   v0 ships events-only (supported kinds: `event`, `table`,
   `derivation`)..."
 - `event_time_not_supported_in_v0`: "The `event_time_field` decorator key is

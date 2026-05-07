@@ -5,7 +5,7 @@
 
 ## Overview
 
-Beava's [JSON wire format](../wire-spec.md) is the **canonical contract**.
+beava's [JSON wire format](../wire-spec.md) is the **canonical contract**.
 Per-language SDKs are thin compilers from idiomatic syntax to the wire — they
 own the developer-experience translation, but they do not own semantics. Every
 behavior visible to a user (cold-start returns `{}`, schema mismatch raises,
@@ -26,7 +26,7 @@ doc wins — Python is the **canonical implementation** but this is the
 
 ## Authoring vs communicate
 
-Beava v0 splits its public SDK surface into two layers:
+beava v0 splits its public SDK surface into two layers:
 
 | Layer | Available in | Description |
 |-------|--------------|-------------|
@@ -58,7 +58,7 @@ transport.
 Embed mode is the default when the user constructs an `App` with no URL:
 
 - Python: `bv.App()` with no argument.
-- TypeScript: `new BeavaApp()` with no argument.
+- TypeScript: `new beavaApp()` with no argument.
 - Go: `beava.NewApp(ctx, "")` with an empty URL string.
 
 In embed mode the SDK locates the `beava` binary (via `$BEAVA_BINARY`,

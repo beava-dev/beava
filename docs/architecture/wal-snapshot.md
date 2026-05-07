@@ -1,6 +1,6 @@
 # WAL + Snapshot
 
-Beava's durability model is the Redis RDB+AOF pattern: a write-ahead log
+beava's durability model is the Redis RDB+AOF pattern: a write-ahead log
 (WAL) for crash recovery + periodic snapshots for fast restart. Both
 files live on local disk; there is no replication, no remote storage, no
 quorum write. State recovery on boot is a snapshot load + WAL replay

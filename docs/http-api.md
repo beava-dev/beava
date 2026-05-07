@@ -1,4 +1,4 @@
-# Beava HTTP API
+# beava HTTP API
 
 > **Status:** Authoritative for v0. Documents the **post-13.4 target** route
 > table — verb-style POST + JSON body for all 6 data-plane operations.
@@ -6,7 +6,7 @@
 
 ## Overview
 
-Beava ships HTTP/1.1 + JSON as its primary data-plane transport so that any
+beava ships HTTP/1.1 + JSON as its primary data-plane transport so that any
 HTTP-speaking client — `curl`, browser fetch, a Lua-scripted load balancer, a
 WAF rewrite rule — can drive the server with no SDK. JSON is the only wire
 content-type on HTTP in v0; MessagePack is reserved for the framed-TCP
@@ -59,7 +59,7 @@ section at the bottom for the migration rationale.
 
 ## Authentication and headers
 
-Beava v0 ships **unauthenticated**. The OSS launch is intentionally an
+beava v0 ships **unauthenticated**. The OSS launch is intentionally an
 "unauthenticated single-process server" — operators front it with whatever
 auth proxy they use elsewhere (an internal LB, a Kong / Envoy / nginx in front,
 a service mesh, etc.). v0.1+ may grow opinions on auth; v0 has none.
@@ -391,7 +391,7 @@ Schema lives at
 
 > **Destructive.** `OP_RESET` wipes all in-memory state and truncates the
 > WAL. It is intended for **test fixtures** (`bv.test.fixture` and the
-> `BeavaTestServer` harness use it between tests). Production operators MUST
+> `beavaTestServer` harness use it between tests). Production operators MUST
 > NOT call `/reset` on an instance bound to live data. Operators concerned
 > about misuse should set `enable_reset_op=false` in the server config; the
 > route then returns `403 Forbidden` with `reset_disabled`.

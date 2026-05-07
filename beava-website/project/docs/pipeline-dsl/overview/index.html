@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pipeline DSL Overview — beava docs</title>
-<meta name="description" content="Beava — real-time feature server.">
+<meta name="description" content="beava — real-time feature server.">
 <link rel="canonical" href="https://beava.dev/docs/pipeline-dsl/overview/">
-<link rel="icon" href="/assets/mascot-mark-geometric.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="shortcut icon" href="/assets/favicon.ico">
 <link rel="stylesheet" href="/styles/colors_and_type.css">
 <link rel="stylesheet" href="/styles/site.css">
 <link rel="stylesheet" href="/styles/docs.css">
@@ -122,7 +122,7 @@ the rewrite targets.
 <strong>Last reviewed:</strong> 2026-05-03 (Phase 13.0).</p>
 </blockquote>
 <h2 id="what-pipelines-are" tabindex="-1"><a class="header-anchor" href="#what-pipelines-are" aria-hidden="true">#</a> What pipelines are</h2>
-<p>A Beava <strong>pipeline</strong> is a small Python program that:</p>
+<p>A beava <strong>pipeline</strong> is a small Python program that:</p>
 <ol>
 <li>Declares one or more <strong>event sources</strong> with <code>@bv.event</code>.</li>
 <li>Declares one or more <strong>aggregation outputs</strong> with <code>@bv.table</code> (per
@@ -200,7 +200,7 @@ class Txn:
 <p>Field types come from the <a href="/docs/sdk-api/shared/#field-types">shared.md § Field types</a>
 vocabulary: <code>str</code>, <code>i64</code> (Python <code>int</code>), <code>f64</code> (Python <code>float</code>), <code>bool</code>,
 <code>bytes</code>, <code>datetime</code>. <code>event_time</code> fields are <strong>rejected at decoration time</strong>
-per <code>project_redis_shaped_no_event_time_ever</code> — Beava is processing-time only;
+per <code>project_redis_shaped_no_event_time_ever</code> — beava is processing-time only;
 the server stamps wall-clock arrival time on every push.</p>
 <h3 id="function-form-derived-event" tabindex="-1"><a class="header-anchor" href="#function-form-derived-event" aria-hidden="true">#</a> Function form (derived event)</h3>
 <p>The function form takes one or more upstream event sources as
@@ -345,7 +345,7 @@ SDK serialises them to a canonical parenthesised string at register time,
 and the server's expression evaluator parses that string back into a
 predicate.</p>
 <h2 id="whats-not-supported" tabindex="-1"><a class="header-anchor" href="#whats-not-supported" aria-hidden="true">#</a> What's not supported</h2>
-<p>Beava v0 is <strong>events-only</strong> + <strong>processing-time only</strong>. The following
+<p>beava v0 is <strong>events-only</strong> + <strong>processing-time only</strong>. The following
 surfaces are out of scope:</p>
 <ul>
 <li><strong>Joins</strong> (<code>event ↔ event</code>, <code>event ↔ table</code>, <code>table ↔ table</code>) — permanently

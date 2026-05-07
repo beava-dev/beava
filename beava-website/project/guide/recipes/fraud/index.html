@@ -7,7 +7,7 @@
   <meta name="description" content="Build real-time fraud detection with velocity checks, buy-intent signals, and login-streak failures. Complete recipe with Python pipeline, curl integration, and benchmark numbers.">
   <link rel="stylesheet" href="/styles/colors_and_type.css">
   <link rel="stylesheet" href="/styles/site.css">
-  <link rel="icon" href="/assets/mascot-mark-geometric.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="shortcut icon" href="/assets/favicon.ico">
 </head>
 <body class="beava">
   <div id="root"></div>
@@ -73,7 +73,7 @@
       const code = `# fraud_pipeline.py
 import beava as bv
 
-@bv.stream
+@bv.event
 class LoginAttempt:
     ip: str
     user_id: str
@@ -113,7 +113,7 @@ app.register(LoginAttempt, IpSignals, UserSignals)`;
               <pre className="code-well" style={{ fontSize: 14, padding: '24px 28px', lineHeight: 1.7, margin: 0 }}>
                 <span className="cmt"># fraud_pipeline.py</span>{'\n'}
                 <span className="kw">import</span> beava <span className="kw">as</span> bv{'\n'}{'\n'}
-                <span className="fn">@bv.stream</span>{'\n'}
+                <span className="fn">@bv.event</span>{'\n'}
                 <span className="kw">class</span> <span className="ty">LoginAttempt</span>:{'\n'}
                 {'    '}ip: <span className="ty">str</span>{'\n'}
                 {'    '}user_id: <span className="ty">str</span>{'\n'}

@@ -7,7 +7,7 @@
   <meta name="description" content="10-minute interactive build. Meet beava, write your first pipeline, extend it into a per-customer analytics dashboard with views, distinct categories, and last-seen. Zero installs, runs in your browser.">
   <link rel="stylesheet" href="/styles/colors_and_type.css">
   <link rel="stylesheet" href="/styles/site.css">
-  <link rel="icon" href="/assets/mascot-mark-geometric.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="shortcut icon" href="/assets/favicon.ico">
   <style>
     .ch1-two { display: grid; grid-template-columns: 1fr auto 1fr; gap: 14px; align-items: stretch; }
     .ch1-compose { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 10px; align-items: end; }
@@ -454,7 +454,7 @@
 
     // ---------------- Part 1: Meet beava ---------------- //
 
-    const MeetBeava = () => (
+    const Meetbeava = () => (
       <section style={{ padding: '48px 28px 16px' }}>
         <div style={{ maxWidth: 1040, margin: '0 auto' }}>
           <Eyebrow style={{ marginBottom: 12 }}>Part 1 · Meet beava</Eyebrow>
@@ -506,7 +506,7 @@
       { t: 'cmt', v: '# your first pipeline — 3 lines of logic' },
       { t: 't', v: '\n' },
       { t: 'kw',  v: 'import' }, { t: 't', v: ' beava ' }, { t: 'kw', v: 'as' }, { t: 't', v: ' bv\n\n' },
-      { t: 'fn',  v: '@bv.stream' }, { t: 't', v: '\n' },
+      { t: 'fn',  v: '@bv.event' }, { t: 't', v: '\n' },
       { t: 'kw',  v: 'class' }, { t: 't', v: ' ' }, { t: 'ty', v: 'PageView' }, { t: 't', v: ':\n' },
       { t: 't',   v: '    user_id: ' }, { t: 'ty', v: 'str' }, { t: 't', v: '\n' },
       { t: 't',   v: '    path: ' },    { t: 'ty', v: 'str' }, { t: 't', v: '\n\n' },
@@ -522,7 +522,7 @@
       { t: 'cmt', v: '# a per-customer analytics dashboard' },
       { t: 't', v: '\n' },
       { t: 'kw',  v: 'import' }, { t: 't', v: ' beava ' }, { t: 'kw', v: 'as' }, { t: 't', v: ' bv\n\n' },
-      { t: 'fn',  v: '@bv.stream' }, { t: 't', v: '\n' },
+      { t: 'fn',  v: '@bv.event' }, { t: 't', v: '\n' },
       { t: 'kw',  v: 'class' }, { t: 't', v: ' ' }, { t: 'ty', v: 'PageView' }, { t: 't', v: ':\n' },
       { t: 't',   v: '    user_id: ' }, { t: 'ty', v: 'str' }, { t: 't', v: '\n' },
       { t: 't',   v: '    path: ' },    { t: 'ty', v: 'str' }, { t: 't', v: '\n' },
@@ -1533,7 +1533,7 @@
         <SiteHeader active="guide" maxWidth={1200}/>
         <ComingSoonBanner/>
         <Hero/>
-        <MeetBeava/>
+        <Meetbeava/>
         <Tutorial/>
         <SiteFooter/>
       </>

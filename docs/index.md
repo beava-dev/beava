@@ -1,12 +1,12 @@
-# Beava Docs
+# beava Docs
 
 > Real-time feature server for fraud, ad-tech, and behavioral analytics.
 
-Beava is a single-binary feature server. Push events in over HTTP, declare aggregations, query features by entity key. Per-instance: ≥3M events/sec/core for simple counters, ~6 KB per entity for the rich fraud-team shape, P99 batch-get under 10 ms (verified Phase 12.9 2026-05-03; v0 launch ship-pitch numbers).
+beava is a single-binary feature server. Push events in over HTTP, declare aggregations, query features by entity key. Per-instance: ≥3M events/sec/core for simple counters, ~6 KB per entity for the rich fraud-team shape, P99 batch-get under 10 ms (verified Phase 12.9 2026-05-03; v0 launch ship-pitch numbers).
 
 ## Quickstart
 
-- [Quickstart](./quickstart.md) — `pip install tally` → first feature in 60 seconds (authored by Plan 13.0-14; PyPI package is currently `tally` until v0.0.0 GA)
+- [Quickstart](./quickstart.md) — `pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"` → first feature in 60 seconds
 
 ## Wire contract
 

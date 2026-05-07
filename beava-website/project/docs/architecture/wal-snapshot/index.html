@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>WAL + Snapshot — beava docs</title>
-<meta name="description" content="Beava's durability model is the Redis RDB+AOF pattern: a write-ahead log (WAL) for crash recovery + periodic snapshots for fast restart. Both files live on local disk; there is no replication, no…">
+<meta name="description" content="beava's durability model is the Redis RDB+AOF pattern: a write-ahead log (WAL) for crash recovery + periodic snapshots for fast restart. Both files live on local disk; there is no replication, no…">
 <link rel="canonical" href="https://beava.dev/docs/architecture/wal-snapshot/">
-<link rel="icon" href="/assets/mascot-mark-geometric.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="shortcut icon" href="/assets/favicon.ico">
 <link rel="stylesheet" href="/styles/colors_and_type.css">
 <link rel="stylesheet" href="/styles/site.css">
 <link rel="stylesheet" href="/styles/docs.css">
@@ -114,7 +114,7 @@
 <nav class="crumbs" aria-label="Breadcrumb"><a href="/docs/">Docs</a><span class="crumb-sep">›</span><span>Architecture</span><span class="crumb-sep">›</span><span class="crumb-cur">WAL + Snapshot</span></nav>
 <article class="docs-prose">
 <h1>WAL + Snapshot</h1>
-<p>Beava's durability model is the Redis RDB+AOF pattern: a write-ahead log
+<p>beava's durability model is the Redis RDB+AOF pattern: a write-ahead log
 (WAL) for crash recovery + periodic snapshots for fast restart. Both
 files live on local disk; there is no replication, no remote storage, no
 quorum write. State recovery on boot is a snapshot load + WAL replay

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 540" font-family="ui-monospace, 'JetBrains Mono', Menlo, Monaco, Consolas, monospace" font-size="13">
-  <title>Beava quickstart — pip install, push events, query fresh features</title>
+  <title>beava quickstart — pip install, push events, query fresh features</title>
   <desc>Terminal screenshot showing pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python", running an adtech demo, and querying live aggregated features per campaign.</desc>
 
   <!-- Window chrome -->

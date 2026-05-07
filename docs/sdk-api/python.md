@@ -1,4 +1,4 @@
-# Beava Python SDK
+# beava Python SDK
 
 > **Status:** Authoritative for v0. Documents the **post-13.5 target** Python
 > SDK shape — Phase 13.5 implements the rewrite. Cross-language semantics
@@ -8,7 +8,7 @@
 
 ## Overview
 
-Python is the **canonical authoring UX** for Beava (per project memory
+Python is the **canonical authoring UX** for beava (per project memory
 `project_v2_devex_first` + `project_beava_product`). Feature engineers reach
 for Python first; the TypeScript and Go SDKs are ports of the Python surface
 into idiomatic JS / Go. Wire semantics are identical across languages
@@ -29,10 +29,7 @@ per Plan 12.7-06; only 32 of the 53 op helpers are present; `app.batch_get`
 and `app.reset` are not yet wired). The forward-looking shape documented
 here is what the SDK rewrite ships.
 
-> **Module name:** install via `pip install tally` (the PyPI package is
-> currently published as `tally`; the `beava` package name is reserved for
-> v0.0.0 GA). Import as `import beava as bv` — the import name is `beava`
-> regardless of which package was installed.
+> **Module name:** install via `pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"` until v0.0.0 GA (when `beava` publishes to PyPI). Import as `import beava as bv`.
 
 ## Module structure
 

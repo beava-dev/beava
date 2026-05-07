@@ -72,7 +72,7 @@ const PipelineShowcase = () => {
           }}>
 <span style={S.kw}>import</span> beava <span style={S.kw}>as</span> bv{'\n'}
 {'\n'}
-<span style={S.fn}>@bv.stream</span>{'\n'}
+<span style={S.fn}>@bv.event</span>{'\n'}
 <span style={S.kw}>class</span> <span style={S.ty}>PageView</span>:{'\n'}
 {'    '}session_id: <span style={S.ty}>str</span>{'\n'}
 {'    '}path: <span style={S.ty}>str</span>{'\n'}

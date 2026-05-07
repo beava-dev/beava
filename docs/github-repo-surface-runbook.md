@@ -69,7 +69,7 @@ repo URL.
 **Verify after upload:**
 
 - Paste the repo URL into https://opengraph.xyz — confirm the 1280×640 card
-  renders with the Beava wordmark and tagline.
+  renders with the beava wordmark and tagline.
 - Or use Twitter's card validator: https://cards-dev.twitter.com/validator
 
 ---
@@ -83,7 +83,7 @@ After all three steps above, confirm:
 - [ ] `curl -s https://api.github.com/repos/beavadb/beava | jq '.description,.topics'`
       returns the expected strings (replace `beavadb/beava` with the actual org/repo).
 - [ ] https://opengraph.xyz renders the social preview card correctly.
-- [ ] The preview card shows "Beava" wordmark, tagline, and the beaver mascot.
+- [ ] The preview card shows "beava" wordmark, tagline, and the beaver mascot.
 
 ---
 

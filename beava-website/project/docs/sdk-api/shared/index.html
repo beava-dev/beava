@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Shared SDK Semantics — beava docs</title>
-<meta name="description" content="Beava — real-time feature server.">
+<meta name="description" content="beava — real-time feature server.">
 <link rel="canonical" href="https://beava.dev/docs/sdk-api/shared/">
-<link rel="icon" href="/assets/mascot-mark-geometric.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="shortcut icon" href="/assets/favicon.ico">
 <link rel="stylesheet" href="/styles/colors_and_type.css">
 <link rel="stylesheet" href="/styles/site.css">
 <link rel="stylesheet" href="/styles/docs.css">
@@ -119,7 +119,7 @@
 <strong>Last reviewed:</strong> 2026-05-03 (Phase 13.0).</p>
 </blockquote>
 <h2 id="overview" tabindex="-1"><a class="header-anchor" href="#overview" aria-hidden="true">#</a> Overview</h2>
-<p>Beava's <a href="/docs/wire-spec/">JSON wire format</a> is the <strong>canonical contract</strong>.
+<p>beava's <a href="/docs/wire-spec/">JSON wire format</a> is the <strong>canonical contract</strong>.
 Per-language SDKs are thin compilers from idiomatic syntax to the wire — they
 own the developer-experience translation, but they do not own semantics. Every
 behavior visible to a user (cold-start returns <code>{}</code>, schema mismatch raises,
@@ -173,7 +173,7 @@ transport.</p>
 <p>Embed mode is the default when the user constructs an <code>App</code> with no URL:</p>
 <ul>
 <li>Python: <code>bv.App()</code> with no argument.</li>
-<li>TypeScript: <code>new BeavaApp()</code> with no argument.</li>
+<li>TypeScript: <code>new beavaApp()</code> with no argument.</li>
 <li>Go: <code>beava.NewApp(ctx, &quot;&quot;)</code> with an empty URL string.</li>
 </ul>
 <p>In embed mode the SDK locates the <code>beava</code> binary (via <code>$BEAVA_BINARY</code>,

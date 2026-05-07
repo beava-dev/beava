@@ -1,6 +1,6 @@
 # Events vs Tables
 
-Beava's registered DAG has two kinds of nodes: **events** (immutable
+beava's registered DAG has two kinds of nodes: **events** (immutable
 append-only streams that you push into) and **tables** (named, keyed
 aggregation outputs that you query). v0 is events-only on the input side —
 the only thing the SDK and HTTP API let you push is an event. Tables exist
@@ -17,7 +17,7 @@ when to reach for which.
 | `@bv.table` | Aggregation output, keyed by partition  | Updates implicitly when upstream events arrive          | `app.get(TableName, key)`      |
 
 Events are facts that have happened; you push them. Tables are functions of
-those facts; you read them. Beava holds both in memory; the apply loop
+those facts; you read them. beava holds both in memory; the apply loop
 updates table state every time a relevant event arrives.
 
 ## `@bv.event` — declares an event source

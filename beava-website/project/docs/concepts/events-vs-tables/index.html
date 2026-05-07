@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Events vs Tables — beava docs</title>
-<meta name="description" content="Beava's registered DAG has two kinds of nodes: **events** (immutable append-only streams that you push into) and **tables** (named, keyed aggregation outputs that you query). v0 is events-only on…">
+<meta name="description" content="beava's registered DAG has two kinds of nodes: **events** (immutable append-only streams that you push into) and **tables** (named, keyed aggregation outputs that you query). v0 is events-only on…">
 <link rel="canonical" href="https://beava.dev/docs/concepts/events-vs-tables/">
-<link rel="icon" href="/assets/mascot-mark-geometric.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="shortcut icon" href="/assets/favicon.ico">
 <link rel="stylesheet" href="/styles/colors_and_type.css">
 <link rel="stylesheet" href="/styles/site.css">
 <link rel="stylesheet" href="/styles/docs.css">
@@ -114,7 +114,7 @@
 <nav class="crumbs" aria-label="Breadcrumb"><a href="/docs/">Docs</a><span class="crumb-sep">›</span><span>Concepts</span><span class="crumb-sep">›</span><span class="crumb-cur">Events vs Tables</span></nav>
 <article class="docs-prose">
 <h1>Events vs Tables</h1>
-<p>Beava's registered DAG has two kinds of nodes: <strong>events</strong> (immutable
+<p>beava's registered DAG has two kinds of nodes: <strong>events</strong> (immutable
 append-only streams that you push into) and <strong>tables</strong> (named, keyed
 aggregation outputs that you query). v0 is events-only on the input side —
 the only thing the SDK and HTTP API let you push is an event. Tables exist
@@ -147,7 +147,7 @@ when to reach for which.</p>
 </tbody>
 </table>
 <p>Events are facts that have happened; you push them. Tables are functions of
-those facts; you read them. Beava holds both in memory; the apply loop
+those facts; you read them. beava holds both in memory; the apply loop
 updates table state every time a relevant event arrives.</p>
 <h2 id="bvevent-declares-an-event-source" tabindex="-1"><a class="header-anchor" href="#bvevent-declares-an-event-source" aria-hidden="true">#</a> <code>@bv.event</code> — declares an event source</h2>
 <p><code>@bv.event</code> decorates a class (or function) describing the shape of one

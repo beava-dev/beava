@@ -1,23 +1,20 @@
-# Beava Quickstart
+# beava Quickstart
 
-> `pip install tally` -> first feature in 60 seconds.
+> `pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"` -> first feature in 60 seconds.
 
-Beava is a real-time feature server. You declare aggregations in plain Python,
+beava is a real-time feature server. You declare aggregations in plain Python,
 push events over HTTP, and query computed features by entity key --
 sub-millisecond -- with `curl` alone or any HTTP client.
 
-![Beava quickstart: pip install tally, push events, query fresh per-campaign features](./_assets/quickstart-demo.svg)
+![beava quickstart: pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python", push events, query fresh per-campaign features](./_assets/quickstart-demo.svg)
 
 ## Install
 
 ```bash
-pip install tally
+pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"
 ```
 
-> **Pre-release naming.** The PyPI package is currently published as `tally`
-> (the project's repo codename). The `beava` package name is reserved for
-> v0.0.0 GA. Until then, install `tally` and import as `import beava as bv`
-> (the import name is already `beava`).
+> **Pre-release.** Install from main until v0.0.0 GA (when `beava` publishes to PyPI). Import name is `beava` in both cases.
 
 The pip package ships the Python SDK. The `beava` server binary is bundled and
 discovered automatically by `bv.App()` (no separate install). For production
@@ -57,7 +54,7 @@ with bv.App() as app:
 ```
 
 That's it. No external storage, no separate server install, no SDK ceremony.
-Beava's [embed mode](./concepts/embed-mode.md) spawns a local `beava` binary
+beava's [embed mode](./concepts/embed-mode.md) spawns a local `beava` binary
 on ephemeral ports -- the same binary you'd run in production for HTTP/TCP
 feature serving.
 

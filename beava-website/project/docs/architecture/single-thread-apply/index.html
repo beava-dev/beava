@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Single-Threaded Apply — beava docs</title>
-<meta name="description" content="Beava processes every event on a single OS thread — the apply loop. There is no in-process apply sharding, no work-stealing scheduler, no per-core fan-out. Auxiliary threads exist (the WAL writer,…">
+<meta name="description" content="beava processes every event on a single OS thread — the apply loop. There is no in-process apply sharding, no work-stealing scheduler, no per-core fan-out. Auxiliary threads exist (the WAL writer,…">
 <link rel="canonical" href="https://beava.dev/docs/architecture/single-thread-apply/">
-<link rel="icon" href="/assets/mascot-mark-geometric.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="shortcut icon" href="/assets/favicon.ico">
 <link rel="stylesheet" href="/styles/colors_and_type.css">
 <link rel="stylesheet" href="/styles/site.css">
 <link rel="stylesheet" href="/styles/docs.css">
@@ -114,7 +114,7 @@
 <nav class="crumbs" aria-label="Breadcrumb"><a href="/docs/">Docs</a><span class="crumb-sep">›</span><span>Architecture</span><span class="crumb-sep">›</span><span class="crumb-cur">Single-Threaded Apply</span></nav>
 <article class="docs-prose">
 <h1>Single-Threaded Apply</h1>
-<p>Beava processes every event on a single OS thread — the apply loop. There
+<p>beava processes every event on a single OS thread — the apply loop. There
 is no in-process apply sharding, no work-stealing scheduler, no per-core
 fan-out. Auxiliary threads exist (the WAL writer, the HTTP listener, the
 admin sidecar, the snapshot writer) but they sit beside the apply thread,
@@ -133,7 +133,7 @@ entity is atomic — no observer sees a half-updated entity, because the
 next read serializes against the same thread that did the write.</li>
 <li><strong>No coordination overhead.</strong> Cross-thread synchronization is
 expensive. A modern x86 atomic compare-and-swap is ~10-25 ns; a
-contended cache line is 100+ ns. Beava's hottest path runs at ~300-400
+contended cache line is 100+ ns. beava's hottest path runs at ~300-400
 ns/event, so coordination overhead would dominate.</li>
 <li><strong>Predictable latency.</strong> No scheduler jitter, no work-stealing
 starvation, no priority inversion across threads. P99 latency is a

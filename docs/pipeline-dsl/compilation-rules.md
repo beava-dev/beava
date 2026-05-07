@@ -704,7 +704,7 @@ fixture (ALLOWED) or a structured error code (FORBIDDEN).
 | `e.with_columns(...) AFTER e.group_by(...)` | FORBIDDEN | `group_by` returns `GroupBy`; `with_columns` is not on the `GroupBy` interface. | `AttributeError` (Python); compile-time `TypeError` (TS); compile error (Go) |
 | `e.group_by("a").group_by("b")` | FORBIDDEN | `GroupBy` does not expose `.group_by()`; nested grouping is unsupported. | `AttributeError` (Python); compile-time `TypeError` (TS) |
 | `e.group_by("a").filter(...)` | FORBIDDEN | `GroupBy` does not expose stateless ops. Filter BEFORE the `group_by`. | `AttributeError` (Python); compile-time `TypeError` (TS) |
-| Cross-event aggregation (`bv.sum(other_event.col("x"))` etc.) | FORBIDDEN per `project_redis_shaped_no_event_time_ever` | Beava is Redis-shaped, processing-time only — no cross-stream joins ever. | `RegistrationError(code="joins_not_supported")` |
+| Cross-event aggregation (`bv.sum(other_event.col("x"))` etc.) | FORBIDDEN per `project_redis_shaped_no_event_time_ever` | beava is Redis-shaped, processing-time only — no cross-stream joins ever. | `RegistrationError(code="joins_not_supported")` |
 | `event_time` field on `@bv.event` | FORBIDDEN per `project_redis_shaped_no_event_time_ever` | Server-side `now_ms()` is the only time source; client-supplied event time is killed permanently. | `TypeError` at decoration time; `RegistrationError(code="event_time_not_supported_in_v0")` if it reaches the wire |
 | `event_time_field=` / `tolerate_delay=` kwargs on `@bv.event` | FORBIDDEN per same lock | Same as above. | `TypeError` at decoration time |
 | `bv.col("x") + 5` arithmetic in `where=` predicates | ALLOWED | Compiles to expr-string via `_BinOp.to_expr_string()`. | (no fixture; standard expression) |

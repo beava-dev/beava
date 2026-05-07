@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Beava Wire Spec — beava docs</title>
-<meta name="description" content="Beava — real-time feature server.">
+<title>beava Wire Spec — beava docs</title>
+<meta name="description" content="beava — real-time feature server.">
 <link rel="canonical" href="https://beava.dev/docs/wire-spec/">
-<link rel="icon" href="/assets/mascot-mark-geometric.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="shortcut icon" href="/assets/favicon.ico">
 <link rel="stylesheet" href="/styles/colors_and_type.css">
 <link rel="stylesheet" href="/styles/site.css">
 <link rel="stylesheet" href="/styles/docs.css">
@@ -111,16 +111,16 @@
   </div>
 </nav>
 <main class="docs-main" data-pagefind-body>
-<nav class="crumbs" aria-label="Breadcrumb"><a href="/docs/">Docs</a><span class="crumb-sep">›</span><span class="crumb-cur">Beava Wire Spec</span></nav>
+<nav class="crumbs" aria-label="Breadcrumb"><a href="/docs/">Docs</a><span class="crumb-sep">›</span><span class="crumb-cur">beava Wire Spec</span></nav>
 <article class="docs-prose">
-<h1>Beava Wire Spec</h1>
+<h1>beava Wire Spec</h1>
 <blockquote>
 <p><strong>Status:</strong> Authoritative for v0. Engine and all SDKs (Python, TypeScript, Go) MUST conform to this spec.
 <strong>JSON Schema dialect:</strong> <a href="https://json-schema.org/draft/2020-12/schema">Draft 2020-12</a>.
 <strong>Last reviewed:</strong> 2026-05-03 (Phase 13.0).</p>
 </blockquote>
 <h2 id="overview" tabindex="-1"><a class="header-anchor" href="#overview" aria-hidden="true">#</a> Overview</h2>
-<p>Beava speaks two transports — <strong>HTTP/1.1 + JSON</strong> for compatibility with curl, load balancers, WAFs, and any HTTP client; and a <strong>custom-framed TCP</strong> path for low-latency fast-path traffic. Both transports carry the <strong>same logical opcode set</strong> and the <strong>same JSON body shapes</strong>. Choosing one transport over the other is an operational decision (HTTP for reach + observability, TCP for tail latency); it is never a contract decision.</p>
+<p>beava speaks two transports — <strong>HTTP/1.1 + JSON</strong> for compatibility with curl, load balancers, WAFs, and any HTTP client; and a <strong>custom-framed TCP</strong> path for low-latency fast-path traffic. Both transports carry the <strong>same logical opcode set</strong> and the <strong>same JSON body shapes</strong>. Choosing one transport over the other is an operational decision (HTTP for reach + observability, TCP for tail latency); it is never a contract decision.</p>
 <p>Correlation on the TCP transport follows <strong>Redis-style strict-FIFO</strong>: the order of responses on a connection matches the order of requests, and there is no <code>request_id</code> or <code>correlation_id</code> field anywhere in the wire format. This keeps the protocol simple, eliminates an entire class of header-bookkeeping bugs in client implementations, and makes the framed envelope as small as possible.</p>
 <p>This document is <strong>authoritative</strong>. Where prose and JSON Schema disagree, the JSON Schema in <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/schemas/"><code>examples/wire/schemas/</code></a> wins — schemas are machine-validatable contracts, prose is explanatory. Phase 13.4 ships a CI test (<code>crates/beava-server/tests/wire_spec_validates.rs</code>) that loads every schema and asserts every fixture under <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/"><code>examples/wire/</code></a> validates against its corresponding schema. SDK ports in 13.5 (Python) and 13.6 (TypeScript + Go) consume the same fixtures via language-native validators.</p>
 <p>The opcode-discovery question — &quot;which family of body shape do I parse?&quot; — is answered by the <strong>opcode</strong> in the TCP frame header (or the URL path on HTTP). Within a body, polymorphic shapes are disambiguated by a JSON <strong><code>kind</code></strong> discriminator. Specifically, <code>OP_REGISTER</code> carries a <code>kind=event|table|derivation</code> discriminator that selects between three sub-shapes; all other opcodes have a single body shape per direction.</p>
@@ -585,7 +585,7 @@ a later phase. v0 SDKs emit the <code>kind: &quot;derivation&quot;</code> form s
 <p><strong>Errors:</strong> Same set as <code>OP_GET</code> (<code>unknown_table</code>, <code>feature_not_in_table</code>, <code>key_shape_mismatch</code>), with the per-entry <code>path</code> field in the error envelope identifying which request entry tripped (e.g., <code>&quot;requests[2].table&quot;</code>).</p>
 <h3 id="opreset-0x0040" tabindex="-1"><a class="header-anchor" href="#opreset-0x0040" aria-hidden="true">#</a> OP_RESET (0x0040)</h3>
 <p>Wipe all in-memory state and truncate the WAL. <strong>Destructive.</strong> Per Phase 13.0 Q7 the value is <code>0x0040</code>, leaving <code>0x0030</code>–<code>0x003F</code> reserved for future direct-feature-write opcodes (<code>set</code>, <code>mset</code>, etc.).</p>
-<p>Use case: testing fixtures. <code>bv.test.fixture</code> and the <code>BeavaTestServer</code> harness reset between tests so the next test sees a clean slate. Production operators MUST NOT call <code>OP_RESET</code> on a beava instance bound to live data.</p>
+<p>Use case: testing fixtures. <code>bv.test.fixture</code> and the <code>beavaTestServer</code> harness reset between tests so the next test sees a clean slate. Production operators MUST NOT call <code>OP_RESET</code> on a beava instance bound to live data.</p>
 <p><strong>Request body shape:</strong></p>
 <pre><code class="language-json">{}
 </code></pre>

@@ -1,6 +1,6 @@
 # Memory Budget
 
-Beava runs entirely in memory. There is no SSD overflow, no tiered
+beava runs entirely in memory. There is no SSD overflow, no tiered
 storage, no page-out-to-cold-cache. Users size their box; if state
 exceeds RAM, beava refuses new entities. The budget for v0 is
 **~7 KB per entity for a rich 30-feature pack** — verified post-Phase

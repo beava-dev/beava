@@ -9,7 +9,7 @@
 
 ## Overview
 
-Beava registration is **additive-only by default** — re-running
+beava registration is **additive-only by default** — re-running
 `app.register(*descriptors)` with new event sources or new aggregation features
 succeeds and bumps `registry_version`, leaving any pre-existing state intact.
 Destructive changes (renaming a field, changing a field's type, removing an

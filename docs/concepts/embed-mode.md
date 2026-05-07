@@ -4,9 +4,7 @@
 ephemeral ports. This is **embed mode** — beava-the-server runs in-process
 under your Python interpreter for the lifetime of the `App`. There is no
 remote infrastructure, no port allocation, and no setup. You go from
-`pip install tally` to a registered, queryable feature server in one line.
-(The PyPI package is currently published as `tally`; `beava` is reserved
-for v0.0.0 GA. Import is `import beava as bv` either way.)
+`pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"` to a registered, queryable feature server in one line.
 
 Embed mode exists for notebooks, scripts, pytest fixtures, and the
 `bv.demo()` quickstart. It is not how you ship to production.
@@ -51,13 +49,11 @@ and surfaced through Python `logging` at `INFO` / `WARN` for debugging.
    ```text
    beava binary not found. Install with one of:
      brew install beava
-     pip install tally[server]
+     pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"
      docker pull beava/beava
    Or set BEAVA_BINARY=/path/to/beava.
    ```
 
-   (Note: until v0.0.0 GA the PyPI package is published as `tally`. The
-   server-extras name will switch back to `beava[server]` at GA.)
 
 The 4-step order is fixed — see
 [`python/beava/_embed.py`](../../python/beava/_embed.py) for the
@@ -80,10 +76,9 @@ discovery order; no shell interpolation; no arbitrary-command execution.
 
 ## When to use embed mode
 
-- **Quickstart and `bv.demo()`** — `pip install tally` and have a working
+- **Quickstart and `bv.demo()`** — `pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"` and have a working
   feature server in one line. No installer, no `docker run`, no port
-  conflict. (PyPI package is currently `tally`; will switch to `beava`
-  at v0.0.0 GA.)
+  conflict.
 - **Pytest fixtures.** `bv.test.fixture(reset_each=True)` spawns a fresh
   embed per test, gives each test an isolated server, tears down on
   teardown. Per-test isolation without the test author managing
