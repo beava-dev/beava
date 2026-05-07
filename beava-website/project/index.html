@@ -457,7 +457,7 @@ bv.<span style={S.fn}>App</span>(<span style={S.str}>"0.0.0.0:8080"</span>).<spa
 bv.<span style={S.fn}>get</span>(<span style={S.str}>"SiteMetrics"</span>)  <span style={S.cmt}># → {`{median_dwell_1h: 6_250, views_today: 14_207, …}`}</span>{'\n'}
 {'\n'}
 <span style={S.cmt}># Or over HTTP (the panel above is hitting this exact endpoint):</span>{'\n'}
-<span style={S.kw}>$</span> curl https://beava.dev/api/features/site
+<span style={S.kw}>$</span> curl https://beava.dev/api/get -d '{`{"table":"SiteMetrics","key":""}`}'
               </pre>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0, borderTop: '1px solid var(--border)', background: '#fff' }}>
                 {[
