@@ -32,9 +32,11 @@ env:
 
 jobs:
   rust:
-    if: |
-      github.event.pull_request.head.repo.full_name == github.repository
-      || contains(github.event.pull_request.labels.*.name, 'ok-to-test')
+    # Gate: nothing runs until a code owner adds `ok-to-test`.
+    # Even owner-authored PRs need the label — explicit approval, no
+    # implicit "same-repo trust." Re-fires automatically on `labeled`
+    # per the trigger above.
+    if: contains(github.event.pull_request.labels.*.name, 'ok-to-test')
 
     name: Rust (fmt, clippy, test, release build)
     runs-on: ubuntu-latest

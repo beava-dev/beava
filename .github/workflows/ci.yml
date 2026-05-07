@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+    # `labeled` re-fires when a code owner adds `ok-to-test`. PR-event
+    # jobs are gated below; push-to-main always runs.
+    types: [opened, synchronize, reopened, labeled]
     branches: [main]
 
 # Cancel in-flight runs of the same branch when a new push lands.
@@ -24,6 +27,9 @@ jobs:
   fmt:
     name: cargo fmt --check
     runs-on: ubuntu-latest
+    # Gate: PR runs need the `ok-to-test` label (added by a code
+    # owner per .github/CODEOWNERS); push-to-main runs always.
+    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'ok-to-test')
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -35,6 +41,9 @@ jobs:
   clippy:
     name: cargo clippy (all-targets, -D warnings)
     runs-on: ubuntu-latest
+    # Gate: PR runs need the `ok-to-test` label (added by a code
+    # owner per .github/CODEOWNERS); push-to-main runs always.
+    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'ok-to-test')
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -51,6 +60,9 @@ jobs:
   test:
     name: cargo nextest run
     runs-on: ubuntu-latest
+    # Gate: PR runs need the `ok-to-test` label (added by a code
+    # owner per .github/CODEOWNERS); push-to-main runs always.
+    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'ok-to-test')
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -67,6 +79,9 @@ jobs:
   python:
     name: Python SDK (${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    # Gate: PR runs need the `ok-to-test` label (added by a code
+    # owner per .github/CODEOWNERS); push-to-main runs always.
+    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'ok-to-test')
     timeout-minutes: 15
     strategy:
       fail-fast: false
