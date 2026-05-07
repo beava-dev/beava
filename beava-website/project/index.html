@@ -138,23 +138,12 @@
       </div>
     );
 
-    const TOP_PAGES = [
-      '/',
-      '/docs/',
-      '/docs/install/',
-      '/docs/get-started/quickstart/',
-      '/docs/concepts/streams/',
-      '/docs/community/rfcs/',
-      '/docs/vision/why-beava/',
-      '/guide/',
-    ];
-
     const LiveMetrics = () => {
       // Real-data mode: poll /api/stats and /api/features/<path> against the
       // beava-website-beava instance. Falls back to seed values if offline.
       const [dwellMs, setDwellMs] = React.useState(0);
       const [pageViews, setPageViews] = React.useState(0);
-      const [topPageIdx, setTopPageIdx] = React.useState(0);
+      const [topPath, setTopPath] = React.useState('/');
       const [topPageHits, setTopPageHits] = React.useState(0);
       const [dwellSeries, setDwellSeries] = React.useState(() => seedSeries(60, 0, 0));
       const [pvSeries, setPvSeries] = React.useState(() => seedSeries(24, 0, 0));
@@ -173,19 +162,21 @@
             }).then(r => r.ok ? r.json() : null).catch(() => null);
             if (cancelled) return;
 
-            // /api/get returns the row as a flat object: {<feature>: <value>, ...}
+            // /api/get returns the row as a flat object — feature names match
+            // beava-website/deploy/register_pipeline.py (the SDK file that IS
+            // the inline example below).
             const sf = site || {};
-            const views = sf.site_views_today || 0;
-            const median = sf.site_med_dwell_1h || 0;
-            const v1h = sf.site_views_1h || 0;
+            const views = sf.page_views_today || 0;
+            const median = sf.median_dwell_1h || 0;
+            // top_k returns a JSON array: [{value, count}, ...]. k=1 in
+            // register_pipeline.py so top[0] is the only row.
+            const top = Array.isArray(sf.top_page_1h) ? sf.top_page_1h[0] : null;
             setPageViews(views);
             setPvSeries(s => [...s.slice(1), views]);
             setDwellMs(median);
             setDwellSeries(s => [...s.slice(1), median]);
-            // Top page: TBD — top_k pipeline TODO (#followup). Show site-wide
-            // hourly views in the meantime so the card isn't dead.
-            setTopPageIdx(0);
-            setTopPageHits(v1h);
+            setTopPath(top?.value || '/');
+            setTopPageHits(top?.count || 0);
           } catch (_) { /* keep previous values on transient failure */ }
         };
         refresh();
@@ -211,13 +202,13 @@
             <MetricCard big label="Top page · Last hour"
               mascot={{ src: '/assets/mascot-pose-3.svg', size: 80, top: 6, right: 10, rotate: -2 }}
               value={
-                <span key={topPageIdx} style={{
+                <span key={topPath} style={{
                   fontFamily: 'var(--font-mono)', fontSize: 17, fontWeight: 600,
                   color: 'var(--fg1)', letterSpacing: 0,
                   animation: 'beava-fade-up 360ms cubic-bezier(0.22,1,0.36,1)',
                   display: 'block', whiteSpace: 'nowrap', overflow: 'hidden',
                   textOverflow: 'ellipsis', maxWidth: '100%',
-                }}>{TOP_PAGES[topPageIdx]}</span>
+                }}>{topPath}</span>
               }
               subline={<><span style={{ fontFamily: 'var(--font-mono)', color: 'var(--fg2)' }}>{hitsTicked}</span> views</>}/>
           </div>
@@ -455,9 +446,9 @@
 <span style={S.fn}>@bv.table</span>{'   '}<span style={S.cmt}># no key=  →  one row, site-wide</span>{'\n'}
 <span style={S.kw}>def</span> <span style={S.fn}>SiteMetrics</span>(e: <span style={S.ty}>PageView</span>):{'\n'}
 {'    '}<span style={S.kw}>return</span> e.<span style={S.fn}>agg</span>({'\n'}
-{'        '}<span style={{ background: 'rgba(184,92,32,0.10)', borderRadius: 3, padding: '0 2px' }}>median_dwell_1h</span>  = bv.<span style={S.fn}>quantile</span>(e.dwell_ms, q=<span style={S.num}>0.5</span>, window=<span style={S.str}>"1h"</span>),{'\n'}
+{'        '}<span style={{ background: 'rgba(184,92,32,0.10)', borderRadius: 3, padding: '0 2px' }}>median_dwell_1h</span>  = bv.<span style={S.fn}>quantile</span>(<span style={S.str}>"dwell_ms"</span>, q=<span style={S.num}>0.5</span>, window=<span style={S.str}>"1h"</span>),{'\n'}
 {'        '}<span style={{ background: 'rgba(58,106,138,0.10)', borderRadius: 3, padding: '0 2px' }}>page_views_today</span> = bv.<span style={S.fn}>count</span>(window=<span style={S.str}>"24h"</span>),{'\n'}
-{'        '}<span style={{ background: 'rgba(217,122,62,0.12)', borderRadius: 3, padding: '0 2px' }}>top_page_1h</span>      = bv.<span style={S.fn}>top_k</span>(e.path, k=<span style={S.num}>1</span>, window=<span style={S.str}>"1h"</span>),{'\n'}
+{'        '}<span style={{ background: 'rgba(217,122,62,0.12)', borderRadius: 3, padding: '0 2px' }}>top_page_1h</span>      = bv.<span style={S.fn}>top_k</span>(<span style={S.str}>"path"</span>, k=<span style={S.num}>1</span>, window=<span style={S.str}>"1h"</span>),{'\n'}
 {'    '}){'\n'}
 {'\n'}
 bv.<span style={S.fn}>App</span>(<span style={S.str}>"0.0.0.0:8080"</span>).<span style={S.fn}>register</span>(<span style={S.ty}>PageView</span>, <span style={S.fn}>SiteMetrics</span>).<span style={S.fn}>serve</span>(){'\n'}

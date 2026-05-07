@@ -5,7 +5,8 @@ on:
     branches: [main]
     paths:
       - 'beava-website/project/**'
-      - 'beava-website/deploy/site-metrics-pipeline.json'
+      - 'beava-website/deploy/register_pipeline.py'
+      - 'python/**'
       - '.github/workflows/deploy-hetzner.yml'
   workflow_dispatch:
 
@@ -52,32 +53,47 @@ jobs:
             beava-website/project/ \
             root@178.104.164.100:/srv/beava-website/project/
 
-      - name: Re-register pipeline if site-metrics-pipeline.json changed
-        # Always-run, idempotent: POST the SDK-shape pipeline payload to
-        # /register on the internal beava (port 8080, docker network).
-        # `force=true` allows schema-changing updates to land without a
-        # manual override. The JSON file is the source of truth — edit
-        # it in repo, push to main, the live registry updates.
+      - name: Set up Python + install Beava SDK
+        # The pipeline is defined in Python at beava-website/deploy/register_pipeline.py
+        # — same SDK code shown on the landing page. We install the SDK from
+        # this repo's python/ source (matching the merged commit) so the
+        # generated wire payload is always in sync with the SDK shipping in
+        # the same image.
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Beava SDK
+        run: pip install ./python
+
+      - name: Generate wire payload from register_pipeline.py
+        # The Python file IS the source of truth. `--dump` emits the wire
+        # JSON the server expects, with force=true. No hand-written JSON.
         run: |
-          # Ship the latest pipeline JSON.
+          python beava-website/deploy/register_pipeline.py --dump \
+            > /tmp/register-payload.json
+          echo "── payload preview (first 800 bytes) ──"
+          head -c 800 /tmp/register-payload.json; echo
+
+      - name: Re-register pipeline against live beava
+        # Always-run, idempotent: POST the freshly-generated payload to
+        # /register on the internal beava (port 8080, docker network).
+        # `force=true` (set inside the payload by --dump) allows
+        # schema-changing updates to land without a manual override.
+        run: |
+          # Ship the canonical Python source + the generated payload to the box.
           rsync -av --no-perms --no-owner --no-group \
-            beava-website/deploy/site-metrics-pipeline.json \
-            root@178.104.164.100:/srv/beava-website/deploy/site-metrics-pipeline.json
-          # Wrap the file's nodes[] payload with `force: true` and POST it
-          # via a one-shot curlimages container on the docker network.
+            beava-website/deploy/register_pipeline.py \
+            root@178.104.164.100:/srv/beava-website/deploy/register_pipeline.py
+          rsync -av --no-perms --no-owner --no-group \
+            /tmp/register-payload.json \
+            root@178.104.164.100:/tmp/register-payload.json
+          # POST via a one-shot curlimages container on the docker network.
           ssh -o StrictHostKeyChecking=no root@178.104.164.100 bash <<'REMOTE'
             set -euo pipefail
-            cd /srv/beava-website/deploy
-            python3 -c '
-            import json, sys
-            with open("site-metrics-pipeline.json") as f:
-              p = json.load(f)
-            p["force"] = True
-            print(json.dumps(p))
-            ' > /tmp/register-payload.json
             docker run --rm --network beava-website-net \
               -v /tmp/register-payload.json:/r.json:ro \
-              curlimages/curl:latest -sS \
+              curlimages/curl:latest -sS --fail-with-body \
               -X POST http://beava:8080/register \
               -H "Content-Type: application/json" \
               --data-binary @/r.json
