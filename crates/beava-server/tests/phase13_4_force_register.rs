@@ -378,3 +378,64 @@ async fn register_destructive_agg_removal_without_force_returns_409() {
 
     ts.shutdown().await.ok();
 }
+
+// ─── Test 11 — additive NewField on existing event with force=true succeeds ─
+//
+// Regression for the production deploy that 409'd after PR #1 merged. The
+// pipeline added `session_id` to the `PageView` event source. Two diff
+// systems disagreed on the classification:
+//
+//   - `classify_register_diff` (apply_shard pre-flight): NewField on an
+//     existing event source → `additive`. No destructive entries.
+//   - `compute_diff` (legacy, inside `execute_register_with_wal`): the
+//     event source's schema differs → `changed: [ConflictDetail]`,
+//     unconditionally returns `RegisterOutcome::Conflict` (HTTP 409
+//     `registration_conflict`) regardless of `force=true` on the wire.
+//
+// `apply_shard`'s force-handling block at the time of the bug only ran
+// `force_remove_descriptors` when `diff.destructive` was non-empty. Pure
+// additive changes against existing descriptors slipped through the
+// pre-flight, hit the legacy compute_diff inside execute_register, and
+// 409'd — even with `force=true` set on the request body.
+//
+// Fixed behavior: with `force=true`, additive entries that target an
+// existing descriptor (NewField on event, NewAgg on table) MUST also be
+// pre-removed so execute_register sees them as fully new. The
+// caller-explicit `force=true` carries the "drop existing state" intent
+// for both destructive AND additive-against-existing changes.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn register_additive_new_field_on_existing_event_with_force_true_succeeds() {
+    let ts = TestServer::spawn().await.expect("spawn");
+    let (status_a, body_a) = post_register(&ts, &baseline_payload()).await;
+    assert!((200..300).contains(&status_a));
+    let v_a = body_a["registry_version"]
+        .as_u64()
+        .unwrap_or_else(|| panic!("baseline response must include registry_version: {body_a:#}"));
+
+    // Re-register the SAME shape with one new field added to the existing
+    // `Tx` event source. `classify_register_diff` will emit
+    // `additive: [NewField{event:Tx, field:session_id}]`,
+    // `destructive: []`. With force=true, the request must succeed.
+    let mut payload_b = baseline_payload();
+    payload_b["nodes"][0]["schema"]["fields"]["session_id"] = json!("str");
+    payload_b["force"] = json!(true);
+
+    let (status_b, body_b) = post_register(&ts, &payload_b).await;
+    assert!(
+        (200..300).contains(&status_b),
+        "force=true on additive NewField against existing event must succeed, got status={status_b}, body={body_b:#}"
+    );
+    assert!(
+        body_b.get("error").is_none(),
+        "force=true additive register must not return error envelope, got: {body_b:#}"
+    );
+    let v_b = body_b["registry_version"]
+        .as_u64()
+        .unwrap_or_else(|| panic!("force=true response must include registry_version: {body_b:#}"));
+    assert!(
+        v_b > v_a,
+        "registry_version must bump after additive force=true apply: was {v_a}, now {v_b}"
+    );
+
+    ts.shutdown().await.ok();
+}
