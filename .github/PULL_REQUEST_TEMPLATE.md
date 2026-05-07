@@ -10,9 +10,16 @@
 
 ## Local checks
 
-Heavy CI is gated on the `ok-to-test` label, applied by a code owner
-after review per `.github/CODEOWNERS`. Run the same gates locally
-before pushing — saves a round-trip.
+Heavy CI is two-step:
+1. A code owner adds the `ok-to-test` label per `.github/CODEOWNERS` (gate).
+2. The PR owner manually runs **Actions → "PR Checks" → Run workflow**,
+   enters this PR's number, and clicks Run. The workflow validates the
+   label is still present at run time.
+
+There is no auto-firing on push, PR open, or label-add — the label
+unlocks the gate; you trigger the run.
+
+Run the same gates locally before requesting the run to save round-trips.
 
 ### One-shot
 

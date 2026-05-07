@@ -1,50 +1,82 @@
 name: PR Checks
 
 on:
-  pull_request:
-    # ONLY `labeled` — workflow fires exactly when a code owner adds
-    # `ok-to-test`. PR open/reopen/push do NOT trigger anything; the
-    # label IS the trigger. To re-run after new commits, remove + re-add
-    # the label (one-shot per label-add, no auto-rerun on push).
-    types: [labeled]
-    branches: [main]
+  # Manually triggered ONLY. The PR owner runs the workflow themselves
+  # against the PR's head ref. There is NO automatic firing on push,
+  # PR open, or label-add — adding `ok-to-test` only *unlocks* the gate
+  # below; it does not start a run.
+  #
+  # To trigger:
+  #   1. A code owner adds the `ok-to-test` label to the PR.
+  #   2. The PR owner goes to Actions → "PR Checks" → Run workflow,
+  #      enters the PR number, and clicks Run.
+  #
+  # The first job below validates the label is still present at run time
+  # (so removing the label revokes permission for future runs).
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR number to test (must have ok-to-test label applied by a code owner)"
+        required: true
+        type: string
 
 concurrency:
-  group: pr-${{ github.event.pull_request.number }}
+  group: pr-${{ inputs.pr_number }}
   cancel-in-progress: true
 
 # Default-deny GITHUB_TOKEN (OWASP / GitHub-Actions hardening guide).
-# pr.yml runs read-only checks; no jobs need write access.
+# Read access is needed to look up the PR head ref + verify the label.
 permissions:
   contents: read
+  pull-requests: read
 
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
 
-# Heavy checks are gated behind the `ok-to-test` label, which only users
-# with write access (i.e. code owners per .github/CODEOWNERS) can apply.
-# PRs from the repo owner / org members with write access run the gate
-# automatically. External contributors need a code owner to add the
-# label after review.
-#
-# To run: as a code owner, click "Labels" on the PR sidebar → check
-# `ok-to-test`. Workflow re-fires immediately (we're listening to the
-# `labeled` activity type above).
-
 jobs:
-  rust:
-    # Gate: nothing runs until a code owner adds `ok-to-test`.
-    # Even owner-authored PRs need the label — explicit approval, no
-    # implicit "same-repo trust." Re-fires automatically on `labeled`
-    # per the trigger above.
-    if: contains(github.event.pull_request.labels.*.name, 'ok-to-test')
+  # Gate job: looks up the PR's head SHA, verifies `ok-to-test` is present
+  # at run time, and exposes the SHA as an output for downstream checkout.
+  # Code-owner-only label control + run-time check = no stale-label exploits.
+  gate:
+    name: Verify ok-to-test label
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      head_sha: ${{ steps.lookup.outputs.head_sha }}
+    steps:
+      - name: Look up PR + verify label
+        id: lookup
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          pr="${{ inputs.pr_number }}"
+          json=$(gh pr view "$pr" --repo "$GITHUB_REPOSITORY" \
+            --json labels,headRefOid,state)
+          state=$(jq -r '.state' <<<"$json")
+          if [[ "$state" != "OPEN" ]]; then
+            echo "::error::PR #$pr is $state, refusing to run"
+            exit 1
+          fi
+          if ! jq -e '.labels[] | select(.name == "ok-to-test")' <<<"$json" >/dev/null; then
+            echo "::error::PR #$pr is missing the 'ok-to-test' label."
+            echo "::error::A code owner must add it before this workflow can run."
+            exit 1
+          fi
+          sha=$(jq -r '.headRefOid' <<<"$json")
+          echo "head_sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "✅ ok-to-test present; will test PR #$pr at $sha"
 
+  rust:
     name: Rust (fmt, clippy, test, release build)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: gate
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.head_sha }}
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -96,9 +128,11 @@ jobs:
     name: Python SDK tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: rust
+    needs: [gate, rust]
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.head_sha }}
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -132,16 +166,15 @@ jobs:
         continue-on-error: true
         run: cd python && mypy beava
 
-      - name: Run Python tests (verbose)
+      - name: Run Python tests (v0 acceptance suite via pyproject testpaths)
         id: python_tests
         run: |
-          cd python && python -m pytest tests/ -v 2>&1 | tee /tmp/python-test-output.txt
+          cd python && python -m pytest -v 2>&1 | tee /tmp/python-test-output.txt
 
       - name: Add Python summary
         if: always()
         run: |
           echo "## Python Test Results" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          # Extract the summary line (last few lines of pytest output)
           tail -10 /tmp/python-test-output.txt >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "No test output captured" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
