@@ -1,0 +1,78 @@
+// js/sdk/SdkSidebar.jsx
+//
+// Shared sidebar for /sdk/* pages. Single source of truth for the
+// SDK nav structure — each new SDK reference page picks `active`
+// and the sidebar handles active-link state + planned-link styling.
+//
+// Mount:
+//   <div id="bv-sdk-sidebar" class="sidebar"></div>
+//   ...
+//   <script type="text/babel" src="/js/sdk/SdkSidebar.jsx"></script>
+//   <script type="text/babel">
+//     ReactDOM.createRoot(document.getElementById('bv-sdk-sidebar'))
+//       .render(<SdkSidebar active="app"/>);
+//   </script>
+//
+// Props:
+//   active — id of the active page; one of:
+//     "quickstart" | "app" | "event" | "table" | "col-lit" |
+//     "operators" | "errors" | "http-push" | "http-get" |
+//     "http-register" | "http-wire-spec"
+//
+// A page is rendered as `planned` (italic, no real link) iff its
+// entry below has href === "#". As pages land, flip "#" to the real
+// URL and the planned styling drops automatically.
+
+const SDK_NAV = [
+  { heading: 'Start here', items: [
+    { id: 'quickstart', label: 'Quickstart', href: '/sdk/python/' },
+  ]},
+  { heading: 'Python SDK', items: [
+    { id: 'app',        label: 'App client',         href: '/sdk/python/app/' },
+    { id: 'event',      label: '@bv.event',          href: '#' },
+    { id: 'table',      label: '@bv.table',          href: '#' },
+    { id: 'col-lit',    label: 'bv.col / bv.lit',    href: '#' },
+    { id: 'operators',  label: 'Operator catalogue', href: '#' },
+    { id: 'errors',     label: 'Errors',             href: '#' },
+  ]},
+  { heading: 'HTTP API', items: [
+    { id: 'http-push',      label: 'POST /push',     href: '#' },
+    { id: 'http-get',       label: 'POST /get',      href: '#' },
+    { id: 'http-register',  label: 'POST /register', href: '#' },
+    { id: 'http-wire-spec', label: 'Wire spec',      href: '#' },
+  ]},
+];
+
+const SdkSidebar = ({ active = null }) => (
+  <React.Fragment>
+    <div className="product-switcher">
+      <div className="swatch">b</div>
+      <div className="label">SDK reference <span className="sub">· v0</span></div>
+      <svg className="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="6 9 12 15 18 9"/>
+      </svg>
+    </div>
+    {SDK_NAV.map(section => (
+      <React.Fragment key={section.heading}>
+        <h4>{section.heading}</h4>
+        <ul>
+          {section.items.map(item => {
+            const isPlanned = item.href === '#';
+            const isActive  = item.id === active;
+            const cls = [
+              isActive  ? 'active'  : '',
+              isPlanned ? 'planned' : '',
+            ].filter(Boolean).join(' ');
+            return (
+              <li key={item.id} className={cls || undefined}>
+                <a href={item.href}>{item.label}</a>
+              </li>
+            );
+          })}
+        </ul>
+      </React.Fragment>
+    ))}
+  </React.Fragment>
+);
+
+window.SdkSidebar = SdkSidebar;
