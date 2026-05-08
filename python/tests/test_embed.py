@@ -175,11 +175,20 @@ class TestParseUrlToTransport:
 
     def test_parse_url_to_transport_tcp(self) -> None:
         """tcp:// URL returns a TcpTransport with correct host and port."""
-        t = parse_url_to_transport("tcp://localhost:7380")
+        t = parse_url_to_transport("tcp://localhost:8081")
         assert isinstance(t, TcpTransport)
         assert t.host == "localhost"
-        assert t.port == 7380
+        assert t.port == 8081
         # Don't call close() — no socket opened yet (lazy connect)
+
+    def test_parse_url_to_transport_tcp_no_port_uses_locked_default(self) -> None:
+        """tcp:// URL without an explicit port falls back to the locked v0 default 8081."""
+        t = parse_url_to_transport("tcp://localhost")
+        assert isinstance(t, TcpTransport)
+        assert t.host == "localhost"
+        assert t.port == 8081, (
+            f"locked v0 TCP default is 8081 (per STATE.md surface-lock); got {t.port}"
+        )
 
     def test_parse_url_to_transport_none_triggers_embed(
         self, beava_binary: Path

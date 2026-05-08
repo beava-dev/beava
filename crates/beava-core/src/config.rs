@@ -494,7 +494,10 @@ mod tests {
         let t = TcpConfig::default();
         assert!(t.enabled);
         assert_eq!(t.host, "127.0.0.1");
-        assert_eq!(t.port, 7380);
+        // Locked v0 wire surface (STATE.md surface-lock 2026-05-06):
+        // HTTP on 8080, TCP on 8081. The pre-lock 7380 was a leftover
+        // from the Phase 12 weather-station port convention.
+        assert_eq!(t.port, 8081);
         assert_eq!(t.max_frame_bytes, 4 * 1024 * 1024);
     }
 
