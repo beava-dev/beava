@@ -95,7 +95,7 @@ fn main() -> Result<()> {
             .parse()
             .with_context(|| format!("parse admin_addr {:?}", cfg.admin_addr))?;
 
-        tracing::info!(
+        tracing::debug!(
             target: "beava.server",
             kind = "server.boot.v18",
             http_addr = %http_addr,

@@ -774,7 +774,7 @@ async fn build_runtime_state_with_persistence(
             .max(snapshot_lsn)
             + 1;
 
-        tracing::info!(
+        tracing::debug!(
             target: "beava.recovery",
             kind = "recovery.serve_with_dirs",
             persistence_lsn,
@@ -838,7 +838,7 @@ async fn build_runtime_state_with_persistence(
     // `O_APPEND`, four-watermark discipline) are untouched; only buffer
     // count, size, and tick interval are tunable.
     let wal_cfg = crate::wal_config::WalConfig::resolve(wal_overrides);
-    tracing::info!(
+    tracing::debug!(
         target: "beava.wal",
         kind = "wal.config.resolved",
         buffers = wal_cfg.buffers,
@@ -1592,7 +1592,7 @@ fn run_mio_event_loop(
     // channel disconnects cleanly when all workers exit.
     drop(read_tx);
 
-    tracing::info!(
+    tracing::debug!(
         target: "beava.server",
         kind = "workers.started",
         threads = n_workers,
@@ -1637,7 +1637,7 @@ fn run_mio_event_loop(
         std::collections::HashMap::new();
     let mut accept_seq: u64 = 0;
 
-    tracing::info!(target: "beava.server", "apply thread: dispatcher loop started");
+    tracing::debug!(target: "beava.server", "apply thread: dispatcher loop started");
 
     // Adaptive busy-poll: tight-spin on `read_rx.try_recv()` for up to
     // `SPIN_BUDGET_K` consecutive empty iterations, then fall through to
@@ -1847,7 +1847,7 @@ fn run_mio_event_loop(
                     // `recv_timeout`.
                 }
                 Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
-                    tracing::info!(
+                    tracing::debug!(
                         target: "beava.server",
                         "apply thread: read_rx disconnected (all workers gone), exiting"
                     );
@@ -1857,7 +1857,7 @@ fn run_mio_event_loop(
         }
 
         if shutdown.load(AOrdering::Acquire) {
-            tracing::info!(
+            tracing::debug!(
                 target: "beava.server",
                 "apply thread: shutdown signal received, stopping workers"
             );
@@ -1886,7 +1886,7 @@ fn run_mio_event_loop(
     for w in workers {
         w.join();
     }
-    tracing::info!(target: "beava.server", "apply thread: exiting");
+    tracing::debug!(target: "beava.server", "apply thread: exiting");
 }
 
 /// Route accepted clients to per-worker `IoBackend`s. Each accepted stream

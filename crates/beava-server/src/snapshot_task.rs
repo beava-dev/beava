@@ -53,7 +53,7 @@ pub fn spawn_snapshot_task(
             tokio::select! {
                 biased;
                 _ = cancel.cancelled() => {
-                    tracing::info!(
+                    tracing::debug!(
                         target: "beava.snapshot",
                         kind = "snapshot.task_exit",
                         "snapshot task cancelled"

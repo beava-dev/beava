@@ -414,7 +414,7 @@ pub fn replay_wal_from_lsn(
         }
     }
     outcome.installed_from_snapshot = from_lsn_exclusive > 0;
-    tracing::info!(
+    tracing::debug!(
         target: "beava.recovery",
         kind = "recovery.complete",
         snapshot_lsn = outcome.snapshot_lsn,
