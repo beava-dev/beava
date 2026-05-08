@@ -1,0 +1,1092 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Operator catalogue · beava SDK reference</title>
+<meta name="description" content="The complete beava operator catalogue — 55 aggregation primitives across seven families (core, sketch, recency, decay, velocity, buffer, geo) plus six deprecated aliases. Every signature is grep-verified against beava._agg.">
+<link rel="stylesheet" href="/styles/colors_and_type.css">
+<link rel="stylesheet" href="/styles/site.css">
+<link rel="stylesheet" href="/styles/sdk-shell.css">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+<link rel="shortcut icon" href="/assets/favicon.ico">
+<style>
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--fg1); font-family: var(--font-sans); }
+
+  /* Reference-page hero — tighter than the Quickstart's landing-style
+     hero. No mascot; eyebrow + h1 + lede in a single column. */
+  .ref-hero {
+    margin: 0 0 28px;
+    padding-bottom: 26px;
+    border-bottom: 1px solid var(--border);
+  }
+  .ref-hero .eyebrow {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-family: var(--font-mono); font-weight: 600; font-size: 12px;
+    color: var(--fg3);
+    margin-bottom: 14px;
+  }
+  .ref-hero .eyebrow .pill {
+    display: inline-block;
+    font-family: var(--font-mono); font-size: 10.5px; font-weight: 600;
+    color: var(--accent); background: var(--beava-orange-wash);
+    padding: 2px 8px; border-radius: 999px;
+    letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .ref-hero h1 {
+    font-family: var(--font-serif); font-weight: 700;
+    font-size: 44px; line-height: 1.05; letter-spacing: -0.025em;
+    color: var(--fg1);
+    margin: 0 0 14px;
+  }
+  .ref-hero h1 code {
+    font-family: var(--font-mono); font-weight: 700; font-size: 0.78em;
+    background: var(--beava-paper); border: 1px solid var(--border-inset);
+    padding: 2px 9px; border-radius: 8px; color: var(--accent);
+    letter-spacing: 0;
+  }
+  .ref-hero .lede {
+    font-family: var(--font-serif);
+    font-size: 19px; line-height: 1.5;
+    color: var(--fg2); font-weight: 400;
+    margin: 0; max-width: 60ch;
+  }
+
+  /* At-a-glance reference table for the seven families. */
+  .glance-table {
+    width: 100%; border-collapse: collapse;
+    margin: 14px 0 8px;
+    font-family: var(--font-sans); font-size: 14px;
+  }
+  .glance-table th, .glance-table td {
+    text-align: left; padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .glance-table th {
+    font-family: var(--font-mono); font-weight: 600; font-size: 11.5px;
+    color: var(--fg3); text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .glance-table td a {
+    font-family: var(--font-mono); font-weight: 600;
+    color: var(--accent);
+  }
+  .glance-table td.count {
+    font-family: var(--font-mono); color: var(--fg3); width: 60px;
+  }
+  .glance-table td.desc { color: var(--fg2); }
+
+  /* Small alias table for the deprecated-aliases section. */
+  .alias-table {
+    width: 100%; border-collapse: collapse;
+    margin: 12px 0 6px;
+    font-family: var(--font-mono); font-size: 13px;
+  }
+  .alias-table th, .alias-table td {
+    text-align: left; padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .alias-table th {
+    font-weight: 600; font-size: 11.5px;
+    color: var(--fg3); text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .alias-table td.from { color: var(--fg2); }
+  .alias-table td.to   { color: var(--accent); font-weight: 600; }
+  .alias-table td.note { font-family: var(--font-sans); color: var(--fg3); font-size: 12.5px; }
+</style>
+</head>
+<body class="beava">
+
+  <div id="bv-site-header"></div>
+
+  <div class="shell">
+
+    <!-- ============ SIDEBAR ============ -->
+    <aside class="sidebar">
+      <div id="bv-sdk-sidebar"></div>
+    </aside>
+
+    <!-- ============ MAIN ============
+         `data-pagefind-body` tells the Pagefind crawler this is the
+         main content region to index for search. Sidebar / TOC / nav
+         are excluded by build-search.mjs's excludeSelectors list. -->
+    <main class="content" data-pagefind-body>
+
+      <div class="crumbs">
+        <a href="/">beava</a><span class="sep">/</span>
+        <a href="/sdk/python/">SDK reference</a><span class="sep">/</span>
+        <span class="cur">Operator catalogue</span>
+      </div>
+
+      <header class="ref-hero">
+        <div class="eyebrow">
+          <span class="pill">Python SDK</span>
+          <span><code>beava._agg</code></span>
+        </div>
+        <h1>Operator catalogue</h1>
+        <p class="lede">Fifty-five aggregation primitives across seven families. Every operator is a function you call inside <code>agg(name=bv.&lt;op&gt;(...))</code>; the family changes what gets remembered, the shape stays the same.</p>
+      </header>
+
+      <!-- =============== OVERVIEW =============== -->
+      <h2 id="overview">Overview</h2>
+      <p>Every operator is a function in the <code>bv</code> namespace that returns an <code>AggDescriptor</code>. You never construct one directly — you call it inside the <code>agg()</code> step of a chain, and the keyword you bind it to becomes the column name in the resulting feature table.</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">shape</span>
+        </div>
+<pre><span class="tk-k">import</span> beava <span class="tk-k">as</span> bv
+
+<span class="tk-p">@</span><span class="tk-fn">bv.event</span>
+<span class="tk-k">class</span> <span class="tk-t">PageView</span><span class="tk-p">:</span>
+    user_id<span class="tk-p">:</span> <span class="tk-t">str</span>
+    spend<span class="tk-p">:</span>   <span class="tk-t">float</span>
+
+<span class="tk-p">@</span><span class="tk-fn">bv.table</span><span class="tk-p">(</span>key<span class="tk-p">=</span><span class="tk-s">"user_id"</span><span class="tk-p">)</span>
+<span class="tk-k">def</span> <span class="tk-fn">UserStats</span><span class="tk-p">(</span>e<span class="tk-p">:</span> <span class="tk-t">PageView</span><span class="tk-p">):</span>
+    <span class="tk-k">return</span> e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+        visits<span class="tk-p">=</span>bv<span class="tk-p">.</span>count<span class="tk-p">(</span>window<span class="tk-p">=</span><span class="tk-s">"1h"</span><span class="tk-p">),</span>
+        spend_avg<span class="tk-p">=</span>bv<span class="tk-p">.</span>mean<span class="tk-p">(</span><span class="tk-s">"spend"</span><span class="tk-p">,</span> window<span class="tk-p">=</span><span class="tk-s">"24h"</span><span class="tk-p">),</span>
+    <span class="tk-p">)</span></pre>
+      </div>
+
+      <p>Three argument shapes show up across the catalogue:</p>
+      <ul>
+        <li><strong>Field-bearing</strong> — the first positional arg is a string column name (<code>bv.sum("amount", ...)</code>). Passing an <code>_Expr</code> raises <code>RegistrationError(code="schema_mismatch")</code> at register time; build the derived column upstream with <code>with_columns</code>.</li>
+        <li><strong>Fieldless</strong> — counts, recency probes, and ratios that don't reference a column (<code>bv.count(...)</code>, <code>bv.first_seen()</code>, <code>bv.has_seen()</code>).</li>
+        <li><strong>Bound</strong> — a memory-bound argument is required: <code>window="&lt;duration&gt;"</code> (rolling), <code>half_life="&lt;duration&gt;"</code> (exponential decay), or a per-op cap (<code>k=</code>, <code>n=</code>, <code>samples=</code>, <code>buckets=[…]</code>).</li>
+      </ul>
+
+      <p>Durations are strings matching <code>\d+(ms|s|m|h|d)</code> or the literal <code>"forever"</code>. All optional <code>where=</code> kwargs accept a <code>bv.col(...)</code> expression and filter the operator's input on a per-event basis.</p>
+
+      <!-- =============== AT A GLANCE =============== -->
+      <h2 id="glance">At a glance</h2>
+      <p>Seven families, grouped by what each one remembers about the entity:</p>
+
+      <table class="glance-table">
+        <thead>
+          <tr><th>Family</th><th>Count</th><th>What it remembers</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><a href="#core">Core</a></td>          <td class="count">11</td><td class="desc">Counts, sums, extremes, the basics. <code>count</code>, <code>sum</code>, <code>mean</code>, <code>min</code>, <code>max</code>, <code>var</code>, <code>std</code>, <code>ratio</code>, <code>n_unique</code>, <code>first</code>, <code>last</code>.</td></tr>
+          <tr><td><a href="#sketch">Sketch</a></td>      <td class="count">10</td><td class="desc">Bounded-memory shape estimators — quantiles, histograms, top-k, sampled buffers.</td></tr>
+          <tr><td><a href="#recency">Recency</a></td>    <td class="count">10</td><td class="desc">Time-since-last-X probes, streaks, ever-seen flags. Cheap, scalar, no per-event memory.</td></tr>
+          <tr><td><a href="#decay">Decay</a></td>        <td class="count">6</td><td class="desc">Exponentially-weighted aggregates and time-weighted average. <code>half_life=</code> instead of <code>window=</code>.</td></tr>
+          <tr><td><a href="#velocity">Velocity</a></td>  <td class="count">9</td><td class="desc">Rate-of-change, trends, residuals, z-scores, burst and outlier counters.</td></tr>
+          <tr><td><a href="#buffer">Buffer</a></td>      <td class="count">4</td><td class="desc">Bounded ordered buffers — first-N, last-N, lag, delta-from-previous.</td></tr>
+          <tr><td><a href="#geo">Geo</a></td>            <td class="count">4</td><td class="desc">Lat/lon-pair operators built on the haversine formula. <code>lat=</code> + <code>lon=</code> name the coordinate columns.</td></tr>
+        </tbody>
+      </table>
+
+      <!-- ============================================================ -->
+      <!-- =====================  CORE  =============================== -->
+      <!-- ============================================================ -->
+      <h2 id="core">Core</h2>
+      <p>The basics. Counters, sums, extremes, ratios. Most accept an optional rolling <code>window=</code> kwarg; omit it for lifetime-cumulative behavior.</p>
+
+      <!-- ----- count ----- -->
+      <div class="method-head">
+        <h3 id="count" data-toc-label="count" class="name">count(window=None, where=None)</h3>
+<div class="sig">count(*, window: str | None = None, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Number of events in the rolling <code>window</code> (or the entity's lifetime when <code>window=None</code>). Returns <code>i64</code>.</p>
+      <ul>
+        <li><code>window</code> — rolling window like <code>"1h"</code>, <code>"24h"</code>, <code>"7d"</code>. Optional.</li>
+        <li><code>where</code> — optional filter; only matching events are counted.</li>
+      </ul>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">count.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    visits_1h<span class="tk-p">=</span>bv<span class="tk-p">.</span>count<span class="tk-p">(</span>window<span class="tk-p">=</span><span class="tk-s">"1h"</span><span class="tk-p">),</span>
+    failed_1h<span class="tk-p">=</span>bv<span class="tk-p">.</span>count<span class="tk-p">(</span>window<span class="tk-p">=</span><span class="tk-s">"1h"</span><span class="tk-p">,</span> where<span class="tk-p">=</span>bv<span class="tk-p">.</span>col<span class="tk-p">(</span><span class="tk-s">"status"</span><span class="tk-p">)</span> <span class="tk-p">==</span> <span class="tk-s">"fail"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- sum ----- -->
+      <div class="method-head">
+        <h3 id="sum" data-toc-label="sum" class="name">sum(field, window=None, where=None)</h3>
+<div class="sig">sum(field: str, *, window: str | None = None, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Sum of <code>field</code> over the window. Returns <code>f64</code>.</p>
+      <ul>
+        <li><code>field</code> — string column name. Passing an expression raises <code>RegistrationError(code="schema_mismatch")</code>.</li>
+        <li><code>window</code> — rolling duration; optional.</li>
+        <li><code>where</code> — optional row filter.</li>
+      </ul>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">sum.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    spend_24h<span class="tk-p">=</span>bv<span class="tk-p">.</span>sum<span class="tk-p">(</span><span class="tk-s">"amount"</span><span class="tk-p">,</span> window<span class="tk-p">=</span><span class="tk-s">"24h"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- mean ----- -->
+      <div class="method-head">
+        <h3 id="mean" data-toc-label="mean" class="name">mean(field, window=None, where=None)</h3>
+<div class="sig">mean(field: str, *, window: str | None = None, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Arithmetic mean of <code>field</code>. Returns <code>f64</code>. Polars-style name; the SQL alias <code>bv.avg</code> is deprecated (see <a href="#aliases">Deprecated aliases</a>).</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">mean.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    avg_amount_1h<span class="tk-p">=</span>bv<span class="tk-p">.</span>mean<span class="tk-p">(</span><span class="tk-s">"amount"</span><span class="tk-p">,</span> window<span class="tk-p">=</span><span class="tk-s">"1h"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- min ----- -->
+      <div class="method-head">
+        <h3 id="min" data-toc-label="min" class="name">min(field, window=None, where=None)</h3>
+<div class="sig">min(field: str, *, window: str | None = None, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Smallest value of <code>field</code> seen. Output type inherits from the upstream column (<code>i64</code> / <code>f64</code> / <code>str</code>).</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">min.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    min_amount<span class="tk-p">=</span>bv<span class="tk-p">.</span>min<span class="tk-p">(</span><span class="tk-s">"amount"</span><span class="tk-p">,</span> window<span class="tk-p">=</span><span class="tk-s">"7d"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- max ----- -->
+      <div class="method-head">
+        <h3 id="max" data-toc-label="max" class="name">max(field, window=None, where=None)</h3>
+<div class="sig">max(field: str, *, window: str | None = None, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Largest value of <code>field</code>. Output type inherits from the upstream column.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">max.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    max_amount<span class="tk-p">=</span>bv<span class="tk-p">.</span>max<span class="tk-p">(</span><span class="tk-s">"amount"</span><span class="tk-p">,</span> window<span class="tk-p">=</span><span class="tk-s">"7d"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- var ----- -->
+      <div class="method-head">
+        <h3 id="var" data-toc-label="var" class="name">var(field, window=None, where=None)</h3>
+<div class="sig">var(field: str, *, window: str | None = None, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Population variance of <code>field</code>. Returns <code>f64</code>. The SQL alias <code>bv.variance</code> is deprecated.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">var.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    spend_var_24h<span class="tk-p">=</span>bv<span class="tk-p">.</span>var<span class="tk-p">(</span><span class="tk-s">"amount"</span><span class="tk-p">,</span> window<span class="tk-p">=</span><span class="tk-s">"24h"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- std ----- -->
+      <div class="method-head">
+        <h3 id="std" data-toc-label="std" class="name">std(field, window=None, where=None)</h3>
+<div class="sig">std(field: str, *, window: str | None = None, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Standard deviation of <code>field</code>. Returns <code>f64</code>. The SQL alias <code>bv.stddev</code> is deprecated.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">std.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    spend_std_24h<span class="tk-p">=</span>bv<span class="tk-p">.</span>std<span class="tk-p">(</span><span class="tk-s">"amount"</span><span class="tk-p">,</span> window<span class="tk-p">=</span><span class="tk-s">"24h"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- ratio ----- -->
+      <div class="method-head">
+        <h3 id="ratio" data-toc-label="ratio" class="name">ratio(window=None, where=None)</h3>
+<div class="sig">ratio(*, window: str | None = None, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Server-computed ratio <code>matched / total</code> over the window. The <code>where=</code> expression filters the numerator only; the denominator is the unfiltered event count. Returns <code>f64</code>.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">ratio.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    failure_rate_1h<span class="tk-p">=</span>bv<span class="tk-p">.</span>ratio<span class="tk-p">(</span>
+        window<span class="tk-p">=</span><span class="tk-s">"1h"</span><span class="tk-p">,</span>
+        where<span class="tk-p">=</span>bv<span class="tk-p">.</span>col<span class="tk-p">(</span><span class="tk-s">"status"</span><span class="tk-p">)</span> <span class="tk-p">==</span> <span class="tk-s">"fail"</span><span class="tk-p">,</span>
+    <span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- n_unique ----- -->
+      <div class="method-head">
+        <h3 id="n_unique" data-toc-label="n_unique" class="name">n_unique(field, window=None, where=None)</h3>
+<div class="sig">n_unique(field: str, *, window: str | None = None, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Approximate distinct-value count for <code>field</code> (HyperLogLog under the hood). Returns <code>i64</code>. The SQL alias <code>bv.count_distinct</code> is deprecated.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">n_unique.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    distinct_ips_24h<span class="tk-p">=</span>bv<span class="tk-p">.</span>n_unique<span class="tk-p">(</span><span class="tk-s">"ip"</span><span class="tk-p">,</span> window<span class="tk-p">=</span><span class="tk-s">"24h"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- first ----- -->
+      <div class="method-head">
+        <h3 id="first" data-toc-label="first" class="name">first(field)</h3>
+<div class="sig">first(field: str) -&gt; AggDescriptor</div>
+      </div>
+      <p>Value of <code>field</code> at the first event seen for the entity. Lifetime only — no <code>window=</code>. Output type inherits from the upstream column.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">first.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    signup_country<span class="tk-p">=</span>bv<span class="tk-p">.</span>first<span class="tk-p">(</span><span class="tk-s">"country"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- last ----- -->
+      <div class="method-head">
+        <h3 id="last" data-toc-label="last" class="name">last(field)</h3>
+<div class="sig">last(field: str) -&gt; AggDescriptor</div>
+      </div>
+      <p>Value of <code>field</code> at the most recent event. Lifetime only. Output type inherits from the upstream column.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">last.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    last_country<span class="tk-p">=</span>bv<span class="tk-p">.</span>last<span class="tk-p">(</span><span class="tk-s">"country"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- ====================  SKETCH  ============================== -->
+      <!-- ============================================================ -->
+      <h2 id="sketch">Sketch</h2>
+      <p>Bounded-memory shape estimators. Each carries its own bound — <code>k=</code>, <code>n=</code>, <code>samples=</code>, or a fixed <code>buckets=</code> list — so per-entity memory stays predictable.</p>
+
+      <!-- ----- quantile ----- -->
+      <div class="method-head">
+        <h3 id="quantile" data-toc-label="quantile" class="name">quantile(field, q, window=None, where=None)</h3>
+<div class="sig">quantile(field: str, *, q: float, window: str | None = None, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Approximate quantile of <code>field</code> at probability <code>q</code> (open interval <code>(0, 1)</code>). Returns <code>f64</code>. The SQL alias <code>bv.percentile(p=...)</code> is deprecated.</p>
+      <ul>
+        <li><code>q</code> — required float in <code>(0, 1)</code>; e.g. <code>0.5</code> for the median, <code>0.99</code> for P99.</li>
+      </ul>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">quantile.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    p99_latency_1h<span class="tk-p">=</span>bv<span class="tk-p">.</span>quantile<span class="tk-p">(</span><span class="tk-s">"latency_ms"</span><span class="tk-p">,</span> q<span class="tk-p">=</span><span class="tk-n">0.99</span><span class="tk-p">,</span> window<span class="tk-p">=</span><span class="tk-s">"1h"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- top_k ----- -->
+      <div class="method-head">
+        <h3 id="top_k" data-toc-label="top_k" class="name">top_k(field, k, window=None, where=None)</h3>
+<div class="sig">top_k(field: str, *, k: int, window: str | None = None, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Top-K most frequent values of <code>field</code> (count-min sketch + min-heap). Returns a JSON-string payload of <code>[{value, count}, ...]</code>.</p>
+      <ul>
+        <li><code>k</code> — required positive integer; the heap size.</li>
+      </ul>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">top_k.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    top_paths_1h<span class="tk-p">=</span>bv<span class="tk-p">.</span>top_k<span class="tk-p">(</span><span class="tk-s">"path"</span><span class="tk-p">,</span> k<span class="tk-p">=</span><span class="tk-n">5</span><span class="tk-p">,</span> window<span class="tk-p">=</span><span class="tk-s">"1h"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- bloom_member ----- -->
+      <div class="method-head">
+        <h3 id="bloom_member" data-toc-label="bloom_member" class="name">bloom_member(field, window=None, where=None)</h3>
+<div class="sig">bloom_member(field: str, *, window: str | None = None, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Bloom-filter membership probe. Server compares the current event's <code>field</code> against the filter accumulated for the entity. Returns <code>bool</code> (false-positive-bounded).</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">bloom_member.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    seen_ip_before<span class="tk-p">=</span>bv<span class="tk-p">.</span>bloom_member<span class="tk-p">(</span><span class="tk-s">"ip"</span><span class="tk-p">,</span> window<span class="tk-p">=</span><span class="tk-s">"30d"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- entropy ----- -->
+      <div class="method-head">
+        <h3 id="entropy" data-toc-label="entropy" class="name">entropy(field, window=None, where=None)</h3>
+<div class="sig">entropy(field: str, *, window: str | None = None, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Shannon entropy of <code>field</code>'s value distribution (bits). Returns <code>f64</code>. Useful for "is this user spread across many values, or dialed in on a few."</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">entropy.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    path_entropy_1h<span class="tk-p">=</span>bv<span class="tk-p">.</span>entropy<span class="tk-p">(</span><span class="tk-s">"path"</span><span class="tk-p">,</span> window<span class="tk-p">=</span><span class="tk-s">"1h"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- histogram ----- -->
+      <div class="method-head">
+        <h3 id="histogram" data-toc-label="histogram" class="name">histogram(field, buckets, where=None)</h3>
+<div class="sig">histogram(field: str, *, buckets: list[float], where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Lifetime fixed-bucket count histogram of <code>field</code>. Returns a JSON-string payload of bucket counts. Lifetime-only — no <code>window=</code>; the bound is the bucket list itself.</p>
+      <ul>
+        <li><code>buckets</code> — required strictly-increasing <code>list[float]</code> of split points.</li>
+      </ul>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">histogram.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    spend_dist<span class="tk-p">=</span>bv<span class="tk-p">.</span>histogram<span class="tk-p">(</span><span class="tk-s">"amount"</span><span class="tk-p">,</span> buckets<span class="tk-p">=</span><span class="tk-p">[</span><span class="tk-n">10</span><span class="tk-p">,</span> <span class="tk-n">100</span><span class="tk-p">,</span> <span class="tk-n">1000</span><span class="tk-p">,</span> <span class="tk-n">10000</span><span class="tk-p">]),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- hour_of_day_histogram ----- -->
+      <div class="method-head">
+        <h3 id="hour_of_day_histogram" data-toc-label="hour_of_day_histogram" class="name">hour_of_day_histogram(where=None)</h3>
+<div class="sig">hour_of_day_histogram(*, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Lifetime 24-bucket per-hour event-count histogram (UTC hour). Fieldless. Returns a JSON-string payload.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">hour_of_day_histogram.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    activity_by_hour<span class="tk-p">=</span>bv<span class="tk-p">.</span>hour_of_day_histogram<span class="tk-p">(),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- dow_hour_histogram ----- -->
+      <div class="method-head">
+        <h3 id="dow_hour_histogram" data-toc-label="dow_hour_histogram" class="name">dow_hour_histogram(where=None)</h3>
+<div class="sig">dow_hour_histogram(*, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Lifetime 168-bucket histogram keyed by <code>(day_of_week, hour)</code>. Fieldless. Returns a JSON-string payload.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">dow_hour_histogram.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    weekly_pattern<span class="tk-p">=</span>bv<span class="tk-p">.</span>dow_hour_histogram<span class="tk-p">(),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- event_type_mix ----- -->
+      <div class="method-head">
+        <h3 id="event_type_mix" data-toc-label="event_type_mix" class="name">event_type_mix(field, categories=None, max_categories=256, where=None)</h3>
+<div class="sig">event_type_mix(
+    field: str,
+    *,
+    categories: list[str] | None = None,
+    max_categories: int = 256,
+    where: _Expr | None = None,
+) -&gt; AggDescriptor</div>
+      </div>
+      <p>Lifetime proportion-per-category sketch over <code>field</code>. Returns a JSON-string payload. Bounded by <code>max_categories</code>; pass an explicit <code>categories</code> allowlist to lock the bucket set.</p>
+      <ul>
+        <li><code>categories</code> — optional allowlist; takes precedence over the cap-and-drop path.</li>
+        <li><code>max_categories</code> — fallback bound when <code>categories</code> is unset (default <code>256</code>).</li>
+      </ul>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">event_type_mix.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    action_mix<span class="tk-p">=</span>bv<span class="tk-p">.</span>event_type_mix<span class="tk-p">(</span>
+        <span class="tk-s">"action"</span><span class="tk-p">,</span>
+        categories<span class="tk-p">=</span><span class="tk-p">[</span><span class="tk-s">"view"</span><span class="tk-p">,</span> <span class="tk-s">"click"</span><span class="tk-p">,</span> <span class="tk-s">"purchase"</span><span class="tk-p">],</span>
+    <span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- most_recent_n ----- -->
+      <div class="method-head">
+        <h3 id="most_recent_n" data-toc-label="most_recent_n" class="name">most_recent_n(field, n, where=None)</h3>
+<div class="sig">most_recent_n(field: str, *, n: int, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>The <code>n</code> most recent values of <code>field</code>, newest-first. Lifetime, capped at <code>n</code>. Returns a JSON-string array.</p>
+      <ul>
+        <li><code>n</code> — required positive integer; the buffer size.</li>
+      </ul>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">most_recent_n.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    last_5_paths<span class="tk-p">=</span>bv<span class="tk-p">.</span>most_recent_n<span class="tk-p">(</span><span class="tk-s">"path"</span><span class="tk-p">,</span> n<span class="tk-p">=</span><span class="tk-n">5</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- reservoir_sample ----- -->
+      <div class="method-head">
+        <h3 id="reservoir_sample" data-toc-label="reservoir_sample" class="name">reservoir_sample(field, samples, where=None)</h3>
+<div class="sig">reservoir_sample(field: str, *, samples: int, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Lifetime Vitter Algorithm-R reservoir sample of <code>field</code>. Returns a JSON-string array of length up to <code>samples</code>.</p>
+      <ul>
+        <li><code>samples</code> — required positive integer; the reservoir size.</li>
+      </ul>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">reservoir_sample.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    amount_sample<span class="tk-p">=</span>bv<span class="tk-p">.</span>reservoir_sample<span class="tk-p">(</span><span class="tk-s">"amount"</span><span class="tk-p">,</span> samples<span class="tk-p">=</span><span class="tk-n">100</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- ====================  RECENCY  ============================= -->
+      <!-- ============================================================ -->
+      <h2 id="recency">Recency</h2>
+      <p>"How long ago" and "how many in a row." These are scalar probes — they don't keep per-event history, so they're cheap.</p>
+
+      <!-- ----- first_seen ----- -->
+      <div class="method-head">
+        <h3 id="first_seen" data-toc-label="first_seen" class="name">first_seen()</h3>
+<div class="sig">first_seen() -&gt; AggDescriptor</div>
+      </div>
+      <p>Wall-clock millisecond timestamp of the first event for the entity. Returns <code>i64</code>. Fieldless, no kwargs.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">first_seen.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    signup_ts<span class="tk-p">=</span>bv<span class="tk-p">.</span>first_seen<span class="tk-p">(),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- last_seen ----- -->
+      <div class="method-head">
+        <h3 id="last_seen" data-toc-label="last_seen" class="name">last_seen()</h3>
+<div class="sig">last_seen() -&gt; AggDescriptor</div>
+      </div>
+      <p>Wall-clock ms timestamp of the most recent event. Returns <code>i64</code>.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">last_seen.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    last_active_ts<span class="tk-p">=</span>bv<span class="tk-p">.</span>last_seen<span class="tk-p">(),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- age ----- -->
+      <div class="method-head">
+        <h3 id="age" data-toc-label="age" class="name">age()</h3>
+<div class="sig">age() -&gt; AggDescriptor</div>
+      </div>
+      <p>Query-time elapsed milliseconds since <code>first_seen</code>. Returns <code>i64</code>. Computed at <code>get</code> time, not at push time.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">age.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    account_age_ms<span class="tk-p">=</span>bv<span class="tk-p">.</span>age<span class="tk-p">(),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- has_seen ----- -->
+      <div class="method-head">
+        <h3 id="has_seen" data-toc-label="has_seen" class="name">has_seen(where=None)</h3>
+<div class="sig">has_seen(*, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Boolean flag — has the entity ever produced a matching event? Returns <code>bool</code>. Fieldless; the predicate goes in <code>where=</code>.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">has_seen.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    ever_failed<span class="tk-p">=</span>bv<span class="tk-p">.</span>has_seen<span class="tk-p">(</span>where<span class="tk-p">=</span>bv<span class="tk-p">.</span>col<span class="tk-p">(</span><span class="tk-s">"status"</span><span class="tk-p">)</span> <span class="tk-p">==</span> <span class="tk-s">"fail"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- time_since ----- -->
+      <div class="method-head">
+        <h3 id="time_since" data-toc-label="time_since" class="name">time_since(where=None)</h3>
+<div class="sig">time_since(*, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Query-time elapsed milliseconds since the most recent matching event. Returns <code>i64</code>.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">time_since.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    ms_since_failure<span class="tk-p">=</span>bv<span class="tk-p">.</span>time_since<span class="tk-p">(</span>where<span class="tk-p">=</span>bv<span class="tk-p">.</span>col<span class="tk-p">(</span><span class="tk-s">"status"</span><span class="tk-p">)</span> <span class="tk-p">==</span> <span class="tk-s">"fail"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- time_since_last_n ----- -->
+      <div class="method-head">
+        <h3 id="time_since_last_n" data-toc-label="time_since_last_n" class="name">time_since_last_n(n, where=None)</h3>
+<div class="sig">time_since_last_n(*, n: int, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Query-time elapsed milliseconds since the <em>n</em>-th most recent matching event — silence relative to a buried event, not just the latest. Returns <code>i64</code>.</p>
+      <ul>
+        <li><code>n</code> — required positive integer; rank from the latest.</li>
+      </ul>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">time_since_last_n.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    ms_since_3rd_login<span class="tk-p">=</span>bv<span class="tk-p">.</span>time_since_last_n<span class="tk-p">(</span>n<span class="tk-p">=</span><span class="tk-n">3</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- streak ----- -->
+      <div class="method-head">
+        <h3 id="streak" data-toc-label="streak" class="name">streak(where=None)</h3>
+<div class="sig">streak(*, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Current run length of consecutive <em>matching</em> events. Resets on the first non-match. Returns <code>i64</code>.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">streak.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    consec_failures<span class="tk-p">=</span>bv<span class="tk-p">.</span>streak<span class="tk-p">(</span>where<span class="tk-p">=</span>bv<span class="tk-p">.</span>col<span class="tk-p">(</span><span class="tk-s">"status"</span><span class="tk-p">)</span> <span class="tk-p">==</span> <span class="tk-s">"fail"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- max_streak ----- -->
+      <div class="method-head">
+        <h3 id="max_streak" data-toc-label="max_streak" class="name">max_streak(where=None)</h3>
+<div class="sig">max_streak(*, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>All-time peak streak length. Returns <code>i64</code>.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">max_streak.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    worst_failure_run<span class="tk-p">=</span>bv<span class="tk-p">.</span>max_streak<span class="tk-p">(</span>where<span class="tk-p">=</span>bv<span class="tk-p">.</span>col<span class="tk-p">(</span><span class="tk-s">"status"</span><span class="tk-p">)</span> <span class="tk-p">==</span> <span class="tk-s">"fail"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- negative_streak ----- -->
+      <div class="method-head">
+        <h3 id="negative_streak" data-toc-label="negative_streak" class="name">negative_streak(where=None)</h3>
+<div class="sig">negative_streak(*, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Current run length of consecutive <em>non-matching</em> events — the inverse of <a href="#streak"><code>streak</code></a>. Returns <code>i64</code>.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">negative_streak.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    consec_clean<span class="tk-p">=</span>bv<span class="tk-p">.</span>negative_streak<span class="tk-p">(</span>where<span class="tk-p">=</span>bv<span class="tk-p">.</span>col<span class="tk-p">(</span><span class="tk-s">"status"</span><span class="tk-p">)</span> <span class="tk-p">==</span> <span class="tk-s">"fail"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- first_seen_in_window ----- -->
+      <div class="method-head">
+        <h3 id="first_seen_in_window" data-toc-label="first_seen_in_window" class="name">first_seen_in_window(window, where=None)</h3>
+<div class="sig">first_seen_in_window(*, window: str, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Boolean — is there a matching event within the past <code>window</code>? Returns <code>bool</code>. <code>window=</code> is required.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">first_seen_in_window.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    active_today<span class="tk-p">=</span>bv<span class="tk-p">.</span>first_seen_in_window<span class="tk-p">(</span>window<span class="tk-p">=</span><span class="tk-s">"24h"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- =====================  DECAY  ============================== -->
+      <!-- ============================================================ -->
+      <h2 id="decay">Decay</h2>
+      <p>Exponentially-weighted aggregates. Use <code>half_life=</code> instead of <code>window=</code>: each event's contribution decays by 50% every <code>half_life</code> of elapsed time, so old events fade rather than getting evicted.</p>
+
+      <!-- ----- ewma ----- -->
+      <div class="method-head">
+        <h3 id="ewma" data-toc-label="ewma" class="name">ewma(field, half_life, where=None)</h3>
+<div class="sig">ewma(field: str, *, half_life: str, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Exponentially weighted moving average of <code>field</code>. Returns <code>f64</code>. Aliased as <code>bv.ema</code> (which simply forwards to <code>ewma</code>).</p>
+      <ul>
+        <li><code>half_life</code> — required duration string; e.g. <code>"15m"</code>, <code>"1h"</code>.</li>
+      </ul>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">ewma.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    spend_ewma<span class="tk-p">=</span>bv<span class="tk-p">.</span>ewma<span class="tk-p">(</span><span class="tk-s">"amount"</span><span class="tk-p">,</span> half_life<span class="tk-p">=</span><span class="tk-s">"30m"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- ewvar ----- -->
+      <div class="method-head">
+        <h3 id="ewvar" data-toc-label="ewvar" class="name">ewvar(field, half_life, where=None)</h3>
+<div class="sig">ewvar(field: str, *, half_life: str, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Exponentially weighted variance of <code>field</code>. Returns <code>f64</code>.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">ewvar.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    spend_ewvar<span class="tk-p">=</span>bv<span class="tk-p">.</span>ewvar<span class="tk-p">(</span><span class="tk-s">"amount"</span><span class="tk-p">,</span> half_life<span class="tk-p">=</span><span class="tk-s">"30m"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- ew_zscore ----- -->
+      <div class="method-head">
+        <h3 id="ew_zscore" data-toc-label="ew_zscore" class="name">ew_zscore(field, half_life, where=None)</h3>
+<div class="sig">ew_zscore(field: str, *, half_life: str, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Z-score of the most recent <code>field</code> value against the EWMA / EWVAR baseline at the same half-life. Returns <code>f64</code>.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">ew_zscore.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    spend_zscore<span class="tk-p">=</span>bv<span class="tk-p">.</span>ew_zscore<span class="tk-p">(</span><span class="tk-s">"amount"</span><span class="tk-p">,</span> half_life<span class="tk-p">=</span><span class="tk-s">"1h"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- decayed_sum ----- -->
+      <div class="method-head">
+        <h3 id="decayed_sum" data-toc-label="decayed_sum" class="name">decayed_sum(field, half_life, where=None)</h3>
+<div class="sig">decayed_sum(field: str, *, half_life: str, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Time-decayed sum of <code>field</code>. Each event contributes its value times <code>0.5^(age / half_life)</code>. Returns <code>f64</code>.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">decayed_sum.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    fading_spend<span class="tk-p">=</span>bv<span class="tk-p">.</span>decayed_sum<span class="tk-p">(</span><span class="tk-s">"amount"</span><span class="tk-p">,</span> half_life<span class="tk-p">=</span><span class="tk-s">"6h"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- decayed_count ----- -->
+      <div class="method-head">
+        <h3 id="decayed_count" data-toc-label="decayed_count" class="name">decayed_count(half_life, where=None)</h3>
+<div class="sig">decayed_count(*, half_life: str, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Time-decayed event count — fieldless. Returns <code>f64</code>.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">decayed_count.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    fading_visits<span class="tk-p">=</span>bv<span class="tk-p">.</span>decayed_count<span class="tk-p">(</span>half_life<span class="tk-p">=</span><span class="tk-s">"1h"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- twa ----- -->
+      <div class="method-head">
+        <h3 id="twa" data-toc-label="twa" class="name">twa(field, window, where=None)</h3>
+<div class="sig">twa(field: str, *, window: str, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Time-weighted average of <code>field</code> over <code>window</code> — each value contributes proportionally to the duration it was the most recent observation. Returns <code>f64</code>. <code>window=</code> is required.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">twa.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    avg_balance_24h<span class="tk-p">=</span>bv<span class="tk-p">.</span>twa<span class="tk-p">(</span><span class="tk-s">"balance"</span><span class="tk-p">,</span> window<span class="tk-p">=</span><span class="tk-s">"24h"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- ====================  VELOCITY  ============================ -->
+      <!-- ============================================================ -->
+      <h2 id="velocity">Velocity</h2>
+      <p>Change-of-rate, trend, residual, and outlier counters. Each requires a <code>window=</code> bound (or <code>baseline_window=</code> for <code>z_score</code>) — there's no lifetime variant; the comparison is always against a rolling reference frame.</p>
+
+      <!-- ----- rate_of_change ----- -->
+      <div class="method-head">
+        <h3 id="rate_of_change" data-toc-label="rate_of_change" class="name">rate_of_change(field, window, where=None)</h3>
+<div class="sig">rate_of_change(field: str, *, window: str, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Slope of <code>field</code> versus time across the window — <code>(latest - earliest) / window_seconds</code>. Returns <code>f64</code>. <code>window=</code> is required.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">rate_of_change.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    spend_velocity_1h<span class="tk-p">=</span>bv<span class="tk-p">.</span>rate_of_change<span class="tk-p">(</span><span class="tk-s">"amount"</span><span class="tk-p">,</span> window<span class="tk-p">=</span><span class="tk-s">"1h"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- inter_arrival_stats ----- -->
+      <div class="method-head">
+        <h3 id="inter_arrival_stats" data-toc-label="inter_arrival_stats" class="name">inter_arrival_stats(window, where=None)</h3>
+<div class="sig">inter_arrival_stats(*, window: str, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Mean inter-arrival time (ms) between consecutive matching events in the window. Fieldless. Returns <code>f64</code>.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">inter_arrival_stats.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    mean_gap_ms_1h<span class="tk-p">=</span>bv<span class="tk-p">.</span>inter_arrival_stats<span class="tk-p">(</span>window<span class="tk-p">=</span><span class="tk-s">"1h"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- burst_count ----- -->
+      <div class="method-head">
+        <h3 id="burst_count" data-toc-label="burst_count" class="name">burst_count(window, sub_window, where=None)</h3>
+<div class="sig">burst_count(*, window: str, sub_window: str, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Number of <code>sub_window</code>-sized buckets inside <code>window</code> that had at least one event. Detects clustered activity rather than steady throughput. Returns <code>i64</code>.</p>
+      <ul>
+        <li><code>window</code> — outer bound; required.</li>
+        <li><code>sub_window</code> — inner bucket size; required (must also be a valid duration).</li>
+      </ul>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">burst_count.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    bursts_1h<span class="tk-p">=</span>bv<span class="tk-p">.</span>burst_count<span class="tk-p">(</span>window<span class="tk-p">=</span><span class="tk-s">"1h"</span><span class="tk-p">,</span> sub_window<span class="tk-p">=</span><span class="tk-s">"1m"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- trend ----- -->
+      <div class="method-head">
+        <h3 id="trend" data-toc-label="trend" class="name">trend(field, window, where=None)</h3>
+<div class="sig">trend(field: str, *, window: str, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>OLS slope of <code>field</code> versus event timestamp across <code>window</code>. Returns <code>f64</code>. Distinct from <a href="#rate_of_change"><code>rate_of_change</code></a>: <code>trend</code> is a regression slope; <code>rate_of_change</code> is endpoint-only.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">trend.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    spend_trend_24h<span class="tk-p">=</span>bv<span class="tk-p">.</span>trend<span class="tk-p">(</span><span class="tk-s">"amount"</span><span class="tk-p">,</span> window<span class="tk-p">=</span><span class="tk-s">"24h"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- trend_residual ----- -->
+      <div class="method-head">
+        <h3 id="trend_residual" data-toc-label="trend_residual" class="name">trend_residual(field, window, where=None)</h3>
+<div class="sig">trend_residual(field: str, *, window: str, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>RMS of the residuals from the OLS fit underlying <a href="#trend"><code>trend</code></a>. Returns <code>f64</code> — high values mean the trend explains little of the variance.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">trend_residual.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    spend_residual_24h<span class="tk-p">=</span>bv<span class="tk-p">.</span>trend_residual<span class="tk-p">(</span><span class="tk-s">"amount"</span><span class="tk-p">,</span> window<span class="tk-p">=</span><span class="tk-s">"24h"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- outlier_count ----- -->
+      <div class="method-head">
+        <h3 id="outlier_count" data-toc-label="outlier_count" class="name">outlier_count(field, window, sigma=3.0, where=None)</h3>
+<div class="sig">outlier_count(field: str, *, window: str, sigma: float = 3.0, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Number of events where <code>field</code> falls outside ±<code>sigma</code> standard deviations of the window's mean. Returns <code>i64</code>.</p>
+      <ul>
+        <li><code>sigma</code> — multiplier on the standard deviation. Default <code>3.0</code>.</li>
+      </ul>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">outlier_count.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    big_spends_24h<span class="tk-p">=</span>bv<span class="tk-p">.</span>outlier_count<span class="tk-p">(</span><span class="tk-s">"amount"</span><span class="tk-p">,</span> window<span class="tk-p">=</span><span class="tk-s">"24h"</span><span class="tk-p">,</span> sigma<span class="tk-p">=</span><span class="tk-n">2.5</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- value_change_count ----- -->
+      <div class="method-head">
+        <h3 id="value_change_count" data-toc-label="value_change_count" class="name">value_change_count(field, window, where=None)</h3>
+<div class="sig">value_change_count(field: str, *, window: str, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Number of times <code>field</code>'s value differed from its previous value inside the window — a coarse churn indicator. Returns <code>i64</code>.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">value_change_count.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    device_swaps_24h<span class="tk-p">=</span>bv<span class="tk-p">.</span>value_change_count<span class="tk-p">(</span><span class="tk-s">"device_id"</span><span class="tk-p">,</span> window<span class="tk-p">=</span><span class="tk-s">"24h"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- z_score ----- -->
+      <div class="method-head">
+        <h3 id="z_score" data-toc-label="z_score" class="name">z_score(field, baseline_window, where=None)</h3>
+<div class="sig">z_score(field: str, *, baseline_window: str, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Z-score of the latest <code>field</code> value against the rolling mean / stddev over <code>baseline_window</code>. Returns <code>f64</code>. Note the kwarg name is <code>baseline_window=</code>, not <code>window=</code>.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">z_score.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    spend_z<span class="tk-p">=</span>bv<span class="tk-p">.</span>z_score<span class="tk-p">(</span><span class="tk-s">"amount"</span><span class="tk-p">,</span> baseline_window<span class="tk-p">=</span><span class="tk-s">"7d"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- seasonal_deviation ----- -->
+      <div class="method-head">
+        <h3 id="seasonal_deviation" data-toc-label="seasonal_deviation" class="name">seasonal_deviation(field, where=None)</h3>
+<div class="sig">seasonal_deviation(field: str, *, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Lifetime z-score of the latest <code>field</code> against the hour-of-day baseline accumulated for the entity. Catches "this user is normally quiet at 3am, why are they spending now." Returns <code>f64</code>. Lifetime-only — no <code>window=</code>.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">seasonal_deviation.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    odd_hour_spend<span class="tk-p">=</span>bv<span class="tk-p">.</span>seasonal_deviation<span class="tk-p">(</span><span class="tk-s">"amount"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- =====================  BUFFER  ============================= -->
+      <!-- ============================================================ -->
+      <h2 id="buffer">Buffer</h2>
+      <p>Bounded ordered buffers — keep a small list of recent values per entity, in the order they arrived. Memory is fixed by the <code>n=</code> bound at register time.</p>
+
+      <!-- ----- first_n ----- -->
+      <div class="method-head">
+        <h3 id="first_n" data-toc-label="first_n" class="name">first_n(field, n, where=None)</h3>
+<div class="sig">first_n(field: str, *, n: int, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>The first <code>n</code> matching values of <code>field</code> in insertion order. Once the buffer is full, later events are ignored. Returns a JSON-string array.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">first_n.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    first_3_paths<span class="tk-p">=</span>bv<span class="tk-p">.</span>first_n<span class="tk-p">(</span><span class="tk-s">"path"</span><span class="tk-p">,</span> n<span class="tk-p">=</span><span class="tk-n">3</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- last_n ----- -->
+      <div class="method-head">
+        <h3 id="last_n" data-toc-label="last_n" class="name">last_n(field, n, where=None)</h3>
+<div class="sig">last_n(field: str, *, n: int, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>The last <code>n</code> matching values of <code>field</code>, oldest-to-newest. Sliding ring buffer — the oldest entry is dropped when a new one arrives. Returns a JSON-string array.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">last_n.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    recent_paths<span class="tk-p">=</span>bv<span class="tk-p">.</span>last_n<span class="tk-p">(</span><span class="tk-s">"path"</span><span class="tk-p">,</span> n<span class="tk-p">=</span><span class="tk-n">10</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- lag ----- -->
+      <div class="method-head">
+        <h3 id="lag" data-toc-label="lag" class="name">lag(field, n=1)</h3>
+<div class="sig">lag(field: str, *, n: int = 1) -&gt; AggDescriptor</div>
+      </div>
+      <p>The value of <code>field</code> from <em>n</em> events ago. Output type inherits from the upstream column. <code>n</code> defaults to <code>1</code> (the immediately previous value).</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">lag.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    prev_amount<span class="tk-p">=</span>bv<span class="tk-p">.</span>lag<span class="tk-p">(</span><span class="tk-s">"amount"</span><span class="tk-p">),</span>
+    amount_2_ago<span class="tk-p">=</span>bv<span class="tk-p">.</span>lag<span class="tk-p">(</span><span class="tk-s">"amount"</span><span class="tk-p">,</span> n<span class="tk-p">=</span><span class="tk-n">2</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- delta_from_prev ----- -->
+      <div class="method-head">
+        <h3 id="delta_from_prev" data-toc-label="delta_from_prev" class="name">delta_from_prev(field, where=None)</h3>
+<div class="sig">delta_from_prev(field: str, *, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Difference between the latest <code>field</code> value and the previous one. Output type inherits from the upstream column.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">delta_from_prev.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    spend_delta<span class="tk-p">=</span>bv<span class="tk-p">.</span>delta_from_prev<span class="tk-p">(</span><span class="tk-s">"amount"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- ======================  GEO  =============================== -->
+      <!-- ============================================================ -->
+      <h2 id="geo">Geo</h2>
+      <p>Lat/lon-pair operators built on the haversine formula. Each takes <code>lat=</code> and <code>lon=</code> kwargs naming the latitude / longitude columns on the upstream event; both columns are read on every matching event.</p>
+
+      <!-- ----- geo_velocity ----- -->
+      <div class="method-head">
+        <h3 id="geo_velocity" data-toc-label="geo_velocity" class="name">geo_velocity(lat, lon, where=None)</h3>
+<div class="sig">geo_velocity(*, lat: str, lon: str, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Lifetime maximum km/h between consecutive matching events. Catches "this card was used in two cities five minutes apart." Returns <code>f64</code>.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">geo_velocity.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    impossible_speed<span class="tk-p">=</span>bv<span class="tk-p">.</span>geo_velocity<span class="tk-p">(</span>lat<span class="tk-p">=</span><span class="tk-s">"lat"</span><span class="tk-p">,</span> lon<span class="tk-p">=</span><span class="tk-s">"lon"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- geo_distance ----- -->
+      <div class="method-head">
+        <h3 id="geo_distance" data-toc-label="geo_distance" class="name">geo_distance(lat, lon, where=None)</h3>
+<div class="sig">geo_distance(*, lat: str, lon: str, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Lifetime cumulative haversine path length (km) traced by the entity's matching events. Returns <code>f64</code>.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">geo_distance.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    total_km<span class="tk-p">=</span>bv<span class="tk-p">.</span>geo_distance<span class="tk-p">(</span>lat<span class="tk-p">=</span><span class="tk-s">"lat"</span><span class="tk-p">,</span> lon<span class="tk-p">=</span><span class="tk-s">"lon"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- geo_spread ----- -->
+      <div class="method-head">
+        <h3 id="geo_spread" data-toc-label="geo_spread" class="name">geo_spread(lat, lon, where=None)</h3>
+<div class="sig">geo_spread(*, lat: str, lon: str, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Lifetime RMS dispersion (km) of matching events around the running centroid — "how spread out is this entity's footprint." Returns <code>f64</code>.</p>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">geo_spread.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    geo_footprint_km<span class="tk-p">=</span>bv<span class="tk-p">.</span>geo_spread<span class="tk-p">(</span>lat<span class="tk-p">=</span><span class="tk-s">"lat"</span><span class="tk-p">,</span> lon<span class="tk-p">=</span><span class="tk-s">"lon"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ----- distance_from_home ----- -->
+      <div class="method-head">
+        <h3 id="distance_from_home" data-toc-label="distance_from_home" class="name">distance_from_home(lat, lon, samples=100, where=None)</h3>
+<div class="sig">distance_from_home(*, lat: str, lon: str, samples: int = 100, where: _Expr | None = None) -&gt; AggDescriptor</div>
+      </div>
+      <p>Distance (km) from the current event's coordinates to the centroid of the last <code>samples</code> matching events. Returns <code>f64</code>.</p>
+      <ul>
+        <li><code>samples</code> — sliding window of points used to compute the home centroid. Default <code>100</code>.</li>
+      </ul>
+      <div class="codeblock">
+        <div class="codeblock-head"><span class="filename">distance_from_home.py</span><button class="copy-btn">Copy</button></div>
+<pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+    km_from_home<span class="tk-p">=</span>bv<span class="tk-p">.</span>distance_from_home<span class="tk-p">(</span>lat<span class="tk-p">=</span><span class="tk-s">"lat"</span><span class="tk-p">,</span> lon<span class="tk-p">=</span><span class="tk-s">"lon"</span><span class="tk-p">,</span> samples<span class="tk-p">=</span><span class="tk-n">50</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- ===============  DEPRECATED ALIASES  ======================= -->
+      <!-- ============================================================ -->
+      <h2 id="aliases">Deprecated aliases</h2>
+      <p>SQL-prose names from earlier drafts. They still work — calling them produces an <code>AggDescriptor</code> identical to the canonical helper — but each emits a Python <code>DeprecationWarning</code> at register time. Use the right column for new code.</p>
+
+      <table class="alias-table">
+        <thead>
+          <tr><th>Old name</th><th>Use instead</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="from"><code>bv.avg(field, ...)</code></td>            <td class="to"><a href="#mean"><code>bv.mean</code></a></td>            <td class="note">Same kwargs.</td></tr>
+          <tr><td class="from"><code>bv.variance(field, ...)</code></td>       <td class="to"><a href="#var"><code>bv.var</code></a></td>              <td class="note">Same kwargs.</td></tr>
+          <tr><td class="from"><code>bv.stddev(field, ...)</code></td>         <td class="to"><a href="#std"><code>bv.std</code></a></td>              <td class="note">Same kwargs.</td></tr>
+          <tr><td class="from"><code>bv.count_distinct(field, ...)</code></td> <td class="to"><a href="#n_unique"><code>bv.n_unique</code></a></td>    <td class="note">Same kwargs.</td></tr>
+          <tr><td class="from"><code>bv.percentile(field, p=...)</code></td>   <td class="to"><a href="#quantile"><code>bv.quantile(q=...)</code></a></td><td class="note">Rename <code>p=</code> to <code>q=</code>.</td></tr>
+          <tr><td class="from"><code>bv.ema(field, ...)</code></td>            <td class="to"><a href="#ewma"><code>bv.ewma</code></a></td>            <td class="note">Forwarder; no <code>DeprecationWarning</code> emitted.</td></tr>
+        </tbody>
+      </table>
+
+      <p><code>bv.ema</code> is the only alias that does <em>not</em> emit a <code>DeprecationWarning</code> — it's a thin re-export of <code>ewma</code> kept for API parity with libraries that prefer the shorter name.</p>
+
+      <!-- ============================================================ -->
+      <!-- ======================  NEXT  ============================== -->
+      <!-- ============================================================ -->
+      <h2 id="next">Where to go next</h2>
+      <p>You've got the catalogue. The two adjacent pages cover the expression DSL the operators consume and the error codes the server returns:</p>
+
+      <div class="card-grid">
+        <a class="card" href="#">
+          <div class="ttl"><code>bv.col</code> / <code>bv.lit</code></div>
+          <p class="desc">The column-reference expression DSL. Used inside <code>where=</code>, <code>filter(...)</code>, and <code>with_columns(...)</code> chain stages — the way you build the expressions you pass to operators.</p>
+          <span class="go">Reference (planned) <span class="arrow">→</span></span>
+        </a>
+        <a class="card" href="#">
+          <div class="ttl">Errors</div>
+          <p class="desc">Every structured error code the server returns — <code>schema_mismatch</code>, <code>unknown_table</code>, <code>event_not_found</code>, <code>reset_disabled</code>, and the rest. Mapped to the SDK's <code>RegistrationError</code> exception.</p>
+          <span class="go">Reference (planned) <span class="arrow">→</span></span>
+        </a>
+      </div>
+
+      <!-- =============== FOOTER =============== -->
+      <div class="footer-area">
+        <div class="feedback">
+          <div class="ask">Was this page useful?</div>
+          <div class="feedback-btns">
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3z"/><line x1="7" y1="22" x2="7" y2="11"/></svg>
+              Yes
+            </button>
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3z"/><line x1="17" y1="2" x2="17" y2="13"/></svg>
+              Not really
+            </button>
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              Suggest an edit
+            </button>
+          </div>
+        </div>
+
+        <div id="bv-sdk-pager"></div>
+      </div>
+    </main>
+
+    <!-- ============ RIGHT TOC ============ -->
+    <aside class="toc">
+      <div id="bv-sdk-toc"></div>
+    </aside>
+
+  </div>
+
+  <div id="bv-site-footer"></div>
+
+  <!-- React + Babel — required by SiteHeader / SiteFooter / Sdk* -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script type="text/babel" src="/js/_shared/SiteHeader.jsx"></script>
+  <script type="text/babel" src="/js/_shared/SiteFooter.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkSidebar.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkTOC.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkPager.jsx"></script>
+
+  <script type="text/babel">
+    ReactDOM.createRoot(document.getElementById('bv-site-header'))
+      .render(<SiteHeader active="sdk" search maxWidth={1400}/>);
+    ReactDOM.createRoot(document.getElementById('bv-site-footer'))
+      .render(<SiteFooter maxWidth={1400}/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-sidebar'))
+      .render(<SdkSidebar active="operators"/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-toc'))
+      .render(<SdkTOC editPath="sdk/python/operators/index.html"/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-pager'))
+      .render(<SdkPager
+        prev={{ href: '/sdk/python/col-lit/', label: 'bv.col / bv.lit' }}
+        next={{ href: '/sdk/python/errors/', label: 'Errors' }}
+      />);
+  </script>
+
+  <script src="/js/copy-buttons.js" defer></script>
+  <!-- Heading anchor copy-link icons. Injects a "#" affordance into every
+       <h2 id> / <h3 id> inside `.content` (matches the `.bv-content` and
+       `.docs-prose` surfaces too). Idempotent + uses MutationObserver to
+       catch React-mounted content. -->
+  <script src="/scripts/docs-headings.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Errors · beava SDK reference</title>
+<meta name="description" content="The two-tier error model: client-side Python exceptions (RegistrationError, ValidationError, BinaryNotFoundError) and the wire-level error codes the server returns under `error.code`.">
+<link rel="stylesheet" href="/styles/colors_and_type.css">
+<link rel="stylesheet" href="/styles/site.css">
+<link rel="stylesheet" href="/styles/sdk-shell.css">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+<link rel="shortcut icon" href="/assets/favicon.ico">
+<style>
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--fg1); font-family: var(--font-sans); }
+
+  /* Reference-page hero — matches the App page convention. */
+  .ref-hero {
+    margin: 0 0 28px;
+    padding-bottom: 26px;
+    border-bottom: 1px solid var(--border);
+  }
+  .ref-hero .eyebrow {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-family: var(--font-mono); font-weight: 600; font-size: 12px;
+    color: var(--fg3);
+    margin-bottom: 14px;
+  }
+  .ref-hero .eyebrow .pill {
+    display: inline-block;
+    font-family: var(--font-mono); font-size: 10.5px; font-weight: 600;
+    color: var(--accent); background: var(--beava-orange-wash);
+    padding: 2px 8px; border-radius: 999px;
+    letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .ref-hero h1 {
+    font-family: var(--font-serif); font-weight: 700;
+    font-size: 44px; line-height: 1.05; letter-spacing: -0.025em;
+    color: var(--fg1);
+    margin: 0 0 14px;
+  }
+  .ref-hero .lede {
+    font-family: var(--font-serif);
+    font-size: 19px; line-height: 1.5;
+    color: var(--fg2); font-weight: 400;
+    margin: 0; max-width: 60ch;
+  }
+
+  /* Wire-code section heading — small caps section break. */
+  .section-eyebrow {
+    font-family: var(--font-mono); font-weight: 600; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--fg3);
+    margin: 8px 0 6px;
+  }
+</style>
+</head>
+<body class="beava">
+
+  <div id="bv-site-header"></div>
+
+  <div class="shell">
+
+    <!-- ============ SIDEBAR ============ -->
+    <aside class="sidebar">
+      <div id="bv-sdk-sidebar"></div>
+    </aside>
+
+    <!-- ============ MAIN ============ -->
+    <main class="content" data-pagefind-body>
+
+      <div class="crumbs">
+        <a href="/">beava</a><span class="sep">/</span>
+        <a href="/sdk/python/">SDK reference</a><span class="sep">/</span>
+        <span class="cur">Errors</span>
+      </div>
+
+      <header class="ref-hero">
+        <div class="eyebrow">
+          <span class="pill">Python SDK</span>
+          <span><code>beava._errors</code></span>
+        </div>
+        <h1>Errors</h1>
+        <p class="lede">Two layers, one combined surface. The Python SDK raises three exception classes; the server returns structured wire errors under <code>error.code</code>. Every non-2xx wire response is rewrapped as a Python exception so <code>try/except bv.RegistrationError</code> catches everything that came off the network.</p>
+      </header>
+
+      <!-- =============== OVERVIEW =============== -->
+      <h2 id="overview">Overview</h2>
+      <p>Beava errors come from two places:</p>
+      <ul>
+        <li><strong>Client-side</strong> — the SDK validates inputs before they hit the wire (e.g. raw <code>EventDerivation</code> chains that weren't wrapped in <code>@bv.event</code>) and raises <code>RegistrationError</code> or <code>BinaryNotFoundError</code> directly. <code>ValidationError</code> is the structured per-failure record carried by <code>RegistrationError.errors</code>.</li>
+        <li><strong>Server-side (wire)</strong> — every non-2xx response from the data plane carries a JSON body with a stable <code>error.code</code>. The SDK rewraps that body as <code>RegistrationError(code=..., path=..., message=...)</code>; you don't deal with raw <code>httpx</code> bodies.</li>
+      </ul>
+
+      <p>The canonical wire-error envelope is a flat object:</p>
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">wire error response</span>
+        </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"error"</span><span class="tk-p">:</span> <span class="tk-p">{</span>
+    <span class="tk-fn">"code"</span><span class="tk-p">:</span>    <span class="tk-s">"event_not_found"</span><span class="tk-p">,</span>
+    <span class="tk-fn">"path"</span><span class="tk-p">:</span>    <span class="tk-s">"PageView"</span><span class="tk-p">,</span>
+    <span class="tk-fn">"message"</span><span class="tk-p">:</span> <span class="tk-s">"event 'PageView' is not registered"</span>
+  <span class="tk-p">}</span><span class="tk-p">,</span>
+  <span class="tk-fn">"registry_version"</span><span class="tk-p">:</span> <span class="tk-n">3</span>
+<span class="tk-p">}</span></pre>
+      </div>
+      <p>Some errors carry richer payloads — <code>force_required</code> includes a structured <code>diff</code>, <code>batch_too_large</code> includes the offending count, registration validation can return an <code>errors</code> list of <code>{kind, path, message}</code> tuples. The SDK threads those into <code>RegistrationError.errors</code> as <code>ValidationError</code> instances when present.</p>
+
+      <p>HTTP status discipline: <code>4xx</code> means client mistake (event not registered, schema mismatch, malformed JSON), <code>5xx</code> means server-side trouble (WAL stall, internal serialization bug). <code>403</code> is reserved for <code>reset_disabled_in_production</code>. The Python SDK does <strong>not</strong> retry — see the FAQ below.</p>
+
+      <!-- =============== PYTHON EXCEPTIONS =============== -->
+      <p class="section-eyebrow">Section 1 of 2</p>
+      <h2 id="python-exceptions">Python exceptions</h2>
+      <p>Three exception classes are exported from the top-level <code>beava</code> module. All three are also accessible as <code>bv.RegistrationError</code>, <code>bv.ValidationError</code>, <code>bv.BinaryNotFoundError</code>.</p>
+
+      <!-- ----- RegistrationError ----- -->
+      <div class="method-head">
+        <h3 id="registration-error" data-toc-label="RegistrationError" class="name">RegistrationError</h3>
+<div class="sig">RegistrationError(*, code: str, path: str = "", message: str = "", errors: list[ValidationError] | None = None)</div>
+      </div>
+      <p>The SDK's general-purpose wire-error wrapper. The name is historical — it predates the wire-code expansion — and it's now raised for <strong>any</strong> non-2xx response from the data plane. Discriminate on <code>code</code>, not on the exception class.</p>
+
+      <h3>Attributes</h3>
+      <ul>
+        <li><code>code</code> — the stable wire code (e.g. <code>"event_not_found"</code>, <code>"schema_mismatch"</code>, <code>"unknown_table"</code>, <code>"reset_disabled"</code>, <code>"invalid_descriptor"</code>). Catalogued in §Wire error codes below.</li>
+        <li><code>path</code> — JSON-pointer-style path to the offending field or descriptor (e.g. <code>"Transaction.amount"</code>). Empty string when the error is global.</li>
+        <li><code>message</code> — human-readable description, suitable for logging.</li>
+        <li><code>errors</code> — <code>list[ValidationError]</code>. Populated when registration validation returns multiple failures; empty for single-error cases.</li>
+      </ul>
+
+      <h3>Raised by</h3>
+      <ul>
+        <li>Any of the seven <code>App</code> methods (<code>register</code>, <code>push</code>, <code>get</code>, <code>batch_get</code>, <code>reset</code>, <code>ping</code>, <code>close</code>) on a non-2xx server response.</li>
+        <li>Client-side from <code>app.register(...)</code> when a passed descriptor is a raw <code>EventDerivation</code> chain (<code>code="invalid_descriptor"</code>) — does not hit the wire.</li>
+        <li>Client-side from the transport layer when the server returns a non-JSON body (<code>code="unparseable_error"</code>).</li>
+      </ul>
+
+      <h3>Example</h3>
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">handle_errors.py</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+<pre><span class="tk-k">import</span> beava <span class="tk-k">as</span> bv
+
+app <span class="tk-p">=</span> bv<span class="tk-p">.</span>App<span class="tk-p">(</span><span class="tk-s">"http://localhost:8080"</span><span class="tk-p">)</span>
+
+<span class="tk-k">try</span><span class="tk-p">:</span>
+    app<span class="tk-p">.</span>push<span class="tk-p">(</span><span class="tk-s">"PageView"</span><span class="tk-p">,</span> <span class="tk-p">{</span><span class="tk-s">"user_id"</span><span class="tk-p">:</span> <span class="tk-s">"alice"</span><span class="tk-p">})</span>
+<span class="tk-k">except</span> bv<span class="tk-p">.</span>RegistrationError <span class="tk-k">as</span> e<span class="tk-p">:</span>
+    <span class="tk-k">if</span> e<span class="tk-p">.</span>code <span class="tk-p">==</span> <span class="tk-s">"event_not_found"</span><span class="tk-p">:</span>
+        <span class="tk-c"># PageView wasn't registered yet — register and retry.</span>
+        app<span class="tk-p">.</span>register<span class="tk-p">(</span>PageView<span class="tk-p">)</span>
+        app<span class="tk-p">.</span>push<span class="tk-p">(</span><span class="tk-s">"PageView"</span><span class="tk-p">,</span> <span class="tk-p">{</span><span class="tk-s">"user_id"</span><span class="tk-p">:</span> <span class="tk-s">"alice"</span><span class="tk-p">})</span>
+    <span class="tk-k">elif</span> e<span class="tk-p">.</span>code <span class="tk-p">==</span> <span class="tk-s">"invalid_event"</span><span class="tk-p">:</span>
+        <span class="tk-c"># Schema mismatch — log path + message and surface up.</span>
+        log<span class="tk-p">.</span>error<span class="tk-p">(</span><span class="tk-s">"bad event payload at %s: %s"</span><span class="tk-p">,</span> e<span class="tk-p">.</span>path<span class="tk-p">,</span> e<span class="tk-p">.</span>message<span class="tk-p">)</span>
+        <span class="tk-k">raise</span>
+    <span class="tk-k">else</span><span class="tk-p">:</span>
+        <span class="tk-k">raise</span>  <span class="tk-c"># anything else is a programming bug</span></pre>
+      </div>
+
+      <!-- ----- ValidationError ----- -->
+      <div class="method-head">
+        <h3 id="validation-error" data-toc-label="ValidationError" class="name">ValidationError</h3>
+<div class="sig">ValidationError(kind: str, path: str, message: str)</div>
+      </div>
+      <p>Frozen dataclass carrying a single validation failure. Not raised on its own — it's the type held in <code>RegistrationError.errors</code> when registration validation produces multiple failures (e.g. five fields with type mismatches across two descriptors).</p>
+
+      <h3>Attributes</h3>
+      <ul>
+        <li><code>kind</code> — one of <code>cycle</code>, <code>missing_upstream</code>, <code>schema_mismatch</code>, <code>bad_return_type</code>, <code>unknown_field_type</code>, <code>table_key_invalid</code>, <code>registration_conflict</code>, <code>duplicate_name</code>. The set is exported as <code>beava._errors.VALIDATION_ERROR_KINDS</code>.</li>
+        <li><code>path</code> — JSON-pointer-style path (e.g. <code>"Transaction.event_time"</code>).</li>
+        <li><code>message</code> — human-readable description.</li>
+      </ul>
+      <p>The dataclass is frozen, so you can use it as a dict key or in sets. Stringification is <code>"[kind] path: message"</code>.</p>
+
+      <!-- ----- BinaryNotFoundError ----- -->
+      <div class="method-head">
+        <h3 id="binary-not-found-error" data-toc-label="BinaryNotFoundError" class="name">BinaryNotFoundError</h3>
+<div class="sig">BinaryNotFoundError</div>
+      </div>
+      <p>Raised by <strong>embed mode</strong> (<code>bv.App()</code> with no URL) when the <code>beava</code> binary cannot be located. Discovery order:</p>
+      <ol>
+        <li><code>$BEAVA_BINARY</code> — explicit override.</li>
+        <li><code>beava</code> on <code>$PATH</code> — released installs.</li>
+        <li><code>./target/debug/beava</code> — local dev-loop convenience.</li>
+        <li>If none of the above resolves, the exception fires with an install-guidance message.</li>
+      </ol>
+      <p>Network-mode (<code>http://...</code>, <code>tcp://...</code>) <code>App</code>s never raise this — they don't spawn a binary.</p>
+
+      <h3>Example</h3>
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">embed_or_fail.py</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+<pre><span class="tk-k">try</span><span class="tk-p">:</span>
+    <span class="tk-k">with</span> bv<span class="tk-p">.</span>App<span class="tk-p">()</span> <span class="tk-k">as</span> app<span class="tk-p">:</span>
+        app<span class="tk-p">.</span>register<span class="tk-p">(</span>PageView<span class="tk-p">)</span>
+<span class="tk-k">except</span> bv<span class="tk-p">.</span>BinaryNotFoundError <span class="tk-k">as</span> e<span class="tk-p">:</span>
+    <span class="tk-fn">print</span><span class="tk-p">(</span><span class="tk-s">"install beava: cargo install beava OR set BEAVA_BINARY"</span><span class="tk-p">)</span>
+    <span class="tk-k">raise</span></pre>
+      </div>
+
+      <!-- =============== WIRE CODES =============== -->
+      <p class="section-eyebrow">Section 2 of 2</p>
+      <h2 id="wire-codes">Wire error codes</h2>
+      <p>Every non-2xx response from the data plane carries a structured <code>error</code> object. The Python SDK rewraps each as <code>RegistrationError(code=...)</code>. The codes below are stable — clients can branch on them. Codes are grouped by trigger; HTTP status is given per code.</p>
+
+      <h3 class="section-eyebrow" style="margin-top:18px">Push errors</h3>
+
+      <div class="method-head">
+        <h3 id="event-not-found" data-toc-label="event_not_found" class="name">event_not_found</h3>
+<div class="sig">HTTP 404 · POST /push · path: &lt;event-name&gt;</div>
+      </div>
+      <p>The pushed <code>event_name</code> isn't in the registry. Register it first (<code>app.register(...)</code>), or check for typos. Catch as <code>RegistrationError(code="event_not_found")</code>.</p>
+
+      <div class="method-head">
+        <h3 id="invalid-event" data-toc-label="invalid_event" class="name">invalid_event</h3>
+<div class="sig">HTTP 400 · POST /push · path: data.&lt;field&gt; (when known)</div>
+      </div>
+      <p>The push body is malformed JSON, fails to deserialize into a <code>Row</code>, or violates the registered event schema (missing required fields, wrong types). The single biggest source of <code>invalid_event</code>: a field type doesn't match the declared schema. Catch as <code>RegistrationError(code="invalid_event")</code>.</p>
+
+      <div class="method-head">
+        <h3 id="unknown-field-v0" data-toc-label="unknown_field_v0" class="name">unknown_field_v0</h3>
+<div class="sig">HTTP 400 · POST /push · path: &lt;event&gt;.&lt;field&gt;</div>
+      </div>
+      <p>The push body contains a field not declared on the event's schema (and not in <code>optional_fields</code>). Beava is strict-deny on unknown fields in v0. Add the field to your <code>@bv.event</code> declaration or strip it from the push payload.</p>
+
+      <div class="method-head">
+        <h3 id="unknown-field-event-time-v0" data-toc-label="unknown_field_event_time_v0" class="name">unknown_field_event_time_v0</h3>
+<div class="sig">HTTP 400 · POST /push · path: &lt;event&gt;.event_time</div>
+      </div>
+      <p>Specialised form of <code>unknown_field_v0</code> for the legacy <code>event_time</code> / <code>event_time_ms</code> fields. v0 is processing-time only — server clock is the timestamp source. Drop the field; if you need event-time semantics, that's on the post-v0 roadmap.</p>
+
+      <div class="method-head">
+        <h3 id="missing-event-name-in-body" data-toc-label="missing_event_name_in_body" class="name">missing_event_name_in_body</h3>
+<div class="sig">HTTP 400 · POST /push (TCP fast-path)</div>
+      </div>
+      <p>The framed-TCP variant of <code>POST /push</code> couldn't extract <code>event_name</code> from the request frame. Almost always a malformed frame or a stale client. Re-check the SDK version against the server.</p>
+
+      <div class="method-head">
+        <h3 id="invalid-json-body" data-toc-label="invalid_json_body" class="name">invalid_json_body</h3>
+<div class="sig">HTTP 400 · POST /push (any transport)</div>
+      </div>
+      <p>The request body wasn't valid JSON. Distinct from <code>invalid_event</code> — the bytes never made it to schema validation.</p>
+
+      <h3 class="section-eyebrow" style="margin-top:24px">Get / batch_get errors</h3>
+
+      <div class="method-head">
+        <h3 id="unknown-table" data-toc-label="unknown_table" class="name">unknown_table</h3>
+<div class="sig">HTTP 404 · GET /get, POST /batch_get · path: &lt;table-name&gt;</div>
+      </div>
+      <p>The requested <code>table</code> isn't in the registry. In <code>batch_get</code>, this can appear per-tuple in the response array — the SDK aggregates and re-raises as a single <code>RegistrationError</code> when any entry failed.</p>
+
+      <div class="method-head">
+        <h3 id="key-not-found" data-toc-label="key_not_found" class="name">key_not_found</h3>
+<div class="sig">HTTP 404 · GET /get · path: &lt;table&gt;/&lt;key&gt;</div>
+      </div>
+      <p>The table is registered, but no events have populated this entity-key yet. The SDK normalizes single-row <code>get</code> calls so that cold-start returns <code>{}</code> rather than raising — you only see <code>key_not_found</code> when calling lower-level feature-query endpoints directly.</p>
+
+      <div class="method-head">
+        <h3 id="key-parse-failure" data-toc-label="key_parse_failure" class="name">key_parse_failure</h3>
+<div class="sig">HTTP 400 · GET /get, POST /batch_get · path: &lt;table&gt;/&lt;key&gt;</div>
+      </div>
+      <p>The supplied entity key doesn't deserialize into the table's declared key shape — typically a composite-key call where the JSON list has the wrong arity or types.</p>
+
+      <div class="method-head">
+        <h3 id="feature-not-found" data-toc-label="feature_not_found" class="name">feature_not_found</h3>
+<div class="sig">HTTP 400 · GET /get, POST /batch_get</div>
+      </div>
+      <p>One of the feature names in the <code>features=[...]</code> filter isn't on the table. The body's <code>missing</code> key lists the offending names. Drop them or re-register the table with the new feature.</p>
+
+      <div class="method-head">
+        <h3 id="batch-too-large" data-toc-label="batch_too_large" class="name">batch_too_large</h3>
+<div class="sig">HTTP 400 · POST /batch_get</div>
+      </div>
+      <p>Total work (<code>keys × features</code>) exceeds the per-request limit (10,000). Split the batch on the client.</p>
+
+      <h3 class="section-eyebrow" style="margin-top:24px">Register errors</h3>
+
+      <div class="method-head">
+        <h3 id="invalid-registration" data-toc-label="invalid_registration" class="name">invalid_registration</h3>
+<div class="sig">HTTP 400 · POST /register</div>
+      </div>
+      <p>The register payload failed structural validation (malformed DAG, missing required keys, raw <code>OpNode</code> shape errors). The body's <code>errors</code> list carries one <code>{kind, path, message}</code> per failure; the SDK exposes them via <code>RegistrationError.errors</code>.</p>
+
+      <div class="method-head">
+        <h3 id="unsupported-node-kind" data-toc-label="unsupported_node_kind" class="name">unsupported_node_kind</h3>
+<div class="sig">HTTP 400 · POST /register · path: descriptors[i].kind</div>
+      </div>
+      <p>The register payload included a descriptor with <code>kind: "table"</code> in a v0 events-only build (the v0 surface is events-only per the locked architectural decision). If you need aggregation tables, that returns in v0.1+.</p>
+
+      <div class="method-head">
+        <h3 id="unbounded-op-in-lifetime-mode" data-toc-label="unbounded_op_in_lifetime_mode" class="name">unbounded_op_in_lifetime_mode</h3>
+<div class="sig">HTTP 400 · POST /register · path: descriptors[i].agg.&lt;op&gt;</div>
+      </div>
+      <p>An aggregation that requires a window (<code>velocity</code>, <code>rate</code>, etc.) was declared without one in a context that demands a bounded window. Add <code>window="..."</code> to the op.</p>
+
+      <div class="method-head">
+        <h3 id="force-required" data-toc-label="force_required" class="name">force_required</h3>
+<div class="sig">HTTP 409 · POST /register</div>
+      </div>
+      <p>The proposed registry change would destroy state (type change, removed field, etc.). The body carries a structured <code>diff</code> with <code>additive</code> and <code>destructive</code> sections. Re-call with <code>force=True</code> to commit, or revise the change to be additive-only. The diff matches the shape the server returns under <code>dry_run</code>.</p>
+
+      <div class="method-head">
+        <h3 id="invalid-descriptor" data-toc-label="invalid_descriptor" class="name">invalid_descriptor</h3>
+<div class="sig">SDK-side · raised pre-wire · path: descriptors[i]</div>
+      </div>
+      <p><strong>Client-only.</strong> Raised by <code>app.register(*descriptors)</code> when one of the descriptors is a raw <code>EventDerivation</code> (a chain expression that wasn't wrapped in <code>@bv.event</code>). The exception message includes the canonical rewrite. Never reaches the wire.</p>
+
+      <h3 class="section-eyebrow" style="margin-top:24px">Reset / admin errors</h3>
+
+      <div class="method-head">
+        <h3 id="reset-disabled-in-production" data-toc-label="reset_disabled_in_production" class="name">reset_disabled_in_production</h3>
+<div class="sig">HTTP 403 · POST /reset</div>
+      </div>
+      <p>The server isn't in test mode (no <code>--test-mode</code> flag, no <code>BEAVA_TEST_MODE=1</code>). <code>/reset</code> is gated to keep production state safe. The SDK surfaces this as <code>RegistrationError(code="reset_disabled")</code> for backward compatibility — handle either string in your <code>except</code> branch if you straddle versions.</p>
+
+      <h3 class="section-eyebrow" style="margin-top:24px">Transport / framing errors</h3>
+
+      <div class="method-head">
+        <h3 id="unknown-op" data-toc-label="unknown_op" class="name">unknown_op</h3>
+<div class="sig">HTTP 400 · TCP fast-path</div>
+      </div>
+      <p>The opcode in a TCP frame isn't in the dispatch table. Almost always a stale client; upgrade the SDK.</p>
+
+      <div class="method-head">
+        <h3 id="op-not-implemented" data-toc-label="op_not_implemented" class="name">op_not_implemented</h3>
+<div class="sig">HTTP 400 · TCP fast-path</div>
+      </div>
+      <p>The opcode is reserved (in the catalogue) but not yet wired up in this build. Distinguishes "you typo'd / are stale" (<code>unknown_op</code>) from "we know about it; not done yet."</p>
+
+      <div class="method-head">
+        <h3 id="frame-too-large" data-toc-label="frame_too_large" class="name">frame_too_large</h3>
+<div class="sig">HTTP 413 · TCP fast-path</div>
+      </div>
+      <p>The TCP frame's declared length exceeds <code>max_frame_bytes</code>. Bump the server's frame ceiling or split the request.</p>
+
+      <div class="method-head">
+        <h3 id="frame-error" data-toc-label="frame_error" class="name">frame_error</h3>
+<div class="sig">HTTP 400 · TCP fast-path</div>
+      </div>
+      <p>Generic protocol-level frame violation (bad length, bad content-type marker, truncated payload).</p>
+
+      <div class="method-head">
+        <h3 id="http-protocol-error" data-toc-label="http_protocol_error" class="name">http_protocol_error</h3>
+<div class="sig">HTTP 400 · HTTP transport</div>
+      </div>
+      <p>The HTTP/1.1 layer rejected the request before it reached an application handler — typically a malformed request line or oversize headers.</p>
+
+      <div class="method-head">
+        <h3 id="unsupported-content-type" data-toc-label="unsupported_content_type" class="name">unsupported_content_type</h3>
+<div class="sig">HTTP 415 · TCP fast-path</div>
+      </div>
+      <p>The frame's <code>content_type</code> byte isn't in the supported set (<code>application/json</code>, <code>application/msgpack</code>).</p>
+
+      <div class="method-head">
+        <h3 id="unsupported-media-type" data-toc-label="unsupported_media_type" class="name">unsupported_media_type</h3>
+<div class="sig">HTTP 415 · HTTP transport</div>
+      </div>
+      <p>The HTTP <code>Content-Type</code> header isn't <code>application/json</code>. Set the header explicitly on raw <code>curl</code> calls.</p>
+
+      <div class="method-head">
+        <h3 id="unsupported-request-shape" data-toc-label="unsupported_request_shape" class="name">unsupported_request_shape</h3>
+<div class="sig">HTTP 400 · HTTP transport</div>
+      </div>
+      <p>The request body parsed but didn't match any known shape for the endpoint (e.g. <code>/batch_get</code> got an object instead of an array). The body's <code>message</code> field carries a hint.</p>
+
+      <div class="method-head">
+        <h3 id="not-found" data-toc-label="not_found" class="name">not_found</h3>
+<div class="sig">HTTP 404 · any HTTP path</div>
+      </div>
+      <p>The HTTP route doesn't exist. Either a typo on a curl-built request or a version skew.</p>
+
+      <div class="method-head">
+        <h3 id="method-not-allowed" data-toc-label="method_not_allowed" class="name">method_not_allowed</h3>
+<div class="sig">HTTP 405 · any HTTP path</div>
+      </div>
+      <p>Right path, wrong verb (e.g. <code>GET /push</code>). The body echoes <code>method</code> and <code>path</code>.</p>
+
+      <h3 class="section-eyebrow" style="margin-top:24px">Server / durability errors</h3>
+
+      <div class="method-head">
+        <h3 id="wal-unavailable" data-toc-label="wal_unavailable" class="name">wal_unavailable</h3>
+<div class="sig">HTTP 503 · POST /register, POST /push</div>
+      </div>
+      <p>The write-ahead log is taking writes but the durability path is degraded (disk full, fsync stuck, recovery in progress). Retries are safe — beava's contract is that successful writes are WAL-acked.</p>
+
+      <div class="method-head">
+        <h3 id="wal-sync-timeout" data-toc-label="wal_sync_timeout" class="name">wal_sync_timeout</h3>
+<div class="sig">HTTP 504 · sync-mode push</div>
+      </div>
+      <p>A sync-mode push waited longer than its timeout for fsync acknowledgement. The event may or may not be durable — if the server comes back, the event will appear with the next ack-LSN if it was buffered. Treat as an at-most-once retry candidate from the application side.</p>
+
+      <div class="method-head">
+        <h3 id="internal-error" data-toc-label="internal_error" class="name">internal_error</h3>
+<div class="sig">HTTP 500 · any path</div>
+      </div>
+      <p>Catch-all for server-side failures the engine couldn't categorize (panicked task, response serialization bug, unexpected I/O). The body's <code>reason</code> field carries a short hint. File a bug with the request payload and the server log line.</p>
+
+      <h3 class="section-eyebrow" style="margin-top:24px">SDK-only codes</h3>
+
+      <div class="method-head">
+        <h3 id="unparseable-error" data-toc-label="unparseable_error" class="name">unparseable_error</h3>
+<div class="sig">SDK-side · raised on non-JSON server response</div>
+      </div>
+      <p><strong>Client-only.</strong> Generated by the transport layer when the server returns a non-2xx response that isn't valid JSON (a load-balancer 502 page, a TCP RST mid-frame, an unexpected HTML body). The exception's <code>message</code> contains the first 200 bytes of the response so you can diagnose. Never originates server-side.</p>
+
+      <!-- =============== FAQ =============== -->
+      <h2 id="faq">Common questions</h2>
+
+      <div class="accordion">
+        <details>
+          <summary>Why is everything wrapped in <code>RegistrationError</code> even when it's not about registration?</summary>
+          <div class="acc-body">
+            <p>Historical naming. The class predates <code>push</code> / <code>get</code> / <code>batch_get</code> on the public API and was originally the registration-only error type. Rather than break <code>except bv.RegistrationError</code> in every existing user codebase, we kept the name and broadened the contract: it now wraps every wire error. Branch on <code>code</code> — that's the discriminator. A renamed alias may land in a future minor release; the existing class will stay for compatibility.</p>
+          </div>
+        </details>
+        <details>
+          <summary>How do I distinguish a 4xx from a 5xx?</summary>
+          <div class="acc-body">
+            <p>The exception doesn't carry the raw HTTP status — only the <code>code</code>. The mapping is documented per-code above (<code>event_not_found</code> is 404, <code>invalid_event</code> is 400, <code>wal_unavailable</code> is 503, etc.). Treat the code as the contract; the status is for HTTP-aware infrastructure (load balancers, monitoring) and isn't part of the SDK's public surface. If you need the status anyway, drop down to the transport layer (<code>app._transport</code>) — but that's a private API and may move.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Does the SDK retry transient failures?</summary>
+          <div class="acc-body">
+            <p>No. Each method is one wire call. Retries belong in your application code — beava's contract is that successful pushes are WAL-acked (durable), so re-pushing on a transport error is safe (idempotent under <code>dedupe_key</code>, an at-least-once duplicate without). For server-side soft failures (<code>wal_unavailable</code>, <code>wal_sync_timeout</code>, <code>internal_error</code>), exponential backoff with jitter is a reasonable default. Don't retry <code>4xx</code> codes — those are client mistakes that won't fix themselves.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Are these codes stable across versions?</summary>
+          <div class="acc-body">
+            <p>The codes documented above are stable. New codes get added (and that's a minor-version-compatible change); existing codes don't get renamed or repurposed without a major-version bump. If you write an exhaustive switch on <code>e.code</code>, fall through to a default branch — don't panic on unknown codes from a newer server.</p>
+          </div>
+        </details>
+      </div>
+
+      <!-- =============== NEXT =============== -->
+      <h2 id="next">Where to go next</h2>
+      <p>Errors don't read in isolation. The two pages you'll cross-reference most:</p>
+
+      <div class="card-grid">
+        <a class="card" href="/sdk/python/app/">
+          <div class="ttl">App client</div>
+          <p class="desc">The seven wire-mapped <code>bv.App</code> methods, each with its own <em>Raises</em> section keyed to the codes above. Start there if you're tracing where a specific error came from.</p>
+          <span class="go">App reference <span class="arrow">→</span></span>
+        </a>
+        <a class="card" href="#">
+          <div class="ttl">Wire spec (planned)</div>
+          <p class="desc">Full HTTP / TCP request and response shapes per endpoint, with status codes, frame layouts, and content-type matrix. Useful for non-Python clients reading the wire codes raw.</p>
+          <span class="go">Wire reference <span class="arrow">→</span></span>
+        </a>
+      </div>
+
+      <!-- =============== FOOTER =============== -->
+      <div class="footer-area">
+        <div class="feedback">
+          <div class="ask">Was this page useful?</div>
+          <div class="feedback-btns">
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3z"/><line x1="7" y1="22" x2="7" y2="11"/></svg>
+              Yes
+            </button>
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3z"/><line x1="17" y1="2" x2="17" y2="13"/></svg>
+              Not really
+            </button>
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              Suggest an edit
+            </button>
+          </div>
+        </div>
+
+        <div id="bv-sdk-pager"></div>
+      </div>
+    </main>
+
+    <!-- ============ RIGHT TOC ============ -->
+    <aside class="toc">
+      <div id="bv-sdk-toc"></div>
+    </aside>
+
+  </div>
+
+  <div id="bv-site-footer"></div>
+
+  <!-- React + Babel — required by SiteHeader / SiteFooter / Sdk* -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script type="text/babel" src="/js/_shared/SiteHeader.jsx"></script>
+  <script type="text/babel" src="/js/_shared/SiteFooter.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkSidebar.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkTOC.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkPager.jsx"></script>
+
+  <script type="text/babel">
+    ReactDOM.createRoot(document.getElementById('bv-site-header'))
+      .render(<SiteHeader active="sdk" search maxWidth={1400}/>);
+    ReactDOM.createRoot(document.getElementById('bv-site-footer'))
+      .render(<SiteFooter maxWidth={1400}/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-sidebar'))
+      .render(<SdkSidebar active="errors"/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-toc'))
+      .render(<SdkTOC editPath="sdk/python/errors/index.html"/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-pager'))
+      .render(<SdkPager
+        prev={{ href: '/sdk/python/operators/', label: 'Operator catalogue' }}
+        next={{ href: '/sdk/http/push/', label: 'POST /push' }}
+      />);
+  </script>
+
+  <script src="/js/copy-buttons.js" defer></script>
+  <!-- Heading anchor copy-link icons. Injects a "#" affordance into every
+       <h2 id> / <h3 id> inside `.content` (matches the `.bv-content` and
+       `.docs-prose` surfaces too). Idempotent + uses MutationObserver to
+       catch React-mounted content. -->
+  <script src="/scripts/docs-headings.js" defer></script>
+</body>
+</html>
