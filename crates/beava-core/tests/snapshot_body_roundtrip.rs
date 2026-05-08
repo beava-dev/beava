@@ -294,11 +294,13 @@ fn snapshot_body_aggspec_params_bincode_roundtrip() {
         registered_at_version: 0,
     };
 
-    let mut registry = RegistryDescriptorsOnly::default();
-    registry.version = 1;
-    registry
-        .derivations
-        .insert("SiteMetrics".to_string(), derivation);
+    let mut derivations = BTreeMap::new();
+    derivations.insert("SiteMetrics".to_string(), derivation);
+    let registry = RegistryDescriptorsOnly {
+        version: 1,
+        derivations,
+        ..RegistryDescriptorsOnly::default()
+    };
 
     let body = SnapshotBody {
         body_format_version: SNAPSHOT_BODY_FORMAT_VERSION,

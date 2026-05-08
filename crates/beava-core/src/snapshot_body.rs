@@ -77,6 +77,16 @@ impl From<&RegistryInner> for RegistryDescriptorsOnly {
 pub struct SnapshotBody {
     /// Monotonic format version for evolution detection; v0 = 1.
     pub body_format_version: u16,
+    /// Registry projection (descriptors only — runtime caches rebuilt on
+    /// load). On the wire this serializes inline; in the snapshot bincode
+    /// envelope the field becomes a single JSON-encoded string. The wrap
+    /// is necessary because the registry's `OpNode` is `#[serde(tag = "op")]`
+    /// and `AggSpec.params` is `serde_json::Value` — both rely on
+    /// `Deserializer::deserialize_any`, which bincode doesn't support.
+    /// See `crate::bincode_safe_json` for the why; the prod failure mode
+    /// is captured by `tests/snapshot_body_roundtrip.rs::
+    /// snapshot_body_aggspec_params_bincode_roundtrip`.
+    #[serde(with = "crate::bincode_safe_json::registry")]
     pub registry: RegistryDescriptorsOnly,
     /// Per-aggregation node state: map from node name to a `Vec<(EntityKey, Vec<AggOp>)>`
     /// (explicit list for deterministic ordering on serialize).

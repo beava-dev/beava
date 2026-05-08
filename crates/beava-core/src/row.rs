@@ -45,7 +45,10 @@ pub enum Value {
     /// Milliseconds since Unix epoch — matches the `event_time` convention.
     Datetime(i64),
     /// Structured JSON output (top_k returns array of {value, count}).
-    Json(serde_json::Value),
+    /// The adapter keeps this bincode-decodable in snapshots; without it
+    /// `serde_json::Value::deserialize_any` aborts the entire snapshot
+    /// decode (see `crate::bincode_safe_json`).
+    Json(#[serde(with = "crate::bincode_safe_json::value")] serde_json::Value),
     /// Ordered list of values used as an aggregation output (e.g.
     /// `most_recent_n`, `reservoir_sample`). Never appears in event/table
     /// rows — only as the output of `AggOp::query`. `type_of()` → None.

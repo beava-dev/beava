@@ -13,6 +13,7 @@ pub mod agg_state_table;
 pub mod agg_state_velocity;
 pub mod agg_where;
 pub mod agg_windowed;
+pub mod bincode_safe_json;
 pub mod config;
 pub mod defaults;
 pub mod eval;

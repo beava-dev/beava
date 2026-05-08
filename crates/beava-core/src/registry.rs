@@ -1195,29 +1195,106 @@ impl Registry {
     /// same state (modulo `version`, which is overwritten). Caller MUST
     /// hold the invariant that this runs BEFORE any concurrent reader
     /// (`Server::bind` runs recovery before flipping readiness).
+    ///
+    /// Snapshot recovery rebuilds **both** the descriptors AND the runtime
+    /// caches (`compiled_chains`, `compiled_aggregations`, `feature_index`,
+    /// `aggregations_by_source`, agg_id / cluster_id counters). Earlier
+    /// versions deferred cache rebuild to a WAL replay of the original
+    /// register record — but that record sits at LSN ≤ snapshot_lsn and
+    /// the WAL replay path skips records up to `snapshot_lsn`, so the
+    /// caches stayed empty whenever snapshot decode actually succeeded.
+    /// (Pre-fix behavior accidentally "worked" because snapshot decode
+    /// always failed for non-trivial pipelines and recovery fell through
+    /// to a from-LSN-0 replay; once the bincode/`serde_json::Value` decode
+    /// path was repaired, the latent gap surfaced as `feature_not_found`
+    /// 404s on every restart.) Re-running the full register-validate
+    /// compile path against the snapshot's descriptors restores the same
+    /// shape the live register endpoint produces, so the apply hot path
+    /// works unchanged.
     pub fn install_from_descriptors(&self, body: &crate::snapshot_body::RegistryDescriptorsOnly) {
-        let mut w = self.inner.write();
-        w.version = body.version;
-        // Snapshot body holds plain `EventDescriptor`; wrap in `Arc` on
-        // install. Snapshot writer (`snapshot_body.rs::from_live`)
-        // unwraps the `Arc` into a plain map for serialization.
-        // When reinstalling from a snapshot, populate `name_arc`
-        // alongside the `Arc<EventDescriptor>` wrap. Snapshot bodies
-        // serialize without `name_arc` (skipped on serde) so this
-        // re-derives it from the descriptor's `name`.
-        w.events = body
-            .events
-            .iter()
-            .map(|(k, v)| {
-                let mut ev = v.clone();
-                ev.name_arc = Arc::from(ev.name.as_str());
-                (k.clone(), Arc::new(ev))
-            })
-            .collect();
-        w.tables = body.tables.clone();
-        w.derivations = body.derivations.clone();
-        // Caches stay as they are; recovery's WAL replay re-applies any
-        // registration via apply_registration, which populates them.
+        // Reset to a clean inner so `apply_registration` can re-insert
+        // every descriptor + compiled state without hitting its
+        // "already-present, skip" fast-path.
+        {
+            let mut w = self.inner.write();
+            *w = RegistryInner::default();
+        }
+
+        // Build the payload in topological order: events / tables first,
+        // derivations last. Mirrors what the live register endpoint accepts.
+        let mut payload: Vec<crate::registry_diff::PayloadNode> = Vec::new();
+        for e in body.events.values() {
+            // Strip name_arc / apply_field_names — they're `#[serde(skip)]`
+            // on the wire and `apply_registration` re-derives them. The
+            // snapshot-body events come from `from_live`'s `(**v).clone()`
+            // which carries whatever arc the live registry held; clearing
+            // it puts us on the same footing as a fresh /register call.
+            let mut ev = e.clone();
+            ev.name_arc = default_event_name_arc();
+            ev.apply_field_names = Vec::new();
+            payload.push(crate::registry_diff::PayloadNode::Event(ev));
+        }
+        for t in body.tables.values() {
+            payload.push(crate::registry_diff::PayloadNode::Table(t.clone()));
+        }
+        for d in body.derivations.values() {
+            payload.push(crate::registry_diff::PayloadNode::Derivation(d.clone()));
+        }
+
+        let empty = RegistryInner::default();
+        let validated = match crate::register_validate::validate_payload(&empty, payload) {
+            Ok(v) => v,
+            Err(errors) => {
+                // The snapshot-stored descriptors were validated when
+                // the original /register accepted them. If they fail
+                // re-validation here it's a code bug (e.g. validation
+                // rule tightened post-snapshot). Surface as a loud
+                // error and fall back to descriptor-only install so
+                // the server can still boot — caches stay empty
+                // (matches pre-fix behavior, recovers via WAL replay
+                // when the register record happens to be present).
+                tracing::error!(
+                    target: "beava.recovery",
+                    kind = "recovery.snapshot_revalidate_failed",
+                    error_count = errors.len(),
+                    first_error = ?errors.first(),
+                    "snapshot descriptors failed re-validation; falling back to descriptor-only install"
+                );
+                let mut w = self.inner.write();
+                w.version = body.version;
+                w.events = body
+                    .events
+                    .iter()
+                    .map(|(k, v)| {
+                        let mut ev = v.clone();
+                        ev.name_arc = Arc::from(ev.name.as_str());
+                        (k.clone(), Arc::new(ev))
+                    })
+                    .collect();
+                w.tables = body.tables.clone();
+                w.derivations = body.derivations.clone();
+                return;
+            }
+        };
+
+        // Re-run the same registration path the live `/register` handler
+        // uses. apply_registration starts from version 0 (we just
+        // cleared), so it increments to 1 — we override below to
+        // preserve the snapshot's recorded version.
+        self.apply_registration(
+            validated.nodes,
+            validated.compiled_chains,
+            validated.propagated_schemas,
+            validated.compiled_aggregations,
+        );
+
+        // Override version to match the snapshot's recorded version.
+        // `apply_registration` set it to its own incremented value
+        // (typically 1 after a clean reset).
+        {
+            let mut w = self.inner.write();
+            w.version = body.version;
+        }
     }
 }
 
