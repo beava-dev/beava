@@ -230,6 +230,20 @@ pub fn load_config<P: AsRef<Path>>(path: P) -> Result<Config, ConfigError> {
     Ok(cfg)
 }
 
+/// Build a `Config` from `Config::default()` + `BEAVA_*` env-var overrides
+/// + validation, **without** requiring a YAML file on disk.
+///
+/// Used by the `beava` binary when invoked without `-c`/`--config` and no
+/// `./beava.yaml` exists — operators can still override port / WAL paths
+/// via `BEAVA_LISTEN_ADDR`, `BEAVA_ADMIN_ADDR`, `BEAVA_WAL_DIR`, etc., but
+/// they don't have to author a YAML file just to start the server.
+pub fn defaults_with_env_overrides() -> Result<Config, ConfigError> {
+    let mut cfg = Config::default();
+    apply_env_overrides(&mut cfg)?;
+    validate(&cfg)?;
+    Ok(cfg)
+}
+
 fn apply_env_overrides(cfg: &mut Config) -> Result<(), ConfigError> {
     if let Ok(v) = std::env::var("BEAVA_LISTEN_ADDR") {
         cfg.listen_addr = v;
