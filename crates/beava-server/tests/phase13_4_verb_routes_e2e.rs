@@ -75,15 +75,20 @@ async fn register(ts: &TestServer) {
     );
 }
 
-// ─── Test 1 — POST /ping returns 200 + {"status":"ok"} ─────────────────────
+// ─── Test 1 — POST /ping returns 200 + {"pong": true, "registry_version": N} ─
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn post_ping_returns_200_status_ok() {
+async fn post_ping_returns_200_pong_with_registry_version() {
     let ts = TestServer::spawn().await.expect("spawn");
 
-    // Use post_json with empty object body — the route's contract says body
-    // is empty, but post_json always sends JSON; an empty `{}` is valid JSON
-    // and the verb-style /ping handler ignores body content.
+    // Empty object body — the route's contract says body is empty, but
+    // post_json always sends JSON; an empty `{}` is valid JSON and the
+    // verb-style /ping handler ignores body content.
+    //
+    // Pre-register: registry_version is 0; the response must include
+    // `{"pong": true, "registry_version": 0}` so SDK clients can use /ping
+    // as a cheap registry-version probe (matches the locked v0 surface +
+    // python/beava `app.ping()` contract).
     let resp = ts.post_json("/ping", &json!({})).await.expect("post /ping");
     let status = resp.status().as_u16();
     let body_text = resp.text().await.expect("body text");
@@ -95,8 +100,22 @@ async fn post_ping_returns_200_status_ok() {
     let body: serde_json::Value =
         serde_json::from_str(&body_text).expect("response body must be JSON");
     assert_eq!(
-        body["status"], "ok",
-        "POST /ping must return {{\"status\":\"ok\"}}, got body={body:#}"
+        body["pong"], true,
+        "POST /ping must return pong=true, got body={body:#}"
+    );
+    assert_eq!(
+        body["registry_version"], 0,
+        "POST /ping pre-register must report registry_version=0, got body={body:#}"
+    );
+
+    // After register, /ping must report the bumped registry_version.
+    register(&ts).await;
+    let resp = ts.post_json("/ping", &json!({})).await.expect("post /ping");
+    let body: serde_json::Value = resp.json().await.expect("post-register body");
+    assert_eq!(body["pong"], true);
+    assert_eq!(
+        body["registry_version"], 1,
+        "post-register /ping must report registry_version=1, got body={body:#}"
     );
 
     ts.shutdown().await.ok();
