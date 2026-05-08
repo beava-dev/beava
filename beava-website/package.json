@@ -3,17 +3,12 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "beava.dev — docs site (hand-rolled static HTML + Pagefind search).",
+  "description": "beava.dev — hand-rolled static HTML + Pagefind search.",
   "scripts": {
-    "build:docs": "node scripts/render-docs.mjs",
     "build:search": "node scripts/build-search.mjs",
-    "check:links": "node scripts/check-links.mjs",
-    "check:copy-buttons": "node scripts/check-copy-buttons.mjs",
-    "build": "npm run build:docs && npm run build:search"
+    "check:links": "node scripts/check-links.mjs"
   },
   "devDependencies": {
-    "markdown-it": "^14.1.0",
-    "markdown-it-anchor": "^9.2.0",
     "pagefind": "^1.1.1"
   }
 }

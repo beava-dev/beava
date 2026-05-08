@@ -1,235 +1,131 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>beava Docs — beava docs</title>
-<meta name="description" content="beava is a single-binary feature server. Push events in over HTTP, declare aggregations, query features by entity key. Per-instance: ≥3M events/sec/core for simple counters, ~6 KB per entity for…">
-<link rel="canonical" href="https://beava.dev/docs/">
-<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png">
-<link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
-<link rel="shortcut icon" href="/assets/favicon.ico">
-<link rel="stylesheet" href="/styles/colors_and_type.css">
-<link rel="stylesheet" href="/styles/site.css">
-<link rel="stylesheet" href="/styles/docs.css">
-<meta name="docs-source" content="docs/index.md">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Introduction · beava docs</title>
+  <meta name="description" content="beava is a single-threaded event processing and serving engine for building real-time features with much less infrastructure. beava turns events into fresh, queryable state.">
+  <link rel="stylesheet" href="../styles/colors_and_type.css">
+  <link rel="stylesheet" href="../styles/site.css">
+  <link rel="stylesheet" href="../styles/docs-kit.css">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="shortcut icon" href="/assets/favicon.ico">
+  <style>
+    html, body { margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--fg1); font-family: var(--font-sans); }
+  </style>
 </head>
-<body class="beava docs-body">
-<header class="site-nav">
-  <div class="nav-inner">
-    <a class="brand" href="/"><img src="/assets/logo-mark.png" alt="" width="36" height="36"/><span>beava</span></a>
-    <ul class="nav-links">
-      <li><a href="/guide/">Guide</a></li>
-      <li><a href="/docs/" aria-current="page">Docs</a></li>
-      <li><a href="https://github.com/beava-dev/beava" target="_blank" rel="noopener">GitHub</a></li>
-    </ul>
-    <div class="nav-search" id="search"></div>
-  </div>
-</header>
-<link rel="stylesheet" href="/_pagefind/pagefind-ui.css">
-<script src="/_pagefind/pagefind-ui.js" defer></script>
-<script>
-  window.addEventListener('DOMContentLoaded', function () {
-    if (window.PagefindUI) {
-      new PagefindUI({ element: '#search', showSubResults: true, resetStyles: false, showImages: false });
-    }
-  });
-</script>
-<div class="docs-shell">
-<nav class="docs-sidebar" aria-label="Docs navigation">
-  <div class="side-section">
-    <div class="side-title">Getting started</div>
-    <ul class="side-list">
-      <li><a class="side-link active" href="/docs/">Introduction</a></li>
-      <li><a class="side-link" href="/docs/quickstart/">Quickstart</a></li>
-    </ul>
-  </div>
-  <div class="side-section">
-    <div class="side-title">Wire &amp; API</div>
-    <ul class="side-list">
-      <li><a class="side-link" href="/docs/wire-spec/">Wire spec</a></li>
-      <li><a class="side-link" href="/docs/http-api/">HTTP API</a></li>
-      <li><a class="side-link" href="/docs/schema-evolution/">Schema evolution</a></li>
-      <li><a class="side-link" href="/docs/error-codes/">Error codes</a></li>
-    </ul>
-  </div>
-  <div class="side-section">
-    <div class="side-title">SDK reference</div>
-    <ul class="side-list">
-      <li><a class="side-link" href="/docs/sdk-api/python/">Python SDK</a></li>
-    </ul>
-  </div>
-  <div class="side-section">
-    <div class="side-title">Pipeline DSL</div>
-    <ul class="side-list">
-      <li><a class="side-link" href="/docs/pipeline-dsl/overview/">DSL overview</a></li>
-      <li><a class="side-link" href="/docs/pipeline-dsl/expressions/">Expressions</a></li>
-      <li><a class="side-link" href="/docs/pipeline-dsl/compilation-rules/">Compilation rules</a></li>
-    </ul>
-  </div>
-  <div class="side-section">
-    <div class="side-title">Operators</div>
-    <ul class="side-list">
-      <li><a class="side-link" href="/docs/operators/">Operator catalog</a></li>
-      <li><a class="side-link" href="/docs/operators/cost-class/">Cost classes</a></li>
-      <li><a class="side-link" href="/docs/operators/core/">Core (family)</a></li>
-      <li><a class="side-link" href="/docs/operators/sketch/">Sketch (family)</a></li>
-      <li><a class="side-link" href="/docs/operators/point-ordinal/">Point/ordinal (family)</a></li>
-      <li><a class="side-link" href="/docs/operators/recency/">Recency (family)</a></li>
-      <li><a class="side-link" href="/docs/operators/decay/">Decay (family)</a></li>
-      <li><a class="side-link" href="/docs/operators/velocity/">Velocity (family)</a></li>
-      <li><a class="side-link" href="/docs/operators/buffer-geo/">Buffer &amp; geo (family)</a></li>
-    </ul>
-  </div>
-  <div class="side-section">
-    <div class="side-title">Concepts</div>
-    <ul class="side-list">
-      <li><a class="side-link" href="/docs/concepts/events-vs-tables/">Events vs tables</a></li>
-      <li><a class="side-link" href="/docs/concepts/embed-mode/">Embed mode</a></li>
-      <li><a class="side-link" href="/docs/concepts/lifetime-aggregation/">Lifetime aggregation</a></li>
-      <li><a class="side-link" href="/docs/concepts/processing-time-only/">Processing-time only</a></li>
-      <li><a class="side-link" href="/docs/concepts/global-aggregation/">Global aggregation</a></li>
-    </ul>
-  </div>
-  <div class="side-section">
-    <div class="side-title">Architecture</div>
-    <ul class="side-list">
-      <li><a class="side-link" href="/docs/architecture/single-thread-apply/">Single-thread apply</a></li>
-      <li><a class="side-link" href="/docs/architecture/mio-data-plane/">mio data plane</a></li>
-      <li><a class="side-link" href="/docs/architecture/wal-snapshot/">WAL + snapshot</a></li>
-      <li><a class="side-link" href="/docs/architecture/memory-budget/">Memory budget</a></li>
-      <li><a class="side-link" href="/docs/architecture/observability/">Observability</a></li>
-    </ul>
-  </div>
-  <div class="side-section">
-    <div class="side-title">Community</div>
-    <ul class="side-list">
-      <li><a class="side-link" href="https://github.com/beava-dev/beava/discussions" target="_blank" rel="noopener">Discussions</a></li>
-      <li><a class="side-link" href="https://github.com/beava-dev/beava" target="_blank" rel="noopener">GitHub</a></li>
-    </ul>
-  </div>
-</nav>
-<main class="docs-main" data-pagefind-body>
-<nav class="crumbs" aria-label="Breadcrumb"><span class="crumb-cur">beava Docs</span></nav>
-<article class="docs-prose">
-<h1>beava Docs</h1>
-<blockquote>
-<p>Real-time feature server for fraud, ad-tech, and behavioral analytics.</p>
-</blockquote>
-<p>beava is a single-binary feature server. Push events in over HTTP, declare aggregations, query features by entity key. Per-instance: ≥3M events/sec/core for simple counters, ~6 KB per entity for the rich fraud-team shape, P99 batch-get under 10 ms — v0 launch ship-pitch numbers.</p>
-<h2 id="quickstart" tabindex="-1"><a class="header-anchor" href="#quickstart" aria-hidden="true">#</a> Quickstart</h2>
-<ul>
-<li><a href="/docs/quickstart/">Quickstart</a> — <code>pip install &quot;git+https://github.com/beava-dev/beava.git#subdirectory=python&quot;</code> → first feature in 60 seconds</li>
-</ul>
-<h2 id="wire-contract" tabindex="-1"><a class="header-anchor" href="#wire-contract" aria-hidden="true">#</a> Wire contract</h2>
-<ul>
-<li><a href="/docs/wire-spec/">docs/wire-spec.md</a> — frame format + 6-opcode table + per-opcode JSON schemas</li>
-<li><a href="/docs/http-api/">docs/http-api.md</a> — verb-style POST routes for all 6 v0 endpoints + admin sidecar</li>
-<li><a href="https://github.com/beava-dev/beava/blob/main/examples/wire/schemas/">examples/wire/schemas/</a> — 13 JSON Schema 2020-12 contract files</li>
-<li><a href="https://github.com/beava-dev/beava/blob/main/examples/wire/">examples/wire/</a> — 20 worked-example fixtures (per opcode + global-table fixtures per ADR-003)</li>
-</ul>
-<h2 id="sdk-reference" tabindex="-1"><a class="header-anchor" href="#sdk-reference" aria-hidden="true">#</a> SDK reference</h2>
-<ul>
-<li><a href="/docs/sdk-api/python/">docs/sdk-api/python.md</a> — Python SDK</li>
-</ul>
-<h2 id="pipeline-dsl" tabindex="-1"><a class="header-anchor" href="#pipeline-dsl" aria-hidden="true">#</a> Pipeline DSL</h2>
-<ul>
-<li><a href="/docs/pipeline-dsl/overview/">docs/pipeline-dsl/overview.md</a> — <code>@bv.event</code>, <code>@bv.table</code>, chain methods</li>
-<li><a href="/docs/pipeline-dsl/expressions/">docs/pipeline-dsl/expressions.md</a> — <code>bv.col</code> operator overloading + <code>bv.lit</code> literals</li>
-<li><a href="/docs/pipeline-dsl/compilation-rules/">docs/pipeline-dsl/compilation-rules.md</a> — Python source → JSON wire + ambiguity matrix</li>
-</ul>
-<h2 id="operator-catalog" tabindex="-1"><a class="header-anchor" href="#operator-catalog" aria-hidden="true">#</a> Operator catalog</h2>
-<ul>
-<li><a href="/docs/operators/">docs/operators/index.md</a> — full 54-op catalogue (53 unique kinds + ema alias inside <a href="http://ewma.md">ewma.md</a>)</li>
-<li><a href="/docs/operators/cost-class/">docs/operators/cost-class.md</a> — per-op CPU tier metadata.</li>
-<li>Family overviews:
-<ul>
-<li><a href="/docs/operators/core/">Core (8)</a> — <code>count</code>, <code>sum</code>, <code>mean</code>, <code>min</code>, <code>max</code>, <code>var</code>, <code>std</code>, <code>ratio</code></li>
-<li><a href="/docs/operators/sketch/">Sketch (5)</a> — <code>n_unique</code>, <code>quantile</code>, <code>top_k</code>, <code>bloom_member</code>, <code>entropy</code></li>
-<li><a href="/docs/operators/point-ordinal/">Point/ordinal (5)</a> — <code>first</code>, <code>last</code>, <code>first_n</code>, <code>last_n</code>, <code>lag</code></li>
-<li><a href="/docs/operators/recency/">Recency (10)</a> — <code>streak</code>, <code>max_streak</code>, <code>negative_streak</code>, <code>first_seen</code>, <code>last_seen</code>, <code>age</code>, <code>has_seen</code>, <code>time_since</code>, <code>time_since_last_n</code>, <code>first_seen_in_window</code></li>
-<li><a href="/docs/operators/decay/">Decay (6)</a> — <code>ewma</code> (alias <code>ema</code>), <code>ewvar</code>, <code>ew_zscore</code>, <code>decayed_sum</code>, <code>decayed_count</code>, <code>twa</code></li>
-<li><a href="/docs/operators/velocity/">Velocity (9)</a> — <code>rate_of_change</code>, <code>inter_arrival_stats</code>, <code>burst_count</code>, <code>delta_from_prev</code>, <code>trend</code>, <code>trend_residual</code>, <code>outlier_count</code>, <code>value_change_count</code>, <code>z_score</code></li>
-<li><a href="/docs/operators/buffer-geo/">Bounded buffers + Geo (11)</a> — <code>histogram</code>, <code>hour_of_day_histogram</code>, <code>dow_hour_histogram</code>, <code>seasonal_deviation</code>, <code>event_type_mix</code>, <code>most_recent_n</code>, <code>reservoir_sample</code>, <code>geo_distance</code>, <code>geo_spread</code>, <code>geo_velocity</code>, <code>distance_from_home</code></li>
-</ul>
-</li>
-</ul>
-<h2 id="concepts" tabindex="-1"><a class="header-anchor" href="#concepts" aria-hidden="true">#</a> Concepts</h2>
-<ul>
-<li><a href="/docs/concepts/events-vs-tables/">docs/concepts/events-vs-tables.md</a> — <code>@bv.event</code> (immutable event source) vs <code>@bv.table</code> (aggregation output, per ADR-001)</li>
-<li><a href="/docs/concepts/embed-mode/">docs/concepts/embed-mode.md</a> — <code>bv.App()</code> no-URL embed mode (in-process for tests + small workloads)</li>
-<li><a href="/docs/concepts/lifetime-aggregation/">docs/concepts/lifetime-aggregation.md</a> — V0-MEM-GOV-02 register-time bound enforcement</li>
-<li><a href="/docs/concepts/processing-time-only/">docs/concepts/processing-time-only.md</a> — server-time only; no event-time, no joins, no watermarks</li>
-<li><a href="/docs/concepts/global-aggregation/">docs/concepts/global-aggregation.md</a> — global tables (no <code>key=</code>) for monitoring + dashboard use cases (per ADR-003)</li>
-</ul>
-<h2 id="architecture" tabindex="-1"><a class="header-anchor" href="#architecture" aria-hidden="true">#</a> Architecture</h2>
-<ul>
-<li><a href="/docs/architecture/single-thread-apply/">docs/architecture/single-thread-apply.md</a> — single-thread apply loop (per <code>project_no_sharded_apply</code>)</li>
-<li><a href="/docs/architecture/mio-data-plane/">docs/architecture/mio-data-plane.md</a> — mio is the sole data-plane runtime (per <code>project_phase18_no_dual_runtime</code>)</li>
-<li><a href="/docs/architecture/wal-snapshot/">docs/architecture/wal-snapshot.md</a> — WAL + snapshot durability</li>
-<li><a href="/docs/architecture/memory-budget/">docs/architecture/memory-budget.md</a> — verified ~6 KB / entity (post-Phase-12.9 boxing), 80 B AggOp size cap</li>
-<li><a href="/docs/architecture/observability/">docs/architecture/observability.md</a> — admin sidecar metrics (Prometheus on <code>/metrics</code>)</li>
-</ul>
-<h2 id="schema-errors" tabindex="-1"><a class="header-anchor" href="#schema-errors" aria-hidden="true">#</a> Schema + errors</h2>
-<ul>
-<li><a href="/docs/schema-evolution/">docs/schema-evolution.md</a> — additive default, <code>force=True</code> for destructive changes, <code>dry_run=True</code> flag</li>
-<li><a href="/docs/error-codes/">docs/error-codes.md</a> — alphabetical structured-code list + Python exception class hierarchy + HTTP status mapping</li>
-</ul>
-<h2 id="decisions-adrs" tabindex="-1"><a class="header-anchor" href="#decisions-adrs" aria-hidden="true">#</a> Decisions (ADRs)</h2>
-<ul>
-<li><a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-001-bv-table-partial-overturn.md">.planning/decisions/ADR-001-bv-table-partial-overturn.md</a> — <code>@bv.table</code> aggregation-output revival (partial overturn of <code>project_v0_events_only_scope</code>)</li>
-<li><a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-002-polars-op-rename.md">.planning/decisions/ADR-002-polars-op-rename.md</a> — Polars op renames (<code>avg→mean / variance→var / stddev→std / count_distinct→n_unique / percentile→quantile</code>)</li>
-<li><a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-003-global-aggregation-and-bv-lit.md">.planning/decisions/ADR-003-global-aggregation-and-bv-lit.md</a> — first-class global aggregation + public <code>bv.lit(value)</code> export</li>
-</ul>
-<h2 id="examples-runnable" tabindex="-1"><a class="header-anchor" href="#examples-runnable" aria-hidden="true">#</a> Examples (runnable)</h2>
-<ul>
-<li>Python: <a href="https://github.com/beava-dev/beava/blob/main/examples/python/">examples/python/{adtech,fraud,ecommerce}.py</a> (run with <code>python3</code>)</li>
-</ul>
-<p>Smoke test: <code>bash examples/test_examples.sh</code> — runs the demos against the Python <code>MockApp</code> shim.</p>
-<p>Wire fixtures: <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/">examples/wire/</a> — 20 JSON request + response + error fixtures per opcode (REGISTER / PUSH / GET / BATCH_GET / RESET / PING).</p>
-<h2 id="project-commitments-locked" tabindex="-1"><a class="header-anchor" href="#project-commitments-locked" aria-hidden="true">#</a> Project commitments (locked)</h2>
-<ul>
-<li>Single-thread data plane (per <code>project_no_sharded_apply</code>) — for higher throughput run multiple instances (Redis-cluster pattern)</li>
-<li>mio is the sole data-plane runtime; admin sidecar on tokio (per <code>project_phase18_no_dual_runtime</code>)</li>
-<li>Events-only with <code>@bv.table</code> aggregation-output exception (per <code>project_v0_events_only_scope</code> + ADR-001) — no <code>app.upsert/delete/retract</code> in v0</li>
-<li>Processing-time only; no event-time, no joins, no watermarks (per <code>project_redis_shaped_no_event_time_ever</code>)</li>
-<li>Memory governance: opt-in <code>cold_after=</code> TTL + lifetime aggregation contract (V0-MEM-GOV-01/02/03)</li>
-<li>80 B <code>size_of::&lt;AggOp&gt;</code> cap (per v0; CI tripwire enforced by <code>crates/beava-core/tests/per_entity_size_dump.rs::aggop_size_within_cap</code>)</li>
-<li>Polars op naming convention (per ADR-002)</li>
-<li>Global aggregation + <code>bv.lit</code> first-class (per ADR-003 — implementation in v0)</li>
-</ul>
-<h2 id="versioning" tabindex="-1"><a class="header-anchor" href="#versioning" aria-hidden="true">#</a> Versioning</h2>
-<p>v0.0.0 is the upcoming OSS launch. v0 covers the Python SDK, the engine wire
-contract, packaging (PyPI / Homebrew / Docker), and minimum-viable docs.
-Everything not in scope for v0 is out of scope.</p>
+<body class="beava">
+  <div id="root"></div>
 
-</article>
-</main>
-<aside class="docs-toc" aria-label="On this page">
-  <div class="toc-title">On this page</div>
-  <ul class="toc-list">
-      <li><a href="#quickstart">Quickstart</a></li>
-      <li><a href="#wire-contract">Wire contract</a></li>
-      <li><a href="#sdk-reference">SDK reference</a></li>
-      <li><a href="#pipeline-dsl">Pipeline DSL</a></li>
-      <li><a href="#operator-catalog">Operator catalog</a></li>
-      <li><a href="#concepts">Concepts</a></li>
-      <li><a href="#architecture">Architecture</a></li>
-      <li><a href="#schema-errors">Schema + errors</a></li>
-      <li><a href="#decisions-adrs">Decisions (ADRs)</a></li>
-      <li><a href="#examples-runnable">Examples (runnable)</a></li>
-      <li><a href="#project-commitments-locked">Project commitments (locked)</a></li>
-      <li><a href="#versioning">Versioning</a></li>
-  </ul>
-</aside>
-</div>
-<footer class="site-foot">
-  <div class="foot-inner">
-    <span>© 2026 beava labs · Apache 2.0</span>
-    <a href="https://github.com/beava-dev/beava" target="_blank" rel="noopener">GitHub</a>
-  </div>
-</footer>
-<script src="/js/copy-buttons.js" defer></script>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="../js/_shared/SiteHeader.jsx"></script>
+  <script type="text/babel" src="../js/_shared/SiteFooter.jsx"></script>
+  <script type="text/babel" src="../js/docs/DocsShared.jsx"></script>
+  <script type="text/babel" src="../js/docs/DocsSidebar.jsx"></script>
+  <script type="text/babel" src="../js/docs/DocsTOC.jsx"></script>
+
+  <script type="text/babel">
+    const TOC = [
+      { id: 'fresh-state', label: 'Fresh state, no platform' },
+      { id: 'why', label: 'Why beava?' },
+      { id: 'how', label: 'How beava works' },
+      { id: 'build', label: 'What you can build' },
+      { id: 'start', label: 'Start here' },
+      { id: 'join', label: 'Join the project' },
+    ];
+
+    const App = () => (
+      <>
+        <SiteHeader active="docs" search maxWidth={1400}/>
+        <div className="bv-docs-shell">
+          <DocsSidebar active="Introduction"/>
+
+          <main className="bv-content">
+            <div className="bv-crumbs">
+              <a href="/docs/">Docs</a>
+              <span className="bv-crumb-sep">/</span>
+              <a href="#">Getting started</a>
+              <span className="bv-crumb-sep">/</span>
+              <span className="bv-crumb-cur">Introduction</span>
+            </div>
+
+            <h1>beava</h1>
+
+            <h2 id="fresh-state">Fresh state without a streaming platform</h2>
+            <p className="bv-lede">beava is a single-threaded event processing and serving engine for building real-time features with much less infrastructure.</p>
+            <p>It lets developers define streams, feature tables, aggregations, and windows in a declarative Python SDK that feels closer to Polars than traditional stream processing frameworks. Events can be pushed over TCP or HTTP, and fresh features can be served immediately through simple <code>get</code> and <code>mget</code> queries.</p>
+            <p><strong>beava turns events into fresh, queryable state.</strong></p>
+            <p>The goal is to make real-time feature pipelines feel as lightweight, practical, and straightforward as Redis.</p>
+
+            <h2 id="why">Why beava?</h2>
+            <p>Modern applications need to make fast decisions from recent data. Models rank, personalize, predict, bid, route, and react in milliseconds. Agents increasingly need fresh state about users, tools, products, workflows, and the environment around them.</p>
+            <p>But developers still lack a simple way to process the latest event data and query it immediately.</p>
+            <p>The standard stack often becomes a collection of separate systems: an event bus, a stream processor, a serving store, and custom glue code. That stack is powerful, but for many application teams it is too heavy, too slow to adapt, and too far away from the code developers want to write.</p>
+            <p><strong>Stream processing should not require a platform team.</strong></p>
+            <p>beava exists because teams need a simpler primitive for turning events into fresh, queryable, windowed features and agentic state.</p>
+            <p><a href="/docs/vision/why-beava/" style={{color:'var(--accent)', fontWeight:600}}>Read the longer story →</a></p>
+
+            <h2 id="how">How beava works</h2>
+            <p>A beava app has three basic parts:</p>
+            <ol>
+              <li><strong>Streams</strong> describe the events your application produces.</li>
+              <li><strong>Tables</strong> describe the grouped, windowed, aggregated state you want to maintain.</li>
+              <li><strong>Queries</strong> let your application fetch the latest values by key with <code>get</code> and <code>mget</code>.</li>
+            </ol>
+            <p>As events arrive, beava updates the relevant tables inline and makes the latest values available to your application.</p>
+            <p><strong>Low-latency reads are useful; low-latency freshness changes the architecture.</strong></p>
+            <p>When a new event becomes queryable quickly enough, teams can put fresh state directly inside personalization, ranking, bidding, fraud, recommendation, and agent decision paths.</p>
+
+            <h2 id="build">What you can build</h2>
+            <p>Use beava when <strong>fresh events need to become a fast decision</strong>.</p>
+            <p>Common starting points include:</p>
+            <ul>
+              <li><strong>Personalization and recommendations</strong></li>
+              <li><strong>Real-time bidding and ads systems</strong></li>
+              <li><strong>Fraud, abuse, and risk scoring</strong></li>
+              <li><strong>Agentic state</strong></li>
+              <li><strong>Product analytics that become product logic</strong></li>
+              <li><strong>ML feature iteration</strong></li>
+            </ul>
+
+            <h2 id="start">Start here</h2>
+            <p>If you are new to beava, start with the quickstart:</p>
+            <ul>
+              <li><a href="/docs/get-started/quickstart/">Quickstart</a></li>
+              <li><a href="/docs/get-started/define-a-pipeline/">Define a pipeline</a></li>
+              <li><a href="/docs/get-started/push-events/">Push events</a></li>
+              <li><a href="/docs/get-started/query-features/">Query features</a></li>
+            </ul>
+            <p>If you want to understand why beava exists, read:</p>
+            <ul>
+              <li><a href="/docs/vision/why-beava/">Why beava</a></li>
+              <li><a href="/docs/vision/open-source/">Open source commitment</a></li>
+              <li><a href="/docs/vision/non-goals/">Non-goals and tradeoffs</a></li>
+              <li><a href="/docs/vision/benchmarks/">Benchmarks</a></li>
+            </ul>
+
+            <h2 id="join">Join the project</h2>
+            <p>beava is early, and we want to build it with people who feel this problem directly.</p>
+            <p>Try it locally, read the public RFCs, join the weekly dev call, or catch up through summaries from previous calls.</p>
+            <p>Help us make <strong>real-time features feel like application code</strong>.</p>
+
+            <Pager
+              prev={null}
+              next={{ label: 'Quickstart', href: '/docs/get-started/quickstart/' }}
+            />
+          </main>
+
+          <DocsTOC items={TOC} editHref="https://github.com/beava-dev/beava-website/edit/main/project/docs/index.html"/>
+        </div>
+        <SiteFooter maxWidth={1400}/>
+      </>
+    );
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+  </script>
+  <script src="/js/track-pageview.js" defer></script>
 </body>
 </html>
