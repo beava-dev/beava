@@ -1,11 +1,17 @@
 // scripts/build-llms-txt.mjs
 //
-// Generate /sdk/llms.txt — a plain-text, markdown-flavored
-// concatenation of all 11 SDK reference pages. Optimized for
-// LLM agents that want the full SDK surface in one fetch
-// without parsing site chrome / JS.
+// Generate the two-tier llms.txt artifacts for the SDK reference.
+// Follows the llmstxt.org convention:
 //
-// Output: beava-website/project/sdk/llms.txt
+//   TIER 1 — /sdk/llms.txt
+//     Short markdown index. One link + one-line summary per page,
+//     grouped by sidebar section. Cheap to ingest; routes agents to
+//     the resource they need.
+//
+//   TIER 2 — /sdk/llms-full.txt
+//     Full plain-text concatenation of all SDK pages, markdown-
+//     flavored. ~145 KB. For agents that want the entire SDK surface
+//     in one fetch without parsing site chrome / JS.
 //
 // Run: cd beava-website && node scripts/build-llms-txt.mjs
 
@@ -16,24 +22,46 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '../..');
 const SITE_ROOT = path.join(REPO_ROOT, 'beava-website/project');
-const OUT_PATH  = path.join(SITE_ROOT, 'sdk/llms.txt');
+const OUT_INDEX = path.join(SITE_ROOT, 'sdk/llms.txt');
+const OUT_FULL  = path.join(SITE_ROOT, 'sdk/llms-full.txt');
 
 // Ordered list — same as the SdkSidebar nav config so the text version
 // reads in the same logical order as a user would click through.
+// `section` groups pages for the index file's H2 headings.
 const PAGES = [
-  { url: '/sdk/python/',              file: 'sdk/python/index.html',           title: 'Quickstart' },
-  { url: '/sdk/server/',              file: 'sdk/server/index.html',           title: 'Server configuration' },
-  { url: '/sdk/python/app/',          file: 'sdk/python/app/index.html',       title: 'App client (bv.App)' },
-  { url: '/sdk/python/event/',        file: 'sdk/python/event/index.html',     title: '@bv.event' },
-  { url: '/sdk/python/table/',        file: 'sdk/python/table/index.html',     title: '@bv.table' },
-  { url: '/sdk/python/col-lit/',      file: 'sdk/python/col-lit/index.html',   title: 'bv.col / bv.lit' },
-  { url: '/sdk/python/operators/',    file: 'sdk/python/operators/index.html', title: 'Operator catalogue' },
-  { url: '/sdk/python/errors/',       file: 'sdk/python/errors/index.html',    title: 'Errors' },
-  { url: '/sdk/http/push/',           file: 'sdk/http/push/index.html',        title: 'POST /push' },
-  { url: '/sdk/http/get/',            file: 'sdk/http/get/index.html',         title: 'POST /get' },
-  { url: '/sdk/http/register/',       file: 'sdk/http/register/index.html',    title: 'POST /register' },
-  { url: '/sdk/http/wire-spec/',      file: 'sdk/http/wire-spec/index.html',   title: 'Wire spec' },
+  { section: 'Start here',  url: '/sdk/python/',              file: 'sdk/python/index.html',           title: 'Quickstart' },
+  { section: 'Server',      url: '/sdk/server/',              file: 'sdk/server/index.html',           title: 'Server configuration' },
+  { section: 'Python SDK',  url: '/sdk/python/app/',          file: 'sdk/python/app/index.html',       title: 'App client (bv.App)' },
+  { section: 'Python SDK',  url: '/sdk/python/event/',        file: 'sdk/python/event/index.html',     title: '@bv.event' },
+  { section: 'Python SDK',  url: '/sdk/python/table/',        file: 'sdk/python/table/index.html',     title: '@bv.table' },
+  { section: 'Python SDK',  url: '/sdk/python/col-lit/',      file: 'sdk/python/col-lit/index.html',   title: 'bv.col / bv.lit' },
+  { section: 'Python SDK',  url: '/sdk/python/operators/',    file: 'sdk/python/operators/index.html', title: 'Operator catalogue' },
+  { section: 'Python SDK',  url: '/sdk/python/errors/',       file: 'sdk/python/errors/index.html',    title: 'Errors' },
+  { section: 'HTTP API',    url: '/sdk/http/push/',           file: 'sdk/http/push/index.html',        title: 'POST /push' },
+  { section: 'HTTP API',    url: '/sdk/http/get/',            file: 'sdk/http/get/index.html',         title: 'POST /get' },
+  { section: 'HTTP API',    url: '/sdk/http/register/',       file: 'sdk/http/register/index.html',    title: 'POST /register' },
+  { section: 'HTTP API',    url: '/sdk/http/wire-spec/',      file: 'sdk/http/wire-spec/index.html',   title: 'Wire spec' },
 ];
+
+// Pull <meta name="description"> from a page — used as the one-line
+// summary in the tier-1 index.
+function extractMetaDescription(html) {
+  const m = html.match(/<meta\s+name="description"\s+content="([^"]+)"\s*\/?>/i);
+  return m ? m[1] : '';
+}
+
+// Pull all h2[id] from <main> for the per-page anchor list shown in
+// the tier-1 index. Helps agents jump directly to relevant section.
+function extractH2Anchors(mainHtml) {
+  const out = [];
+  const re = /<h2\s+id="([^"]+)"[^>]*>([\s\S]*?)<\/h2>/gi;
+  let m;
+  while ((m = re.exec(mainHtml)) !== null) {
+    const text = m[2].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+    if (text) out.push({ id: m[1], text });
+  }
+  return out;
+}
 
 // Decode common HTML entities. Keep narrow — we only need the ones
 // that actually appear in the source pages.
@@ -226,27 +254,10 @@ function htmlToMarkdown(html) {
 
 const SEPARATOR = '\n\n' + '='.repeat(72) + '\n\n';
 
-function main() {
-  const out = [];
-
-  out.push('# Beava SDK reference — full plain-text version');
-  out.push('');
-  out.push('This is a concatenation of all 11 SDK reference pages on beava.dev');
-  out.push('formatted for LLM agents that want the full SDK surface in one fetch.');
-  out.push('Source URLs are noted at the top of each section.');
-  out.push('');
-  out.push('Generated by beava-website/scripts/build-llms-txt.mjs from the canonical');
-  out.push('HTML pages under beava-website/project/sdk/. To regenerate after page');
-  out.push('edits: `cd beava-website && node scripts/build-llms-txt.mjs`.');
-  out.push('');
-  out.push(`Total pages: ${PAGES.length}`);
-  out.push('');
-  out.push('## Index');
-  out.push('');
-  for (const p of PAGES) {
-    out.push(`- ${p.title} — https://beava.dev${p.url}`);
-  }
-
+// Read each page once; collect both the markdown body (for the full
+// dump) and metadata (for the index).
+function loadPages() {
+  const enriched = [];
   for (const p of PAGES) {
     const fp = path.join(SITE_ROOT, p.file);
     if (!fs.existsSync(fp)) {
@@ -259,19 +270,111 @@ function main() {
       console.warn(`SKIP no <main class="content">: ${fp}`);
       continue;
     }
-    const md = htmlToMarkdown(main);
+    enriched.push({
+      ...p,
+      description: extractMetaDescription(html),
+      anchors: extractH2Anchors(main),
+      markdown: htmlToMarkdown(main),
+    });
+  }
+  return enriched;
+}
 
+// TIER 1 — the short index. llmstxt.org-shaped: H1 + lede, then
+// section H2s, each with one bullet per page (markdown-link + summary
+// + bracketed h2-anchor list so agents can deep-link).
+function buildIndex(pages, fullPath) {
+  const out = [];
+  out.push('# Beava SDK reference');
+  out.push('');
+  out.push('> Beava is a single-binary real-time feature server for fraud, ad-tech, and behavioral analytics. This is the SDK reference: boot configuration, Python SDK, HTTP API, and wire spec.');
+  out.push('');
+  out.push('This is the **tier-1 index** (short, structured). For the full plain-text concatenation of every SDK page, see [llms-full.txt](https://beava.dev/sdk/llms-full.txt).');
+  out.push('');
+  out.push('Generated by `beava-website/scripts/build-llms-txt.mjs` from the canonical HTML pages under `beava-website/project/sdk/`. Regenerate with `npm run build:llms` after page edits.');
+  out.push('');
+
+  // Group pages by section, preserving definition order.
+  const sectionOrder = [];
+  const bySection = new Map();
+  for (const p of pages) {
+    if (!bySection.has(p.section)) {
+      bySection.set(p.section, []);
+      sectionOrder.push(p.section);
+    }
+    bySection.get(p.section).push(p);
+  }
+
+  for (const sec of sectionOrder) {
+    out.push(`## ${sec}`);
+    out.push('');
+    for (const p of bySection.get(sec)) {
+      const desc = p.description || '(no description)';
+      out.push(`- [${p.title}](https://beava.dev${p.url}): ${desc}`);
+      if (p.anchors.length > 0) {
+        const list = p.anchors.map(a => `\`#${a.id}\` ${a.text}`).join(' · ');
+        out.push(`  Sections: ${list}`);
+      }
+    }
+    out.push('');
+  }
+
+  out.push('## Full content');
+  out.push('');
+  out.push('- [llms-full.txt](https://beava.dev/sdk/llms-full.txt): All SDK pages concatenated as plain text with markdown headings + fenced code blocks. ~145 KB. Single fetch covers the full surface.');
+  out.push('');
+
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';
+}
+
+// TIER 2 — the full dump. Each page rendered as markdown, separated
+// by horizontal rules. Same structure as before; just renamed.
+function buildFull(pages) {
+  const out = [];
+  out.push('# Beava SDK reference — full plain-text version');
+  out.push('');
+  out.push('Concatenation of all SDK reference pages on beava.dev formatted');
+  out.push('for LLM agents that want the full surface in one fetch.');
+  out.push('');
+  out.push('See also the short structured index at https://beava.dev/sdk/llms.txt');
+  out.push('');
+  out.push('Generated by `beava-website/scripts/build-llms-txt.mjs` from the canonical');
+  out.push('HTML pages under `beava-website/project/sdk/`. Regenerate with');
+  out.push('`npm run build:llms` after page edits.');
+  out.push('');
+  out.push(`Total pages: ${pages.length}`);
+  out.push('');
+  out.push('## Index');
+  out.push('');
+  for (const p of pages) {
+    out.push(`- ${p.title} — https://beava.dev${p.url}`);
+  }
+
+  for (const p of pages) {
     out.push(SEPARATOR.trim());
     out.push('');
     out.push(`# ${p.title}`);
     out.push(`Source: https://beava.dev${p.url}`);
     out.push('');
-    out.push(md);
+    out.push(p.markdown);
   }
 
-  const text = out.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';
-  fs.writeFileSync(OUT_PATH, text);
-  console.log(`build-llms-txt: wrote ${OUT_PATH} (${text.length.toLocaleString()} chars, ${text.split('\n').length.toLocaleString()} lines)`);
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';
+}
+
+function writeWithLog(filePath, body) {
+  fs.writeFileSync(filePath, body);
+  const lines = body.split('\n').length;
+  console.log(`  wrote ${path.relative(REPO_ROOT, filePath)}` +
+              ` (${body.length.toLocaleString()} chars, ${lines.toLocaleString()} lines)`);
+}
+
+function main() {
+  const pages = loadPages();
+  console.log(`build-llms-txt: ${pages.length} pages loaded`);
+  writeWithLog(OUT_INDEX, buildIndex(pages, OUT_FULL));
+  writeWithLog(OUT_FULL,  buildFull(pages));
+  console.log('build-llms-txt: done');
 }
 
 main();
