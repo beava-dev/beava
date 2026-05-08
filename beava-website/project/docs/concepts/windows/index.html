@@ -68,8 +68,8 @@
 {`@bv.table(key="campaign_id")
 def CampaignFeatures(ev: BidEvent) -> bv.Table:
     return ev.group_by("campaign_id").agg(
-        spend_1h=bv.sum("price", window="1h", where="_event.event_type == 'win'"),
-        wins_24h=bv.count(window="24h", where="_event.event_type == 'win'"),
+        spend_1h=bv.sum("price", window="1h", where=bv.col("event_type") == "win"),
+        wins_24h=bv.count(window="24h", where=bv.col("event_type") == "win"),
     )`}
             </Code>
             <p>Windows are one of the main ways beava turns raw events into useful state.</p>

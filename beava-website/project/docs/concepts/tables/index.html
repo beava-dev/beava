@@ -60,8 +60,8 @@
 {`@bv.table(key="user_id")
 def UserActivityFeatures(ev: UserEvent) -> bv.Table:
     return ev.group_by("user_id").agg(
-        clicks_1h=bv.count(window="1h", where="_event.event_type == 'click'"),
-        views_1h=bv.count(window="1h", where="_event.event_type == 'view'"),
+        clicks_1h=bv.count(window="1h", where=bv.col("event_type") == "click"),
+        views_1h=bv.count(window="1h", where=bv.col("event_type") == "view"),
     )`}
             </Code>
             <p>A table answers the question:</p>

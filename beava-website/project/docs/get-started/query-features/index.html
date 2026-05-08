@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Query features · beava docs</title>
-  <meta name="description" content="beava serves the latest feature values through simple key-based get and mget queries. Fresh enough for the decision path.">
+  <meta name="description" content="beava serves the latest feature values through simple key-based get and batch_get queries. Fresh enough for the decision path.">
   <link rel="stylesheet" href="../../../styles/colors_and_type.css">
   <link rel="stylesheet" href="../../../styles/site.css">
   <link rel="stylesheet" href="../../../styles/docs-kit.css">
@@ -30,7 +30,7 @@
   <script type="text/babel">
     const TOC = [
       { id: 'get', label: 'Get one key' },
-      { id: 'mget', label: 'Get many keys' },
+      { id: 'batch-get', label: 'Get many keys' },
       { id: 'composite', label: 'Composite keys' },
       { id: 'philosophy', label: 'Query path philosophy' },
     ];
@@ -51,18 +51,21 @@
 
             <h1>Query features</h1>
 
-            <p className="bv-lede">beava serves the latest feature values through simple key-based queries. Use <code>get</code> when you need one key. Use <code>mget</code> when you need many.</p>
+            <p className="bv-lede">beava serves the latest feature values through simple key-based queries. Use <code>get</code> when you need one key. Use <code>batch_get</code> when you need many.</p>
 
             <p>This serving model is intentionally simple.</p>
             <p><strong>Applications should be able to ask for the state they need, when they need it.</strong></p>
 
             <h2 id="get">Get one key</h2>
             <p>Example HTTP query:</p>
-            <Code lang="bash">{`curl http://127.0.0.1:6400/features/UserActivityFeatures/u123`}</Code>
+            <Code lang="bash">
+{`curl -X POST http://127.0.0.1:8080/get \\
+  -H "Content-Type: application/json" \\
+  -d '{"table": "UserActivityFeatures", "key": "u123"}'`}
+            </Code>
             <p>Example response:</p>
             <Code lang="json">
 {`{
-  "user_id": "u123",
   "views_1h": 12,
   "clicks_1h": 3,
   "purchases_24h": 1,
@@ -70,16 +73,20 @@
 }`}
             </Code>
 
-            <h2 id="mget">Get many keys</h2>
-            <p>Use <code>mget</code> when an application needs features for multiple entities in one decision.</p>
+            <h2 id="batch-get">Get many keys</h2>
+            <p>Use <code>batch_get</code> when an application needs features for multiple entities in one decision.</p>
             <Code lang="bash">
-{`curl -X POST http://127.0.0.1:6400/features/UserActivityFeatures/mget \\
+{`curl -X POST http://127.0.0.1:8080/batch_get \\
   -H "Content-Type: application/json" \\
   -d '{
-    "keys": ["u123", "u456", "u789"]
+    "requests": [
+      {"table": "UserActivityFeatures", "key": "u123"},
+      {"table": "UserActivityFeatures", "key": "u456"},
+      {"table": "UserActivityFeatures", "key": "u789"}
+    ]
   }'`}
             </Code>
-            <p><code>mget</code> is useful for ranking, recommendation, bidding, and fraud workloads where a decision may need many feature lookups at once.</p>
+            <p><code>batch_get</code> is useful for ranking, recommendation, bidding, and fraud workloads where a decision may need many feature lookups at once. The <code>requests</code> array can mix tables and keys freely; the response array preserves request order.</p>
 
             <h2 id="composite">Composite keys</h2>
             <p>Some features are keyed by more than one field.</p>

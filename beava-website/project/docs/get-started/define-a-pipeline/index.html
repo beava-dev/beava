@@ -81,9 +81,9 @@ class BidEvent:
 {`@bv.table(key=("user_id", "campaign_id"))
 def UserCampaignFeatures(ev: BidEvent) -> bv.Table:
     return ev.group_by("user_id", "campaign_id").agg(
-        imps_1h=bv.count(window="1h", where="_event.event_type == 'impression'"),
-        imps_24h=bv.count(window="24h", where="_event.event_type == 'impression'"),
-        spend_24h=bv.sum("price", window="24h", where="_event.event_type == 'win'"),
+        imps_1h=bv.count(window="1h", where=bv.col("event_type") == "impression"),
+        imps_24h=bv.count(window="24h", where=bv.col("event_type") == "impression"),
+        spend_24h=bv.sum("price", window="24h", where=bv.col("event_type") == "win"),
     )`}
             </Code>
             <p>This table is keyed by <code>user_id</code> and <code>campaign_id</code>. Each key maintains its own rolling feature values.</p>
