@@ -11,12 +11,16 @@ use beava_server::{banner, cli::Cli, logging, shutdown::shutdown_signal, ServerV
 use clap::Parser;
 use std::path::PathBuf;
 
-/// Resolve the config from CLI + filesystem + defaults.
+/// Resolve the config from CLI + defaults.
 ///
 /// Precedence (highest first):
 ///   1. `--config <path>` — explicit; fail if missing.
-///   2. `./beava.yaml` exists in cwd — load implicitly.
-///   3. Built-in defaults + `BEAVA_*` env-var overrides.
+///   2. Built-in defaults + `BEAVA_*` env-var overrides.
+///
+/// There is no implicit `./beava.yaml` lookup: a YAML config is only loaded
+/// when the operator points at one with `-c` / `--config`. This avoids the
+/// footgun where running `beava` from a directory that happens to contain
+/// an unrelated `beava.yaml` silently bound to whatever that file said.
 ///
 /// Returns `(cfg, source_label)` where `source_label` describes where the
 /// config came from for the boot banner.
@@ -24,13 +28,9 @@ fn resolve_config(
     explicit: Option<&PathBuf>,
 ) -> Result<(beava_server::Config, String), beava_server::ConfigError> {
     use beava_server::config::{defaults_with_env_overrides, load_config};
-    let implicit = PathBuf::from("./beava.yaml");
     if let Some(path) = explicit {
         let cfg = load_config(path)?;
         Ok((cfg, format!("--config {}", path.display())))
-    } else if implicit.exists() {
-        let cfg = load_config(&implicit)?;
-        Ok((cfg, "./beava.yaml".to_string()))
     } else {
         let cfg = defaults_with_env_overrides()?;
         Ok((cfg, "built-in defaults + BEAVA_* env".to_string()))
@@ -43,7 +43,7 @@ fn main() -> Result<()> {
     let (cfg, source_label) =
         resolve_config(cli.config.as_ref()).with_context(|| match cli.config.as_ref() {
             Some(p) => format!("loading config from {}", p.display()),
-            None => "loading config (built-in defaults + ./beava.yaml + BEAVA_* env)".to_string(),
+            None => "loading config (built-in defaults + BEAVA_* env)".to_string(),
         })?;
 
     logging::init(&cfg.log_level).context("init logging")?;

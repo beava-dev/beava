@@ -12,10 +12,12 @@ use std::path::PathBuf;
     long_about = None,
 )]
 pub struct Cli {
-    /// Path to YAML config file. Optional — when omitted, beava loads
-    /// `./beava.yaml` if it exists, or falls back to the built-in
-    /// defaults (HTTP 127.0.0.1:8080, admin 127.0.0.1:8090, WAL +
-    /// snapshot under ./beava-wal and ./beava-snapshots). The resolved
+    /// Path to YAML config file. Optional — when omitted, beava falls
+    /// back to the built-in defaults (HTTP 127.0.0.1:8080, admin
+    /// 127.0.0.1:8090, WAL + snapshot under ./beava-wal and
+    /// ./beava-snapshots) and applies any `BEAVA_*` env-var overrides.
+    /// There is no implicit `./beava.yaml` lookup — point at a YAML
+    /// explicitly with `-c` / `--config` if you want one. The resolved
     /// config is logged at startup so it's clear which path was taken.
     #[arg(short, long)]
     pub config: Option<PathBuf>,
