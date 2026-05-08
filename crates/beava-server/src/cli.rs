@@ -89,8 +89,7 @@ mod tests {
     /// set, `--no-file` is `false` (we DO write the drop-file by default).
     #[test]
     fn quickstart_subcommand_parses_with_default_flags() {
-        let cli = Cli::try_parse_from(["beava", "quickstart"])
-            .expect("parses `beava quickstart`");
+        let cli = Cli::try_parse_from(["beava", "quickstart"]).expect("parses `beava quickstart`");
         assert_eq!(
             cli.command,
             Some(Command::Quickstart { no_file: false }),
