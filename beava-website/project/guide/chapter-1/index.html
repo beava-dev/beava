@@ -412,9 +412,37 @@
             </div>
           </div>
 
-          {/* Spin-up: how to run beava locally for real, alongside the in-browser sim. */}
+        </div>
+      </section>
+    );
+
+    // ---------------- Part 0: Run beava in 10 seconds ---------------- //
+
+    const Part0RunBeava = () => (
+      <section style={{ padding: '32px 28px 16px' }}>
+        <div style={{ maxWidth: 1040, margin: '0 auto' }}>
+          <Eyebrow style={{ marginBottom: 12 }}>Part 0 · Run beava in 10 seconds</Eyebrow>
+          <h2 style={{ fontFamily: 'var(--font-serif)', fontWeight: 600, fontSize: 'clamp(26px, 3.4vw, 36px)', lineHeight: 1.15, letterSpacing: '-0.01em', color: 'var(--fg1)', margin: '0 0 16px' }}>
+            One command, a real server, a Python file on disk.
+          </h2>
+          <p style={{ fontFamily: 'var(--font-sans)', fontSize: 16, lineHeight: 1.6, color: 'var(--fg2)', margin: '0 0 22px', textWrap: 'pretty' }}>
+            Install the binary, run <code style={{ fontFamily: 'var(--font-mono)', fontSize: 14, background: 'var(--bg-inset)', padding: '1px 6px', borderRadius: 4 }}>beava quickstart</code>, watch a 4-step demo against an in-process server, and find a <code style={{ fontFamily: 'var(--font-mono)', fontSize: 14, background: 'var(--bg-inset)', padding: '1px 6px', borderRadius: 4 }}>beava_quickstart.py</code> file Beava just dropped next to your shell. Edit that file, point it at a real beava server, and you're shipping.
+          </p>
+
+          {/* The lead command — magical first-touch. */}
           <div style={{
-            marginTop: 36,
+            display: 'inline-flex', alignItems: 'center', gap: 12,
+            padding: '12px 18px', marginBottom: 20,
+            background: '#fff', border: '1px solid var(--accent)', borderRadius: 10,
+            fontFamily: 'var(--font-mono)', fontSize: 15, color: 'var(--fg1)',
+            boxShadow: '0 0 0 4px rgba(184,92,32,0.08)',
+          }}>
+            <span style={{ color: 'var(--fg3)' }}>$</span>
+            <span style={{ fontWeight: 600 }}>beava quickstart</span>
+          </div>
+
+          {/* Install paths */}
+          <div style={{
             background: 'var(--beava-paper)',
             border: '1px solid var(--border)',
             borderRadius: 14,
@@ -423,32 +451,39 @@
             <div style={{
               fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 700,
               textTransform: 'uppercase', letterSpacing: '0.08em',
-              color: 'var(--accent)', marginBottom: 10,
-            }}>Skip the browser — run it for real</div>
-            <p style={{ fontFamily: 'var(--font-sans)', fontSize: 14, lineHeight: 1.6, color: 'var(--fg2)', margin: '0 0 12px' }}>
-              The simulator on this page runs in your browser, but the real beava is a single binary you can <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, background: 'var(--bg-inset)', padding: '1px 5px', borderRadius: 4 }}>brew install</code> or <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, background: 'var(--bg-inset)', padding: '1px 5px', borderRadius: 4 }}>docker run</code> in 30 seconds. Same wire protocol; everything you build below works against it unchanged.
-            </p>
+              color: 'var(--accent)', marginBottom: 12,
+            }}>Install the binary</div>
             <pre style={{
               fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.55,
               background: '#1a1715', color: '#f3ebde',
               borderRadius: 8, padding: '12px 14px', margin: 0,
               overflowX: 'auto',
             }}>
-{'# docker — rolling :edge tag built from main on every push\n'}
-{'$ docker run -p 8080:8080 -p 8090:8090 -v $(pwd)/data:/data beavadev/beava:edge\n'}
+{'# brew (recommended)\n'}
+{'$ brew tap beava-dev/beava && brew install beava\n'}
 {'\n'}
-{'# from source (Rust toolchain required)\n'}
-{'$ cargo install --git https://github.com/beava-dev/beava beava-server\n'}
-{'$ beava\n'}
+{'# pip\n'}
+{'$ pip install beava\n'}
 {'\n'}
-{'# verify (admin port — /health, /ready, /metrics, /registry)\n'}
+{'# docker (zero deps on host — :edge tag rebuilt from main on every push)\n'}
+{'$ docker run -p 8080:8080 -p 8090:8090 beavadev/beava:edge\n'}
+{'\n'}
+{'# verify\n'}
 {'$ curl http://localhost:8090/health\n'}
 {'{"status":"ok"}'}
             </pre>
-            <p style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: 'var(--fg3)', margin: '10px 0 0' }}>
-              ~14 MB binary · ~62 ms cold start · zero config required · point any of the curl examples below at <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>localhost:8080</code> instead of the in-browser sim.
+            <p style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: 'var(--fg3)', margin: '12px 0 0' }}>
+              ~14 MB binary · ~62 ms cold start · runs on 1 GB RAM · single binary, no Kafka.
             </p>
           </div>
+
+          {/* Sub-callout: browser sim fallback */}
+          <p style={{
+            fontFamily: 'var(--font-sans)', fontSize: 13.5, color: 'var(--fg3)',
+            lineHeight: 1.6, margin: '14px 0 0', paddingLeft: 4,
+          }}>
+            Or simulate it in your browser below if you can't install yet — same wire protocol, same shape, runs entirely client-side.
+          </p>
         </div>
       </section>
     );
@@ -1509,6 +1544,7 @@
         <SiteHeader active="guide" maxWidth={1200}/>
         <ComingSoonBanner/>
         <Hero/>
+        <Part0RunBeava/>
         <Meetbeava/>
         <Tutorial/>
         <SiteFooter/>
