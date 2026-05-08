@@ -14,8 +14,9 @@ pub const DEFAULT_DEDUPE_WINDOW_MS: u64 = 86_400_000; // 24 hours
 /// Default TCP listen host for the binary-framed wire.
 pub const DEFAULT_TCP_HOST: &str = "127.0.0.1";
 
-/// Default TCP port for the binary-framed wire.
-pub const DEFAULT_TCP_PORT: u16 = 7380;
+/// Default TCP port for the binary-framed wire. Locked v0 surface
+/// (STATE.md surface-lock 2026-05-06): HTTP on 8080, TCP on 8081.
+pub const DEFAULT_TCP_PORT: u16 = 8081;
 
 /// Default max frame size in bytes (4 MiB). Oversize frames produce a
 /// `frame_too_large` error response, then the connection closes.

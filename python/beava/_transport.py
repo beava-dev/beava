@@ -840,7 +840,7 @@ def parse_url_to_transport(url: str | None) -> Transport:
         proc, _http_url, tcp_url, env = spawn_embedded_server()
         parsed = urllib.parse.urlparse(tcp_url)
         host = parsed.hostname or "127.0.0.1"
-        port = parsed.port or 7380
+        port = parsed.port or 8081
         tcp = TcpTransport(host=host, port=port)
         return EmbedTransport(tcp=tcp, proc=proc, spawn_env=env)
 
@@ -850,7 +850,7 @@ def parse_url_to_transport(url: str | None) -> Transport:
     if url.startswith("tcp://"):
         parsed = urllib.parse.urlparse(url)
         host = parsed.hostname or "127.0.0.1"
-        port = parsed.port or 7380
+        port = parsed.port or 8081
         return TcpTransport(host=host, port=port)
 
     raise ValueError(
@@ -887,7 +887,7 @@ def make_transport(
         proc, _http_url, tcp_url, env = spawn_embedded_server(test_mode=test_mode)
         parsed = urllib.parse.urlparse(tcp_url)
         host = parsed.hostname or "127.0.0.1"
-        port = parsed.port or 7380
+        port = parsed.port or 8081
         tcp = TcpTransport(host=host, port=port, timeout=timeout)
         return EmbedTransport(tcp=tcp, proc=proc, spawn_env=env)
 
@@ -897,7 +897,7 @@ def make_transport(
     if url.startswith("tcp://"):
         parsed = urllib.parse.urlparse(url)
         host = parsed.hostname or "127.0.0.1"
-        port = parsed.port or 7380
+        port = parsed.port or 8081
         return TcpTransport(host=host, port=port, timeout=timeout)
 
     raise ValueError(

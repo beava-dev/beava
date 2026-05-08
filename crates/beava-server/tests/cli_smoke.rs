@@ -82,7 +82,7 @@ fn loads_valid_config_starts_and_prints_banner() {
     let snap_dir = unique_snapshot_dir();
     let child = Command::new(beava_bin())
         // Disable TCP wire listener for CLI smoke tests — avoids port conflicts
-        // when multiple cli_smoke tests run in parallel and default-bind TCP 7380.
+        // when multiple cli_smoke tests run in parallel and default-bind TCP 8081.
         .env("BEAVA_TCP_ENABLED", "0")
         .env("BEAVA_WAL_DIR", &wal_dir)
         .env("BEAVA_SNAPSHOT_DIR", &snap_dir)
@@ -159,7 +159,7 @@ fn no_args_ignores_beava_yaml_in_cwd() {
 
     // Override admin + WAL + snapshot dirs via env so this test doesn't
     // collide with the default 8090 / ./beava-wal paths used by other
-    // tests, and disable TCP wire to avoid port-7380 conflicts.
+    // tests, and disable TCP wire to avoid port-8081 conflicts.
     let wal_dir = unique_wal_dir();
     let snap_dir = unique_snapshot_dir();
     let child = Command::new(beava_bin())

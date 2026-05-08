@@ -24,7 +24,7 @@ fn beava_bin() -> &'static str {
 #[test]
 fn quickstart_runs_to_completion_and_prints_four_step_markers() {
     let tmp = tempfile::tempdir().expect("tempdir");
-    // BEAVA_TCP_ENABLED=0 keeps the in-process server off TCP-7380 to
+    // BEAVA_TCP_ENABLED=0 keeps the in-process server off TCP-8081 to
     // avoid colliding with a server already running on the dev box.
     let output = Command::new(beava_bin())
         .arg("quickstart")

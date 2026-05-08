@@ -105,7 +105,7 @@ pub fn run(no_file: bool) -> anyhow::Result<()> {
         let started = Instant::now();
 
         // Bind on ephemeral ports so quickstart never collides with a
-        // real `beava` already running on 8080/7380/8090. The HTTP
+        // real `beava` already running on 8080/8081/8090. The HTTP
         // address the user sees in [1/4]/[2/4]/[3/4] is whatever the
         // OS assigned.
         let any: SocketAddr = "127.0.0.1:0".parse().unwrap();
