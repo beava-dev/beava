@@ -61,10 +61,13 @@
             <p><strong>Define events. Maintain tables. Query fresh state.</strong></p>
 
             <h2 id="install">Install beava</h2>
-            <Code lang="bash">{`pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"`}</Code>
-            <p>(Pre-release: install from main until v0.0.0 GA, when <code>beava</code> publishes to PyPI. Import name is <code>beava</code> in both cases.)</p>
-            <p>Start a local beava server:</p>
-            <Code lang="bash">{`beava -c beava.yaml`}</Code>
+            <Code lang="bash">{`brew tap beava-dev/beava && brew install beava
+# or: pip install beava
+# or: docker run -p 8080:8080 beavadev/beava:edge`}</Code>
+            <p>Start a local beava server (no config file needed — built-in defaults bind HTTP on <code>:8080</code> and the admin sidecar on <code>:8090</code>):</p>
+            <Code lang="bash">{`beava`}</Code>
+            <p>Or run the magical 4-step demo against an in-process server, no setup required:</p>
+            <Code lang="bash">{`beava quickstart`}</Code>
             <p>beava is designed to start small. For local development, a single beava process should be enough to define pipelines, push events, and query features.</p>
             <p><strong>Start small. Understand the system. Grow with the use case.</strong></p>
 
