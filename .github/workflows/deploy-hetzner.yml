@@ -78,6 +78,28 @@ jobs:
             exit 1
           REMOTE
 
+      - name: Setup Node.js (for render-docs)
+        # Without this, `npm run build:docs` below fails. Pin LTS — the
+        # render-docs script uses only stable Node APIs (path/fs/url) so
+        # any LTS works.
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: beava-website/package-lock.json
+
+      - name: Render docs (markdown → HTML)
+        # `docs/**/*.md` is the source of truth; `beava-website/project/docs/`
+        # is generated. Without this step the deploy ships stale HTML —
+        # `/docs/quickstart` would still show pre-PR-15 content even after
+        # the markdown source landed on main. `npm ci` installs
+        # markdown-it + markdown-it-anchor; `build:docs` is idempotent
+        # (re-running produces byte-identical output).
+        working-directory: beava-website
+        run: |
+          npm ci
+          npm run build:docs
+
       - name: rsync beava-website/project/ to /srv/beava-website/project/
         # No --delete: the Hetzner box has artifacts (e.g. _pagefind index built
         # post-deploy) that don't live in the repo. Stale files accumulate over
