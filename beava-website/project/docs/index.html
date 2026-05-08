@@ -73,7 +73,7 @@
             <ol>
               <li><strong>Streams</strong> describe the events your application produces.</li>
               <li><strong>Tables</strong> describe the grouped, windowed, aggregated state you want to maintain.</li>
-              <li><strong>Queries</strong> let your application fetch the latest values by key with <code>get</code> and <code>mget</code>.</li>
+              <li><strong>Queries</strong> let your application fetch the latest values by key with <code>get</code> and <code>batch_get</code>.</li>
             </ol>
             <p>As events arrive, beava updates the relevant tables inline and makes the latest values available to your application.</p>
             <p><strong>Low-latency reads are useful; low-latency freshness changes the architecture.</strong></p>

@@ -92,7 +92,7 @@ def UserActivityFeatures(ev: UserEvent) -> bv.Table:
         views_1h=bv.count(window="1h", where=bv.col("event_type") == "view"),
         clicks_1h=bv.count(window="1h", where=bv.col("event_type") == "click"),
         purchases_24h=bv.count(window="24h", where=bv.col("event_type") == "purchase"),
-        distinct_categories_24h=bv.count_distinct("category", window="24h"),
+        distinct_categories_24h=bv.n_unique("category", window="24h"),
     )`}
             </Code>
             <p>This table turns raw user events into fresh user-level features.</p>
@@ -109,14 +109,17 @@ app.register(UserEvent, UserActivityFeatures)`}
             <h2 id="push">Push an event</h2>
             <p>Push an event over HTTP:</p>
             <Code lang="bash">
-{`curl -X POST http://127.0.0.1:8080/push/UserEvent \\
+{`curl -X POST http://127.0.0.1:8080/push \\
   -H "Content-Type: application/json" \\
   -d '{
-    "user_id": "u123",
-    "item_id": "i456",
-    "event_type": "click",
-    "category": "sports",
-    "ts": 1777855797.778
+    "event": "UserEvent",
+    "data": {
+      "user_id": "u123",
+      "item_id": "i456",
+      "event_type": "click",
+      "category": "sports",
+      "ts": 1777855797.778
+    }
   }'`}
             </Code>
             <p>As the event arrives, beava updates the matching feature tables inline.</p>
