@@ -56,10 +56,12 @@ def beava_binary(pytestconfig: pytest.Config) -> Path:
 
 
 @pytest.fixture
-def beava_server(beava_binary: Path) -> Generator[tuple[str, str], None, None]:
+def beava_server(
+    beava_binary: Path, tmp_path: Path
+) -> Generator[tuple[str, str], None, None]:
     """Spawn a beava server on ephemeral HTTP and TCP ports.
 
-    Parses stderr for server.http_bound + server.tcp_bound JSON log lines to
+    Parses stdout for server.http_bound + server.tcp_bound JSON log lines to
     discover the OS-assigned ports.  Yields (http_url, tcp_url).  Sends SIGTERM
     on teardown and waits up to 5s; SIGKILL if the process doesn't exit.
 
@@ -68,11 +70,25 @@ def beava_server(beava_binary: Path) -> Generator[tuple[str, str], None, None]:
     Port overrides via env vars:
       BEAVA_LISTEN_ADDR=127.0.0.1:0  (HTTP listener — port 0 → OS assigns)
       BEAVA_TCP_PORT=0                (TCP listener — port 0 → OS assigns)
+
+    WAL + snapshot isolation: ``BEAVA_WAL_DIR`` and ``BEAVA_SNAPSHOT_DIR``
+    point at the per-test ``tmp_path`` so each test starts with a clean
+    registry (registry_version=1 fresh-boot, no carried-over event
+    descriptors). Without isolation, a test calling ``register("Foo")``
+    leaves Foo in the default ``./.beava/`` and subsequent tests see it
+    as ``already_present`` — caught while wiring the F2 /ping
+    registry-version delta assertion.
     """
+    wal_dir = tmp_path / "wal"
+    snap_dir = tmp_path / "snapshots"
+    wal_dir.mkdir()
+    snap_dir.mkdir()
     env = {
         **os.environ,
         "BEAVA_LISTEN_ADDR": "127.0.0.1:0",
         "BEAVA_TCP_PORT": "0",
+        "BEAVA_WAL_DIR": str(wal_dir),
+        "BEAVA_SNAPSHOT_DIR": str(snap_dir),
         "BEAVA_DEV_ENDPOINTS": "1",  # expose GET /registry for Plan 03-06 smoke
     }
 

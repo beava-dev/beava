@@ -72,13 +72,14 @@ def test_http_url_picks_http_transport(embedded_server: tuple[str, str]) -> None
         )
         # Smoke: also verify the transport actually talks to the engine —
         # protects against a no-op transport that satisfies the type
-        # assertion but is non-functional.
+        # assertion but is non-functional. Post-F2 the HTTP transport's
+        # /ping returns {"pong": true, "registry_version": <n>}; pre-F2
+        # binaries in the discover_binary search path may still raise
+        # NotImplementedError. Either path proves the transport works.
         ping_or_register: Any
         try:
             ping_or_register = app.ping()
         except NotImplementedError:
-            # HTTP has no /ping endpoint per docs/http-api.md; a register
-            # round-trip suffices to confirm the transport is wired.
             @bv.event
             class _Probe:
                 user_id: str
