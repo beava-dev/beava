@@ -58,7 +58,7 @@
             <p className="bv-lede">Change a pipeline definition — add features, change windows, fix expressions — without losing aggregate state or downtime.</p>
 
             <h2 id="motivation">Motivation</h2>
-            <p>Today, changing a pipeline means re-registration, which discards in-memory state. For fraud, ad-tech, and personalization workloads where the windowed state is irreplaceable (a 30-day rolling distinct count can’t be recomputed from a fresh start), this is unacceptable. Operators currently work around it by running two beava instances in parallel and switching traffic — which doubles the memory budget and adds a coordination failure mode.</p>
+            <p>Changing a pipeline means re-registration, which discards in-memory state. For fraud, ad-tech, and personalization workloads where the windowed state is irreplaceable (a 30-day rolling distinct count can’t be recomputed from a fresh start), this is unacceptable. Operators currently work around it by running two beava instances in parallel and switching traffic — which doubles the memory budget and adds a coordination failure mode.</p>
             <p><strong>Iterating on a feature should not cost a 30-day warm-up.</strong></p>
             <h2 id="questions">Open questions</h2>
             <ul>

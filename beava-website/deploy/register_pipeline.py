@@ -28,7 +28,7 @@ class PageView:
 def SiteMetrics(e: PageView):
     return e.agg(
         median_dwell_1h=bv.quantile("dwell_ms", q=0.5, window="1h"),
-        page_views_today=bv.count(window="24h"),
+        page_views_24h=bv.count(window="24h"),
         top_page_1h=bv.top_k("path", k=1, window="1h"),
     )
 

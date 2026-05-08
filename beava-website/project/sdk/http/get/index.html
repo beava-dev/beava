@@ -155,7 +155,7 @@
       <p>The success body is a <strong>flat dict mapping feature name → value</strong>. There is no envelope — feature names are top-level keys. Cold-start returns <code>{}</code> at HTTP 200; document this in your client wrapper because it is easy to mistake for an empty error envelope.</p>
 
       <h3 id="response-hit">Standard hit</h3>
-      <p>Table is registered, key has events, full row requested. Pulled verbatim from <code>examples/wire/get-found.*</code>:</p>
+      <p>Table is registered, key has events, full row requested:</p>
 
       <div class="reqres">
         <div class="codeblock">
@@ -203,7 +203,7 @@
       </div>
 
       <h3 id="response-global">Global aggregation</h3>
-      <p>Tables registered with <code>key=[]</code> (no group-by keys) hold a single, server-wide row. Address it with the empty-string sentinel <code>"key": ""</code>. Pulled verbatim from <code>examples/wire/get-global.*</code>:</p>
+      <p>Tables registered with <code>key=[]</code> (no group-by keys) hold a single, server-wide row. Address it with the empty-string sentinel <code>"key": ""</code>:</p>
 
       <div class="reqres">
         <div class="codeblock">
@@ -274,7 +274,7 @@
         </div>
       </div>
 
-      <p>If <code>features</code> names a column that isn't registered on the table, the whole call is rejected — no partial response. The error surfaces as HTTP 500 with <code>code: "internal_error"</code> and a <code>reason</code> that names the missing feature(s). This matches the batch-get path's whole-batch-reject disposition.</p>
+      <p>If <code>features</code> names a column that isn't registered on the table, the whole call is rejected — no partial response. The error surfaces as HTTP 500 with <code>code: "internal_error"</code> and a <code>reason</code> that names the missing feature(s). The batch-get path uses the same whole-batch-reject disposition.</p>
 
       <!-- =============== COMPOSITE KEYS =============== -->
       <h2 id="composite-keys">Composite keys</h2>
@@ -329,10 +329,10 @@ Content-Type: application/json
 
 <span class="tk-p">{</span><span class="tk-fn">"error"</span>:<span class="tk-p">{</span>
   <span class="tk-fn">"code"</span>:    <span class="tk-s">"unsupported_request_shape"</span><span class="tk-p">,</span>
-  <span class="tk-fn">"message"</span>: <span class="tk-s">"POST /get expects {table, key, features?}; received legacy {keys, features} shape — see docs/http-api.md#post-get"</span>
+  <span class="tk-fn">"message"</span>: <span class="tk-s">"POST /get expects {table, key, features?}"</span>
 <span class="tk-p">}}</span></pre>
       </div>
-      <p>The body parsed as JSON but matched a deprecated shape (<code>{keys, features}</code> 2D-cell or <code>{feature, key}</code> single-feature). Migrate to the verb-style body documented above.</p>
+      <p>The body parsed as JSON but didn't match the canonical shape — common when a client sends a multi-key shape (<code>{keys, features}</code>) or a single-feature shape (<code>{feature, key}</code>). Use the verb-style body documented above.</p>
 
       <div class="codeblock">
         <div class="codeblock-head">
@@ -377,7 +377,7 @@ Content-Type: application/json
         <details>
           <summary>What happens if I pass <code>features</code> for a column that doesn't exist?</summary>
           <div class="acc-body">
-            <p>The whole call is rejected — no partial response with the columns that did match. The server returns HTTP 500 with <code>code: "internal_error"</code> and a <code>reason</code> string of the form <code>"feature_not_found: missing=[\"bogus\"] table=UserStats"</code>. This whole-batch-reject disposition matches the multi-key path: clients see one consistent failure mode, not a half-populated row that silently dropped fields.</p>
+            <p>The whole call is rejected — no partial response with the columns that did match. The server returns HTTP 500 with <code>code: "internal_error"</code> and a <code>reason</code> string of the form <code>"feature_not_found: missing=[\"bogus\"] table=UserStats"</code>. Same whole-batch-reject disposition as the multi-key path: clients see one consistent failure mode, not a half-populated row that silently dropped fields.</p>
           </div>
         </details>
         <details>

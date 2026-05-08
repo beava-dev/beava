@@ -58,7 +58,7 @@
             <p className="bv-lede">Join an incoming event stream against a sibling table inside a pipeline. The table side is read as a snapshot of its current state at apply time. This is a <strong>stream-to-table join</strong> — distinct from stream-stream joins, which v0 doesn’t do.</p>
 
             <h2 id="motivation">Motivation</h2>
-            <p>Real-time decisions often need static or slowly-changing context — user tier, account status, merchant category, allow/block list — on top of streaming aggregates. Today, teams either denormalize at push time (bloating every event with context) or query two stores app-side and stitch results in their own code. Both options push complexity onto the application.</p>
+            <p>Real-time decisions often need static or slowly-changing context — user tier, account status, merchant category, allow/block list — on top of streaming aggregates. Teams either denormalize at push time (bloating every event with context) or query two stores app-side and stitch results in their own code. Both options push complexity onto the application.</p>
             <p>A pipeline-level join keeps enrichment inside beava and inside the same transaction as the event apply.</p>
             <p><strong>Real-time features should feel like application code</strong> — including the joins to context.</p>
             <h2 id="questions">Open questions</h2>

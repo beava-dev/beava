@@ -83,7 +83,7 @@ const PipelineShowcase = () => {
 {'    '}<span style={S.kw}>return</span> e.<span style={S.fn}>agg</span>({'\n'}
 {'        '}<span style={{ background: 'rgba(184,92,32,0.10)', borderRadius: 3, padding: '0 2px' }}>avg_dwell_docs_1h</span> = bv.<span style={S.fn}>avg</span>(e.dwell_ms, window=<span style={S.str}>"1h"</span>,{'\n'}
 {'                                   '}where=<span style={S.str}>"_event.path.startswith('/docs/')"</span>),{'\n'}
-{'        '}<span style={{ background: 'rgba(58,106,138,0.10)', borderRadius: 3, padding: '0 2px' }}>page_views_today</span>  = bv.<span style={S.fn}>count</span>(window=<span style={S.str}>"24h"</span>),{'\n'}
+{'        '}<span style={{ background: 'rgba(58,106,138,0.10)', borderRadius: 3, padding: '0 2px' }}>page_views_24h</span>  = bv.<span style={S.fn}>count</span>(window=<span style={S.str}>"24h"</span>),{'\n'}
 {'        '}<span style={{ background: 'rgba(217,122,62,0.12)', borderRadius: 3, padding: '0 2px' }}>top_page_1h</span>       = bv.<span style={S.fn}>top_k</span>(e.path, k=<span style={S.num}>1</span>, window=<span style={S.str}>"1h"</span>),{'\n'}
 {'    '}){'\n'}
 {'\n'}
@@ -96,7 +96,7 @@ bv.<span style={S.fn}>App</span>(<span style={S.str}>"0.0.0.0:6400"</span>).<spa
           }}>
             {[
               { color: 'rgba(184,92,32,0.10)', dot: 'var(--accent)',             label: 'avg_dwell_docs_1h', maps: 'Avg time on /docs/ · 1h' },
-              { color: 'rgba(58,106,138,0.10)', dot: 'var(--beava-info)',        label: 'page_views_today',  maps: 'Pages viewed today' },
+              { color: 'rgba(58,106,138,0.10)', dot: 'var(--beava-info)',        label: 'page_views_24h',  maps: 'Page views (last 24h)' },
               { color: 'rgba(217,122,62,0.12)', dot: 'var(--beava-orange-soft)', label: 'top_page_1h',       maps: 'Top page · this hour' },
             ].map((row, i) => (
               <div key={row.label} style={{

@@ -166,7 +166,7 @@
             // beava-website/deploy/register_pipeline.py (the SDK file that IS
             // the inline example below).
             const sf = site || {};
-            const views = sf.page_views_today || 0;
+            const views = sf.page_views_24h || 0;
             const median = sf.median_dwell_1h || 0;
             // top_k returns a JSON array: [{value, count}, ...]. k=1 in
             // register_pipeline.py so top[0] is the only row.
@@ -196,7 +196,7 @@
             <MetricCard label="Median time on page · Last hour" value={dwellNum} unit={dwellUnit}
               sparkData={dwellSeries} sparkColor="var(--accent)"
               mascot={{ src: '/assets/mascot-work-pose.svg', size: 84, top: 4, right: 10, rotate: -4 }}/>
-            <MetricCard label="Pages viewed · Today" value={pvNum} unit={pvUnit}
+            <MetricCard label="Pages viewed · Last 24h" value={pvNum} unit={pvUnit}
               sparkData={pvSeries} sparkColor="var(--beava-info)"
               mascot={{ src: '/assets/logo-mark.png', size: 100, top: -2, right: 4, rotate: 4 }}/>
             <MetricCard big label="Top page · Last hour"
@@ -439,7 +439,7 @@
     const PipelineOutput = () => {
       const SEED = {
         median_dwell_1h: 6250.0,
-        page_views_today: 14207,
+        page_views_24h: 14207,
         top_page_1h: [{ value: '/', count: 412 }],
       };
       const [data, setData] = React.useState(null);
@@ -549,14 +549,14 @@
 <span style={S.kw}>def</span> <span style={S.fn}>SiteMetrics</span>(e: <span style={S.ty}>PageView</span>):{'\n'}
 {'    '}<span style={S.kw}>return</span> e.<span style={S.fn}>agg</span>({'\n'}
 {'        '}<span style={{ background: 'rgba(184,92,32,0.10)', borderRadius: 3, padding: '0 2px' }}>median_dwell_1h</span>  = bv.<span style={S.fn}>quantile</span>(<span style={S.str}>"dwell_ms"</span>, q=<span style={S.num}>0.5</span>, window=<span style={S.str}>"1h"</span>),{'\n'}
-{'        '}<span style={{ background: 'rgba(58,106,138,0.10)', borderRadius: 3, padding: '0 2px' }}>page_views_today</span> = bv.<span style={S.fn}>count</span>(window=<span style={S.str}>"24h"</span>),{'\n'}
+{'        '}<span style={{ background: 'rgba(58,106,138,0.10)', borderRadius: 3, padding: '0 2px' }}>page_views_24h</span> = bv.<span style={S.fn}>count</span>(window=<span style={S.str}>"24h"</span>),{'\n'}
 {'        '}<span style={{ background: 'rgba(217,122,62,0.12)', borderRadius: 3, padding: '0 2px' }}>top_page_1h</span>      = bv.<span style={S.fn}>top_k</span>(<span style={S.str}>"path"</span>, k=<span style={S.num}>1</span>, window=<span style={S.str}>"1h"</span>),{'\n'}
 {'    '}){'\n'}
 {'\n'}
 bv.<span style={S.fn}>App</span>(<span style={S.str}>"0.0.0.0:8080"</span>).<span style={S.fn}>register</span>(<span style={S.ty}>PageView</span>, <span style={S.fn}>SiteMetrics</span>).<span style={S.fn}>serve</span>(){'\n'}
 {'\n'}
 <span style={S.cmt}># Query the global row — no key, just the table name.</span>{'\n'}
-bv.<span style={S.fn}>get</span>(<span style={S.str}>"SiteMetrics"</span>)  <span style={S.cmt}># → {`{median_dwell_1h: 6_250, views_today: 14_207, …}`}</span>{'\n'}
+bv.<span style={S.fn}>get</span>(<span style={S.str}>"SiteMetrics"</span>)  <span style={S.cmt}># → {`{median_dwell_1h: 6_250, views_24h: 14_207, …}`}</span>{'\n'}
 {'\n'}
 <span style={S.cmt}># Or over HTTP (the panel above is hitting this exact endpoint):</span>{'\n'}
 <span style={S.kw}>$</span> curl https://beava.dev/api/get -d '{`{"table":"SiteMetrics","key":""}`}'
@@ -564,7 +564,7 @@ bv.<span style={S.fn}>get</span>(<span style={S.str}>"SiteMetrics"</span>)  <spa
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0, borderTop: '1px solid var(--border)', background: '#fff' }}>
                 {[
                   { color: 'rgba(184,92,32,0.10)', dot: 'var(--accent)',             label: 'median_dwell_1h',  maps: 'Median time on page · 1h' },
-                  { color: 'rgba(58,106,138,0.10)', dot: 'var(--beava-info)',        label: 'page_views_today', maps: 'Pages viewed today' },
+                  { color: 'rgba(58,106,138,0.10)', dot: 'var(--beava-info)',        label: 'page_views_24h', maps: 'Page views (last 24h)' },
                   { color: 'rgba(217,122,62,0.12)', dot: 'var(--beava-orange-soft)', label: 'top_page_1h',      maps: 'Top page · this hour' },
                 ].map((row, i) => (
                   <div key={row.label} style={{ padding: '14px 18px', borderRight: i < 2 ? '1px solid var(--border)' : 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>

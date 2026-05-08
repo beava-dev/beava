@@ -133,7 +133,7 @@
             </span>
           </div>
           <div class="param-body">
-            <p>Event fields as a flat object. Keys must match the descriptor's declared <code>schema.fields</code>; unknown keys are rejected with <code>unknown_field_v0</code> (or <code>unknown_field_event_time_v0</code> for the legacy <code>event_time</code> / <code>event_time_ms</code> sentinels — beava v0 is processing-time only).</p>
+            <p>Event fields as a flat object. Keys must match the descriptor's declared <code>schema.fields</code>; unknown keys are rejected with <code>unknown_field_v0</code>. The names <code>event_time</code> and <code>event_time_ms</code> are reserved and rejected with <code>unknown_field_event_time_v0</code> — v0 is processing-time only.</p>
           </div>
         </div>
       </div>
@@ -294,7 +294,7 @@ ack <span class="tk-p">=</span> app<span class="tk-p">.</span>push<span class="t
             <span class="param-name">400 · unknown_field_event_time_v0</span>
           </div>
           <div class="param-body">
-            <p>Specialised case of <code>unknown_field_v0</code> for the legacy <code>event_time</code> / <code>event_time_ms</code> field names. beava v0 is processing-time only; clients sending event-time data get a structured 400 rather than silent acceptance. Event-time support is on the post-v0 roadmap.</p>
+            <p>Specialised case of <code>unknown_field_v0</code> for the reserved <code>event_time</code> / <code>event_time_ms</code> field names. v0 is processing-time only; clients sending event-time data get a structured 400 rather than silent acceptance.</p>
           </div>
         </div>
       </div>
@@ -308,7 +308,7 @@ ack <span class="tk-p">=</span> app<span class="tk-p">.</span>push<span class="t
 
       <!-- =============== EXAMPLE =============== -->
       <h2 id="example">Worked example: end-to-end</h2>
-      <p>Canonical request and response, taken verbatim from the wire fixtures (<code>examples/wire/push-success.{request,response}.json</code>) so SDK ports stay byte-identical:</p>
+      <p>Canonical request and response:</p>
 
       <div class="reqres">
         <div class="codeblock">
@@ -354,7 +354,7 @@ content_type<span class="tk-p">:</span>  <span class="tk-n">0x01</span> = CT_JSO
               <span class="tk-n">0x02</span> = CT_MSGPACK <span class="tk-c">// msgpack-encoded {event, data} (TCP only)</span></pre>
       </div>
 
-      <p>TCP is strict-FIFO with one in-flight request per connection — the response order matches the request order. The msgpack body format is a TCP-only fast-path; HTTP <code>/push</code> always parses bodies as JSON. See the <a href="#">wire spec (planned)</a> for the full opcode catalogue and frame state machine.</p>
+      <p>TCP is strict-FIFO with one in-flight request per connection — the server replies in the same order it received requests. HTTP <code>/push</code> always parses bodies as JSON. The full opcode catalogue and frame state machine live on the <a href="/sdk/http/wire-spec/">wire spec</a> page.</p>
 
       <!-- =============== FAQ =============== -->
       <h2 id="faq">Common questions</h2>

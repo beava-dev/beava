@@ -177,7 +177,7 @@ const LiveMetrics = () => {
           mascot={{ src: '../../assets/mascot-work-pose.svg', size: 48, top: 8, right: 10, rotate: -4 }}
         />
         <MetricCard
-          label="Pages viewed · Today"
+          label="Pages viewed · Last 24h"
           value={pvNum}
           unit={pvUnit}
           sparkData={pvSeries}

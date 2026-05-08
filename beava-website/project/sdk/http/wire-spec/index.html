@@ -82,8 +82,6 @@
   }
   .wire-table td.op { white-space: nowrap; font-family: var(--font-mono); font-weight: 600; color: var(--accent); }
   .wire-table td.note { color: var(--fg2); }
-  .wire-table td.status-impl { color: var(--fg2); }
-  .wire-table td.status-reserved { color: var(--fg3); font-style: italic; }
 </style>
 </head>
 <body class="beava">
@@ -252,14 +250,13 @@
 
       <!-- =============== TCP OPCODES =============== -->
       <h2 id="opcodes">TCP opcode table</h2>
-      <p>Source of truth: <code>crates/beava-core/src/wire.rs</code>. Opcodes are u16 big-endian. Reserved opcodes parse but the server rejects them with <code>op_not_implemented</code>; opcodes outside this table return <code>unknown_op</code>.</p>
+      <p>Opcodes are u16 big-endian. Opcodes outside this table return <code>unknown_op</code>.</p>
 
       <table class="wire-table">
         <thead>
           <tr>
             <th>Opcode</th>
             <th>Name</th>
-            <th>Status</th>
             <th>Request payload</th>
             <th>Response opcode &amp; body</th>
           </tr>
@@ -268,141 +265,71 @@
           <tr>
             <td class="op">0x0000</td>
             <td><code>OP_PING</code></td>
-            <td class="status-impl">Implemented</td>
             <td>Empty JSON (<code>{}</code> or zero-byte payload).</td>
             <td><code>OP_GET_RESPONSE (0x0023)</code> with <code>{"pong": true, "registry_version": &lt;n&gt;}</code>.</td>
           </tr>
           <tr>
             <td class="op">0x0001</td>
             <td><code>OP_REGISTER</code></td>
-            <td class="status-impl">Implemented</td>
             <td>Same JSON DAG body as <code>POST /register</code>: <code>{"nodes":[...], "force"?, "dry_run"?}</code>.</td>
             <td><code>OP_GET_RESPONSE</code> with the success body, or <code>OP_ERROR_RESPONSE</code> on conflict.</td>
           </tr>
           <tr>
             <td class="op">0x0010</td>
             <td><code>OP_PUSH</code></td>
-            <td class="status-impl">Implemented</td>
             <td><code>{"event": "&lt;name&gt;", "data": {...}}</code> (or <code>"body"</code> as a synonym for <code>data</code>).</td>
             <td><code>OP_GET_RESPONSE</code> with <code>{"ack_lsn", "idempotent_replay", "registry_version"}</code>.</td>
           </tr>
           <tr>
-            <td class="op">0x0011</td>
-            <td><code>OP_PUSH_SYNC</code></td>
-            <td class="status-reserved">Reserved</td>
-            <td>Same shape as <code>OP_PUSH</code>; reserved for the synchronous-push wire variant. Today, sync-push is reachable through HTTP <code>POST /push-sync</code>.</td>
-            <td><code>OP_ERROR_RESPONSE</code> with <code>op_not_implemented</code>.</td>
-          </tr>
-          <tr>
-            <td class="op">0x0012</td>
-            <td><code>OP_PUSH_MANY</code></td>
-            <td class="status-reserved">Reserved</td>
-            <td>Batched push over TCP. Reserved.</td>
-            <td><code>OP_ERROR_RESPONSE</code> with <code>op_not_implemented</code>.</td>
-          </tr>
-          <tr>
             <td class="op">0x0020</td>
             <td><code>OP_GET</code></td>
-            <td class="status-impl">Implemented</td>
             <td><code>{"table": "&lt;name&gt;", "entity_id": "&lt;key&gt;", "features": [...]}</code>.</td>
             <td><code>OP_GET_RESPONSE</code> with the flat row dict (cold-start: <code>{}</code>).</td>
           </tr>
           <tr>
             <td class="op">0x0021</td>
             <td><code>OP_MGET</code></td>
-            <td class="status-impl">Implemented</td>
             <td>Many keys, one feature: <code>{"feature": "&lt;name&gt;", "keys": [...]}</code>.</td>
             <td><code>OP_GET_RESPONSE</code> with <code>{"results": [...]}</code>.</td>
           </tr>
           <tr>
             <td class="op">0x0022</td>
             <td><code>OP_GET_MULTI</code></td>
-            <td class="status-impl">Implemented</td>
             <td>Multi-descriptor batched read.</td>
             <td><code>OP_GET_RESPONSE</code>.</td>
           </tr>
           <tr>
             <td class="op">0x0023</td>
             <td><code>OP_GET_RESPONSE</code></td>
-            <td class="status-impl">Implemented</td>
             <td><em>Response-only.</em> Generic JSON success-frame opcode shared by <code>OP_PING</code>, <code>OP_REGISTER</code>, <code>OP_PUSH</code>, the <code>OP_GET</code> family, <code>OP_BATCH_GET</code>, and <code>OP_RESET</code>.</td>
             <td>Body is opcode-of-the-request-specific.</td>
           </tr>
           <tr>
             <td class="op">0x0024</td>
             <td><code>OP_BATCH_GET</code></td>
-            <td class="status-impl">Implemented</td>
             <td><code>{"requests": [{"table","entity_id","features"?}, ...]}</code> — heterogeneous keys across tables in one frame.</td>
             <td><code>OP_GET_RESPONSE</code> with <code>{"results": [&lt;row&gt;, ...]}</code> in submission order.</td>
           </tr>
           <tr>
-            <td class="op">0x0030</td>
-            <td><code>OP_SET</code></td>
-            <td class="status-reserved">Reserved</td>
-            <td>Direct feature write. Reserved.</td>
-            <td><code>OP_ERROR_RESPONSE</code> with <code>op_not_implemented</code>.</td>
-          </tr>
-          <tr>
-            <td class="op">0x0031</td>
-            <td><code>OP_MSET</code></td>
-            <td class="status-reserved">Reserved</td>
-            <td>Batched direct writes. Reserved.</td>
-            <td><code>OP_ERROR_RESPONSE</code> with <code>op_not_implemented</code>.</td>
-          </tr>
-          <tr>
             <td class="op">0x0040</td>
             <td><code>OP_RESET</code></td>
-            <td class="status-impl">Implemented</td>
             <td>Empty JSON (<code>{}</code>). Test-mode-gated — if the server is not in test mode, returns <code>OP_ERROR_RESPONSE</code> with <code>reset_disabled_in_production</code>.</td>
             <td><code>OP_GET_RESPONSE</code> with <code>{"reset": true, "registry_version": &lt;new&gt;}</code>.</td>
           </tr>
           <tr>
             <td class="op">0xFFFF</td>
             <td><code>OP_ERROR_RESPONSE</code></td>
-            <td class="status-impl">Implemented</td>
             <td><em>Response-only.</em> Carries any structured error regardless of which opcode the request used.</td>
             <td><code>{"error": {"code", "path", "message"}}</code> — same shape as the HTTP error body.</td>
           </tr>
         </tbody>
       </table>
 
-      <div class="callout note">
-        <span class="ic">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-        </span>
-        <p><strong>Two opcode ranges are reserved by removed features.</strong> <code>0x0013</code> / <code>0x0014</code> were <code>push_table</code> / <code>delete_table</code>; they were removed by the v0 events-only invariant and are now treated as <code>unknown_op</code>. Tables return in v0.1+ if/when justified by demand.</p>
-      </div>
-
       <!-- =============== CONTENT TYPE =============== -->
       <h2 id="content-type">Content type byte</h2>
-      <p>The single-byte <code>content_type</code> field gates payload parsing. Two values are reserved.</p>
+      <p>The single-byte <code>content_type</code> field gates payload parsing. v0 ships one value: <code>0x01</code> = <code>CT_JSON</code>. Every frame the SDKs send sets this byte; server-to-client response frames also use <code>0x01</code>.</p>
 
-      <table class="wire-table">
-        <thead>
-          <tr>
-            <th>Byte</th>
-            <th>Name</th>
-            <th>Status</th>
-            <th>Notes</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td class="op">0x01</td>
-            <td><code>CT_JSON</code></td>
-            <td class="status-impl">Implemented</td>
-            <td>The v0 default. Every frame the SDKs send sets this byte. Server-to-client response frames also use <code>0x01</code>.</td>
-          </tr>
-          <tr>
-            <td class="op">0x02</td>
-            <td><code>CT_MSGPACK</code></td>
-            <td class="status-reserved">Reserved (read-fast-path only)</td>
-            <td>Reserved for the read fast-path under the <code>--enable-msgpack</code> server flag. Not implemented in v0; setting this byte today returns <code>unsupported_content_type</code>.</td>
-          </tr>
-        </tbody>
-      </table>
-
-      <p>Unknown content-type bytes return <code>OP_ERROR_RESPONSE</code> with code <code>unsupported_content_type</code>. The connection is <em>not</em> closed — only that frame is rejected, so a misconfigured client doesn't tear down a healthy long-lived session.</p>
+      <p>Any other content-type byte returns <code>OP_ERROR_RESPONSE</code> with code <code>unsupported_content_type</code>. The connection is <em>not</em> closed — only that frame is rejected, so a misconfigured client doesn't tear down a healthy long-lived session.</p>
 
       <!-- =============== STRICT-FIFO =============== -->
       <h2 id="fifo">Strict-FIFO contract</h2>
@@ -439,7 +366,7 @@
 <span class="tk-p">}</span></pre>
       </div>
 
-      <p>Over HTTP this body is returned with the appropriate <code>4xx</code> / <code>5xx</code> status. Over TCP it is wrapped in a frame whose opcode is <code>OP_ERROR_RESPONSE = 0xFFFF</code> regardless of which opcode the request used. The <code>code</code> field is a stable string SDK clients can match on (e.g. <code>event_not_found</code>, <code>schema_mismatch</code>, <code>invalid_event</code>, <code>reset_disabled_in_production</code>, <code>unsupported_content_type</code>, <code>op_not_implemented</code>, <code>unknown_op</code>, <code>frame_too_large</code>).</p>
+      <p>Over HTTP this body is returned with the appropriate <code>4xx</code> / <code>5xx</code> status. Over TCP it is wrapped in a frame whose opcode is <code>OP_ERROR_RESPONSE = 0xFFFF</code> regardless of which opcode the request used. The <code>code</code> field is a stable string SDK clients can match on (e.g. <code>event_not_found</code>, <code>invalid_event</code>, <code>unknown_table</code>, <code>reset_disabled_in_production</code>, <code>unsupported_content_type</code>, <code>unknown_op</code>, <code>frame_too_large</code>).</p>
 
       <!-- =============== HTTP vs TCP =============== -->
       <h2 id="http-vs-tcp">HTTP vs TCP — when to use which</h2>
@@ -500,7 +427,7 @@
         <details>
           <summary>Is the wire format stable?</summary>
           <div class="acc-body">
-            <p>The opcodes and their semantics are locked for v0. Future versions add new opcodes in unused ranges (e.g. <code>0x0030</code>, <code>0x0031</code> are pre-reserved for direct feature writes); existing opcodes never change shape. Reserved-but-not-implemented opcodes return <code>op_not_implemented</code> with a stable error code today, so a forward-looking client can probe for support without crashing.</p>
+            <p>The opcodes and their semantics are locked for v0. Existing opcodes never change shape; new wire features get new opcode numbers.</p>
           </div>
         </details>
         <details>

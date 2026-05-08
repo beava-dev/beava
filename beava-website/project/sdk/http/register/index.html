@@ -167,7 +167,7 @@
       <ul>
         <li><code>kind: "event"</code> — an event source. The typed input shape you'll <code>POST /push</code> against.</li>
         <li><code>kind: "derivation"</code> — a derived node. Either an event-derivation (<code>output_kind: "event"</code>, no aggregation) or a table-derivation (<code>output_kind: "table"</code>, aggregation into a per-entity feature row).</li>
-        <li>Any other <code>kind</code> — including the legacy <code>kind: "table"</code> — returns <code>400 unsupported_node_kind</code>. v0 is events-only at the top level; tables are produced by derivations.</li>
+        <li>Any other <code>kind</code> returns <code>400 unsupported_node_kind</code>. v0 is events-only at the top level; tables are produced by derivations.</li>
       </ul>
 
       <!-- =============== EVENT NODE =============== -->
@@ -388,7 +388,7 @@
       <p>All error responses share the envelope <code>{"error": {"code": "&lt;code&gt;", ...}, "registry_version": &lt;u64&gt;}</code> with a non-2xx status. Codes:</p>
 
       <h3><code>400 unsupported_node_kind</code></h3>
-      <p>A node carries a <code>kind</code> the server doesn't recognise — most commonly the legacy <code>kind: "table"</code>, which has been removed (events-only invariant; tables are produced via <code>kind: "derivation", output_kind: "table"</code>). Body includes <code>path</code> (the JSON pointer of the offending node) and <code>reason</code>.</p>
+      <p>A node carries a <code>kind</code> the server doesn't recognise. v0 accepts only <code>"event"</code> and <code>"derivation"</code>; tables are produced via <code>kind: "derivation", output_kind: "table"</code>. Body includes <code>path</code> (the JSON pointer of the offending node) and <code>reason</code>.</p>
 
       <h3><code>400 invalid_registration</code></h3>
       <p>The body parsed but failed schema validation — missing required field, unknown wire type, malformed operator params, unresolved upstream, etc. Body includes <code>path</code> and <code>reason</code>; v0 reports the first error wins.</p>

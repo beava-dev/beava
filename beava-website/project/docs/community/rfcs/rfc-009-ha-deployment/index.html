@@ -59,7 +59,7 @@
 
             <h2 id="motivation">Motivation</h2>
             <p>Single-node beava is the right choice for the programming model: one process, atomic apply, easy to reason about. But for any production deployment with real revenue or compliance pressure, "what happens when the box dies?" is the first question.</p>
-            <p>Today the answer is: spin up a fresh box, restore from snapshot, replay WAL since the snapshot. RPO ≈ last fsync (seconds). RTO ≈ minutes-to-hours depending on snapshot size and replay throughput. That's acceptable for analytics; not acceptable for fraud-decisioning at a payments fintech.</p>
+            <p>In v0 the answer is: spin up a fresh box, restore from snapshot, replay WAL since the snapshot. RPO ≈ last fsync (seconds). RTO ≈ minutes-to-hours depending on snapshot size and replay throughput. That's acceptable for analytics; not acceptable for fraud-decisioning at a payments fintech.</p>
             <p>This RFC closes that gap without sharding apply or breaking the single-instance contract — by adding a hot standby that's already running and already caught up.</p>
             <h2 id="questions">Open questions</h2>
             <ul>

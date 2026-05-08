@@ -58,18 +58,18 @@
             <p className="bv-lede">Spill cold per-key state from RAM to local SSD and S3 so memory budget stops being the cap on total entity count. The hot path stays sub-millisecond; cold reads accept a degraded latency contract.</p>
 
             <h2 id="motivation">Motivation</h2>
-            <p>Today beava holds all entity state in RAM. At ~7&nbsp;KB per entity for a rich pack, a 1&nbsp;TB box caps at ~100&nbsp;M entities. Workloads with long-tail keys — most fraud, ad-tech, recommendation, and agentic systems — waste large fractions of that memory on entities that haven’t been touched in hours.</p>
+            <p>v0 holds all entity state in RAM. At ~7&nbsp;KB per entity for a rich pack, a 1&nbsp;TB box caps at ~100&nbsp;M entities. Workloads with long-tail keys — most fraud, ad-tech, recommendation, and agentic systems — waste large fractions of that memory on entities that haven’t been touched in hours.</p>
             <p>A tiered design lets the working set live in RAM, the warm set live on local NVMe, and the cold set live in object storage. Total addressable entity count goes from "RAM budget" to "storage budget" without the user assembling a separate cache.</p>
             <p><strong>Memory should be the budget for the working set, not the total population.</strong></p>
 
             <h2 id="questions">Open questions</h2>
             <ul>
               <li><strong>Tier policy.</strong> What signals demote a key (idle time, access frequency, explicit pin)? Per-table or global?</li>
-              <li><strong>Cold-read latency contract.</strong> Hot is sub-ms today. What do we promise for warm (SSD) and cold (S3)? p99 target, fallback behavior on cold-read timeout.</li>
+              <li><strong>Cold-read latency contract.</strong> Hot is sub-ms in v0. What do we promise for warm (SSD) and cold (S3)? p99 target, fallback behavior on cold-read timeout.</li>
               <li><strong>WAL interaction.</strong> Does spill change the durability story? Can we skip WAL for state that already lives on durable storage?</li>
               <li><strong>S3 cost model.</strong> A naive design hits S3 on every cold key. Need a strategy (per-key vs batched, prefetch, request budget).</li>
               <li><strong>Ops UX.</strong> How does an operator see "this query went to S3 and took 200 ms"? Per-table tier dashboards.</li>
-              <li><strong>Relationship to today’s design.</strong> v0 ships in-memory only — users size their box. Tiered storage changes that. The RFC has to make the case that the new shape is worth the additional surface.</li>
+              <li><strong>Relationship to the v0 design.</strong> v0 ships in-memory only — users size their box. Tiered storage changes that. The RFC has to make the case that the new shape is worth the additional surface.</li>
             </ul>
 
             <div className="docs-help-callout">

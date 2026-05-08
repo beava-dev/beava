@@ -59,7 +59,7 @@
             <p className="bv-lede">Persist raw events past the in-memory window so a fresh beava instance can replay the log to reconstruct its state — instead of streaming a snapshot off a peer or asking the application to backfill.</p>
 
             <h2 id="motivation">Motivation</h2>
-            <p>Today beava persists aggregates, not events. WAL covers durability inside a process; once aggregates are folded, the original events are gone. This is great for memory and for the simple mental model — but it means a fresh node has nothing to replay. To bring up a new instance you either copy a snapshot from a peer (if one exists) or have the application replay from its own source-of-truth (Kafka, S3, the OLTP DB).</p>
+            <p>In v0 beava persists aggregates, not events. WAL covers durability inside a process; once aggregates are folded, the original events are gone. This is great for memory and for the simple mental model — but it means a fresh node has nothing to replay. To bring up a new instance you either copy a snapshot from a peer (if one exists) or have the application replay from its own source-of-truth (Kafka, S3, the OLTP DB).</p>
             <p>Event log retention closes that loop: beava itself keeps a bounded raw-event log, and a new instance bootstraps by replaying it. Same binary, no external dependency, deterministic reconstruction.</p>
             <p>This is the operational counterpart to <a href="/docs/community/rfcs/rfc-005-event-log-query-replay/">RFC-005 — Event-log query and replay</a>: RFC-005 lets you query and replay subsets for backfill / A/B feature work; RFC-007 is the storage layer that makes both possible. The two land together or RFC-005 stays theoretical.</p>
 

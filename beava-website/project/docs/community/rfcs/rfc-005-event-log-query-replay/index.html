@@ -58,7 +58,7 @@
             <p className="bv-lede">Read the raw event log directly (filter by stream, key, time range), and replay subsets into a new pipeline for backfill, A/B feature tests, or historical feature extraction.</p>
 
             <h2 id="motivation">Motivation</h2>
-            <p>Once events are durable past the in-memory window (<a href="/docs/community/rfcs/rfc-007-event-log-retention/">RFC-007</a>), the natural next step is to query and replay them. Today, evaluating a new feature definition requires re-running production traffic — which is slow, risky, and only tells you about the future. Direct replay enables iterative feature development against real history.</p>
+            <p>Once events are durable past the in-memory window (<a href="/docs/community/rfcs/rfc-007-event-log-retention/">RFC-007</a>), the natural next step is to query and replay them. Evaluating a new feature definition requires re-running production traffic — which is slow, risky, and only tells you about the future. Direct replay enables iterative feature development against real history.</p>
             <p><strong>Backfill should be a query, not a deployment.</strong></p>
             <h2 id="questions">Open questions</h2>
             <ul>

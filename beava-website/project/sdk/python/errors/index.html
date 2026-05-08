@@ -16,7 +16,7 @@
   html, body { margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--fg1); font-family: var(--font-sans); }
 
-  /* Reference-page hero — matches the App page convention. */
+  /* Reference-page hero. */
   .ref-hero {
     margin: 0 0 28px;
     padding-bottom: 26px;
@@ -236,7 +236,7 @@ app <span class="tk-p">=</span> bv<span class="tk-p">.</span>App<span class="tk-
         <h3 id="unknown-field-event-time-v0" data-toc-label="unknown_field_event_time_v0" class="name">unknown_field_event_time_v0</h3>
 <div class="sig">HTTP 400 · POST /push · path: &lt;event&gt;.event_time</div>
       </div>
-      <p>Specialised form of <code>unknown_field_v0</code> for the legacy <code>event_time</code> / <code>event_time_ms</code> fields. v0 is processing-time only — server clock is the timestamp source. Drop the field; if you need event-time semantics, that's on the post-v0 roadmap.</p>
+      <p>Specialised form of <code>unknown_field_v0</code> for the reserved <code>event_time</code> / <code>event_time_ms</code> field names. v0 is processing-time only — server clock is the timestamp source. Drop the field.</p>
 
       <div class="method-head">
         <h3 id="missing-event-name-in-body" data-toc-label="missing_event_name_in_body" class="name">missing_event_name_in_body</h3>
@@ -306,7 +306,7 @@ app <span class="tk-p">=</span> bv<span class="tk-p">.</span>App<span class="tk-
         <h3 id="force-required" data-toc-label="force_required" class="name">force_required</h3>
 <div class="sig">HTTP 409 · POST /register</div>
       </div>
-      <p>The proposed registry change would destroy state (type change, removed field, etc.). The body carries a structured <code>diff</code> with <code>additive</code> and <code>destructive</code> sections. Re-call with <code>force=True</code> to commit, or revise the change to be additive-only. The diff matches the shape the server returns under <code>dry_run</code>.</p>
+      <p>The proposed registry change would destroy state (type change, removed field, etc.). The body carries a structured <code>diff</code> with <code>additive</code> and <code>destructive</code> sections — same shape the server returns under <code>dry_run</code>. Re-call with <code>force=True</code> to commit, or revise the change to be additive-only.</p>
 
       <div class="method-head">
         <h3 id="invalid-descriptor" data-toc-label="invalid_descriptor" class="name">invalid_descriptor</h3>

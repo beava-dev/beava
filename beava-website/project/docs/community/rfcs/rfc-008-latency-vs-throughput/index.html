@@ -60,13 +60,13 @@
 
             <h2 id="motivation">Motivation</h2>
             <p>The current programming model is genuinely strong: every event applies serially, every read sees a consistent snapshot, atomicity is the default. For fraud rules, rate limits, anything where read-after-write matters — this is exactly right.</p>
-            <p>But the per-event cost is dominated by sync, ack, lock acquisition, and WAL fsync. At roughly 100k EPS/core today on realistic workloads, batching and ack-early could push the same single-instance ceiling an order of magnitude higher for workloads where strict semantics aren't required. That's the difference between "needs a small cluster" and "fits on one box" for the analytics-shape and agentic-app workloads.</p>
+            <p>But the per-event cost is dominated by sync, ack, lock acquisition, and WAL fsync. At roughly 100k EPS/core in v0 on realistic workloads, batching and ack-early could push the same single-instance ceiling an order of magnitude higher for workloads where strict semantics aren't required. That's the difference between "needs a small cluster" and "fits on one box" for the analytics-shape and agentic-app workloads.</p>
             <p>Examples of workloads that don't need strict semantics:</p>
             <ul>
               <li><strong>Bulk training-data ingest</strong> — load a year of historical events, fit on one box; nobody is reading them mid-load.</li>
               <li><strong>Agentic apps</strong> — push a session's worth of tool-call events; the agent reads features at the end of the session, not after every event.</li>
               <li><strong>Analytics dashboards</strong> — N-second staleness is fine.</li>
-              <li><strong>Wide-fanout writes</strong> — one event updates many tables; the cost compounds linearly today.</li>
+              <li><strong>Wide-fanout writes</strong> — one event updates many tables; the cost compounds linearly in v0.</li>
             </ul>
             <h2 id="questions">Open questions</h2>
             <ul>

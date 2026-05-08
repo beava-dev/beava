@@ -360,7 +360,7 @@ When no subcommand is provided, `beava` boots the server. One subcommand is expo
 
 beava quickstart [--no-file]
 
-Run the in-process 4-step first-touch demo. Spawns an in-process server on an ephemeral port, registers a `PageView` / `SiteMetrics` pipeline (mirrors the homepage hero), pushes 5 events, queries the global row, prints a formatted walkthrough, and writes `beava_quickstart.py` to the current working directory. Zero setup, zero dependencies, completes in under 10 seconds.
+Run the in-process 4-step first-touch demo. Spawns an in-process server on an ephemeral port, registers a `PageView` / `SiteMetrics` pipeline, pushes 5 events, queries the global row, prints a formatted walkthrough, and writes `beava_quickstart.py` to the current working directory. Zero setup, zero dependencies, completes in under 10 seconds.
 
 ### Flags
 
@@ -1136,7 +1136,7 @@ At register time the SDK serializes each `@bv.event` descriptor into a JSON node
 }
 ```
 
-The full envelope and per-field semantics are reproduced inline on the HTTP /register reference (planned) (#).
+The full envelope and per-field semantics are documented at HTTP /register (/sdk/http/register/).
 
 ## Common questions
 
@@ -1766,7 +1766,7 @@ e.group_by("user_id").agg(
 
 mean(field: str, *, window: str | None = None, where: _Expr | None = None) -> AggDescriptor
 
-Arithmetic mean of `field`. Returns `f64`. Polars-style name; the SQL alias `bv.avg` is deprecated (see Deprecated aliases (#aliases)).
+Arithmetic mean of `field`. Returns `f64`.
 
         mean.pyCopy
 
@@ -1808,7 +1808,7 @@ e.group_by("user_id").agg(
 
 var(field: str, *, window: str | None = None, where: _Expr | None = None) -> AggDescriptor
 
-Population variance of `field`. Returns `f64`. The SQL alias `bv.variance` is deprecated.
+Population variance of `field`. Returns `f64`.
 
         var.pyCopy
 
@@ -1822,7 +1822,7 @@ e.group_by("user_id").agg(
 
 std(field: str, *, window: str | None = None, where: _Expr | None = None) -> AggDescriptor
 
-Standard deviation of `field`. Returns `f64`. The SQL alias `bv.stddev` is deprecated.
+Standard deviation of `field`. Returns `f64`.
 
         std.pyCopy
 
@@ -1853,7 +1853,7 @@ e.group_by("user_id").agg(
 
 n_unique(field: str, *, window: str | None = None, where: _Expr | None = None) -> AggDescriptor
 
-Approximate distinct-value count for `field` (HyperLogLog under the hood). Returns `i64`. The SQL alias `bv.count_distinct` is deprecated.
+Approximate distinct-value count for `field` (HyperLogLog under the hood). Returns `i64`.
 
         n_unique.pyCopy
 
@@ -1899,7 +1899,7 @@ Bounded-memory shape estimators. Each carries its own bound — `k=`, `n=`, `sam
 
 quantile(field: str, *, q: float, window: str | None = None, where: _Expr | None = None) -> AggDescriptor
 
-Approximate quantile of `field` at probability `q` (open interval `(0, 1)`). Returns `f64`. The SQL alias `bv.percentile(p=...)` is deprecated.
+Approximate quantile of `field` at probability `q` (open interval `(0, 1)`). Returns `f64`.
 
 - q — required float in (0, 1); e.g. 0.5 for the median, 0.99 for P99.
 
@@ -2200,7 +2200,7 @@ Boolean — is there a matching event within the past `window`? Returns `bool`. 
 
 ```
 e.group_by("user_id").agg(
-    active_today=bv.first_seen_in_window(window="24h"),
+    active_last_24h=bv.first_seen_in_window(window="24h"),
 )
 ```
 
@@ -2553,28 +2553,13 @@ e.group_by("user_id").agg(
 )
 ```
 
-## Deprecated aliases
-
-SQL-prose names from earlier drafts. They still work — calling them produces an `AggDescriptor` identical to the canonical helper — but each emits a Python `DeprecationWarning` at register time. Use the right column for new code.
-
-| Old name | Use instead | Notes |
-| --- | --- | --- |
-| bv.avg(field, ...) | bv.mean | Same kwargs. |
-| bv.variance(field, ...) | bv.var | Same kwargs. |
-| bv.stddev(field, ...) | bv.std | Same kwargs. |
-| bv.count_distinct(field, ...) | bv.n_unique | Same kwargs. |
-| bv.percentile(field, p=...) | bv.quantile(q=...) | Rename p= to q=. |
-| bv.ema(field, ...) | bv.ewma | Forwarder; no DeprecationWarning emitted. |
-
-`bv.ema` is the only alias that does *not* emit a `DeprecationWarning` — it's a thin re-export of `ewma` kept for API parity with libraries that prefer the shorter name.
-
 ## Where to go next
 
 You've got the catalogue. The two adjacent pages cover the expression DSL the operators consume and the error codes the server returns:
 
-→ **bv.col / bv.lit** (#) — The column-reference expression DSL. Used inside where=, filter(...), and with_columns(...) chain stages — the way you build the expressions you pass to operators.
+→ **bv.col / bv.lit** (/sdk/python/col-lit/) — The column-reference expression DSL. Used inside where=, filter(...), and with_columns(...) chain stages — the way you build the expressions you pass to operators.
 
-→ **Errors** (#) — Every structured error code the server returns — schema_mismatch, unknown_table, event_not_found, reset_disabled, and the rest. Mapped to the SDK's RegistrationError exception.
+→ **Errors** (/sdk/python/errors/) — Every structured error code the server returns — unknown_table, event_not_found, invalid_event, reset_disabled_in_production, and the rest. Mapped to the SDK's RegistrationError exception.
 
 ========================================================================
 
@@ -2743,7 +2728,7 @@ The push body contains a field not declared on the event's schema (and not in `o
 
 HTTP 400 · POST /push · path: <event>.event_time
 
-Specialised form of `unknown_field_v0` for the legacy `event_time` / `event_time_ms` fields. v0 is processing-time only — server clock is the timestamp source. Drop the field; if you need event-time semantics, that's on the post-v0 roadmap.
+Specialised form of `unknown_field_v0` for the reserved `event_time` / `event_time_ms` field names. v0 is processing-time only — server clock is the timestamp source. Drop the field.
 
 ### missing_event_name_in_body
 
@@ -2813,7 +2798,7 @@ An aggregation that requires a window (`velocity`, `rate`, etc.) was declared wi
 
 HTTP 409 · POST /register
 
-The proposed registry change would destroy state (type change, removed field, etc.). The body carries a structured `diff` with `additive` and `destructive` sections. Re-call with `force=True` to commit, or revise the change to be additive-only. The diff matches the shape the server returns under `dry_run`.
+The proposed registry change would destroy state (type change, removed field, etc.). The body carries a structured `diff` with `additive` and `destructive` sections — same shape the server returns under `dry_run`. Re-call with `force=True` to commit, or revise the change to be additive-only.
 
 ### invalid_descriptor
 
@@ -2988,7 +2973,7 @@ Name of a registered event type (e.g. `"Txn"`). Must match an `EventDescriptor` 
               object
               required
 
-Event fields as a flat object. Keys must match the descriptor's declared `schema.fields`; unknown keys are rejected with `unknown_field_v0` (or `unknown_field_event_time_v0` for the legacy `event_time` / `event_time_ms` sentinels — beava v0 is processing-time only).
+Event fields as a flat object. Keys must match the descriptor's declared `schema.fields`; unknown keys are rejected with `unknown_field_v0`. The names `event_time` and `event_time_ms` are reserved and rejected with `unknown_field_event_time_v0` — v0 is processing-time only.
 
 ### Worked example — curl
 
@@ -3103,13 +3088,13 @@ Body parsed as JSON but the top-level `event` string is absent or non-string. Th
 
             400 · unknown_field_event_time_v0
 
-Specialised case of `unknown_field_v0` for the legacy `event_time` / `event_time_ms` field names. beava v0 is processing-time only; clients sending event-time data get a structured 400 rather than silent acceptance. Event-time support is on the post-v0 roadmap.
+Specialised case of `unknown_field_v0` for the reserved `event_time` / `event_time_ms` field names. v0 is processing-time only; clients sending event-time data get a structured 400 rather than silent acceptance.
 
 **HTTP /push does not enforce Content-Type.** The 415 `unsupported_media_type` code only fires on `POST /register`; `/push` attempts JSON parse against any body and emits `invalid_json_body` on failure. Always send `Content-Type: application/json` anyway — proxies and load balancers in front of beava may enforce it.
 
 ## Worked example: end-to-end
 
-Canonical request and response, taken verbatim from the wire fixtures (`examples/wire/push-success.{request,response}.json`) so SDK ports stay byte-identical:
+Canonical request and response:
 
             request
 
@@ -3151,7 +3136,7 @@ content_type:  0x01 = CT_JSON    // {"event":"Txn","data":{...}}
               0x02 = CT_MSGPACK // msgpack-encoded {event, data} (TCP only)
 ```
 
-TCP is strict-FIFO with one in-flight request per connection — the response order matches the request order. The msgpack body format is a TCP-only fast-path; HTTP `/push` always parses bodies as JSON. See the wire spec (planned) (#) for the full opcode catalogue and frame state machine.
+TCP is strict-FIFO with one in-flight request per connection — the server replies in the same order it received requests. HTTP `/push` always parses bodies as JSON. The full opcode catalogue and frame state machine live on the wire spec (/sdk/http/wire-spec/) page.
 
 ## Common questions
 
@@ -3241,7 +3226,7 @@ The success body is a **flat dict mapping feature name → value**. There is no 
 
 ### Standard hit
 
-Table is registered, key has events, full row requested. Pulled verbatim from `examples/wire/get-found.*`:
+Table is registered, key has events, full row requested:
 
             request
 
@@ -3285,7 +3270,7 @@ Same request, key the server has never seen. **HTTP 200, not 404.**
 
 ### Global aggregation
 
-Tables registered with `key=[]` (no group-by keys) hold a single, server-wide row. Address it with the empty-string sentinel `"key": ""`. Pulled verbatim from `examples/wire/get-global.*`:
+Tables registered with `key=[]` (no group-by keys) hold a single, server-wide row. Address it with the empty-string sentinel `"key": ""`:
 
             request
 
@@ -3347,7 +3332,7 @@ Same key, two requests:
 }
 ```
 
-If `features` names a column that isn't registered on the table, the whole call is rejected — no partial response. The error surfaces as HTTP 500 with `code: "internal_error"` and a `reason` that names the missing feature(s). This matches the batch-get path's whole-batch-reject disposition.
+If `features` names a column that isn't registered on the table, the whole call is rejected — no partial response. The error surfaces as HTTP 500 with `code: "internal_error"` and a `reason` that names the missing feature(s). The batch-get path uses the same whole-batch-reject disposition.
 
 ## Composite keys
 
@@ -3399,11 +3384,11 @@ Content-Type: application/json
 
 {"error":{
   "code":    "unsupported_request_shape",
-  "message": "POST /get expects {table, key, features?}; received legacy {keys, features} shape — see docs/http-api.md#post-get"
+  "message": "POST /get expects {table, key, features?}"
 }}
 ```
 
-The body parsed as JSON but matched a deprecated shape (`{keys, features}` 2D-cell or `{feature, key}` single-feature). Migrate to the verb-style body documented above.
+The body parsed as JSON but didn't match the canonical shape — common when a client sends a multi-key shape (`{keys, features}`) or a single-feature shape (`{feature, key}`). Use the verb-style body documented above.
 
           500 — internal_error
 
@@ -3441,7 +3426,7 @@ Yes — pass `features: ["my_feature"]` on the regular `/get` body. There's no s
 
           What happens if I pass `features` for a column that doesn't exist?
 
-The whole call is rejected — no partial response with the columns that did match. The server returns HTTP 500 with `code: "internal_error"` and a `reason` string of the form `"feature_not_found: missing=[\"bogus\"] table=UserStats"`. This whole-batch-reject disposition matches the multi-key path: clients see one consistent failure mode, not a half-populated row that silently dropped fields.
+The whole call is rejected — no partial response with the columns that did match. The server returns HTTP 500 with `code: "internal_error"` and a `reason` string of the form `"feature_not_found: missing=[\"bogus\"] table=UserStats"`. Same whole-batch-reject disposition as the multi-key path: clients see one consistent failure mode, not a half-populated row that silently dropped fields.
 
           Is `POST /get` idempotent?
 
@@ -3523,7 +3508,7 @@ default `false`
 
 - kind: "derivation" — a derived node. Either an event-derivation (output_kind: "event", no aggregation) or a table-derivation (output_kind: "table", aggregation into a per-entity feature row).
 
-- Any other kind — including the legacy kind: "table" — returns 400 unsupported_node_kind. v0 is events-only at the top level; tables are produced by derivations.
+- Any other kind returns 400 unsupported_node_kind. v0 is events-only at the top level; tables are produced by derivations.
 
 ### Event node — kind: "event"
 
@@ -3745,7 +3730,7 @@ All error responses share the envelope `{"error": {"code": "", ...}, "registry_v
 
 ### 400 unsupported_node_kind
 
-A node carries a `kind` the server doesn't recognise — most commonly the legacy `kind: "table"`, which has been removed (events-only invariant; tables are produced via `kind: "derivation", output_kind: "table"`). Body includes `path` (the JSON pointer of the offending node) and `reason`.
+A node carries a `kind` the server doesn't recognise. v0 accepts only `"event"` and `"derivation"`; tables are produced via `kind: "derivation", output_kind: "table"`. Body includes `path` (the JSON pointer of the offending node) and `reason`.
 
 ### 400 invalid_registration
 
@@ -3873,37 +3858,26 @@ Every TCP frame — request or response — has the same envelope. All multi-byt
 
 ## TCP opcode table
 
-Source of truth: `crates/beava-core/src/wire.rs`. Opcodes are u16 big-endian. Reserved opcodes parse but the server rejects them with `op_not_implemented`; opcodes outside this table return `unknown_op`.
+Opcodes are u16 big-endian. Opcodes outside this table return `unknown_op`.
 
-| Opcode | Name | Status | Request payload | Response opcode & body |
-| --- | --- | --- | --- | --- |
-| 0x0000 | OP_PING | Implemented | Empty JSON ({} or zero-byte payload). | OP_GET_RESPONSE (0x0023) with {"pong": true, "registry_version": <n>}. |
-| 0x0001 | OP_REGISTER | Implemented | Same JSON DAG body as POST /register: {"nodes":[...], "force"?, "dry_run"?}. | OP_GET_RESPONSE with the success body, or OP_ERROR_RESPONSE on conflict. |
-| 0x0010 | OP_PUSH | Implemented | {"event": "<name>", "data": {...}} (or "body" as a synonym for data). | OP_GET_RESPONSE with {"ack_lsn", "idempotent_replay", "registry_version"}. |
-| 0x0011 | OP_PUSH_SYNC | Reserved | Same shape as OP_PUSH; reserved for the synchronous-push wire variant. Today, sync-push is reachable through HTTP POST /push-sync. | OP_ERROR_RESPONSE with op_not_implemented. |
-| 0x0012 | OP_PUSH_MANY | Reserved | Batched push over TCP. Reserved. | OP_ERROR_RESPONSE with op_not_implemented. |
-| 0x0020 | OP_GET | Implemented | {"table": "<name>", "entity_id": "<key>", "features": [...]}. | OP_GET_RESPONSE with the flat row dict (cold-start: {}). |
-| 0x0021 | OP_MGET | Implemented | Many keys, one feature: {"feature": "<name>", "keys": [...]}. | OP_GET_RESPONSE with {"results": [...]}. |
-| 0x0022 | OP_GET_MULTI | Implemented | Multi-descriptor batched read. | OP_GET_RESPONSE. |
-| 0x0023 | OP_GET_RESPONSE | Implemented | Response-only. Generic JSON success-frame opcode shared by OP_PING, OP_REGISTER, OP_PUSH, the OP_GET family, OP_BATCH_GET, and OP_RESET. | Body is opcode-of-the-request-specific. |
-| 0x0024 | OP_BATCH_GET | Implemented | {"requests": [{"table","entity_id","features"?}, ...]} — heterogeneous keys across tables in one frame. | OP_GET_RESPONSE with {"results": [<row>, ...]} in submission order. |
-| 0x0030 | OP_SET | Reserved | Direct feature write. Reserved. | OP_ERROR_RESPONSE with op_not_implemented. |
-| 0x0031 | OP_MSET | Reserved | Batched direct writes. Reserved. | OP_ERROR_RESPONSE with op_not_implemented. |
-| 0x0040 | OP_RESET | Implemented | Empty JSON ({}). Test-mode-gated — if the server is not in test mode, returns OP_ERROR_RESPONSE with reset_disabled_in_production. | OP_GET_RESPONSE with {"reset": true, "registry_version": <new>}. |
-| 0xFFFF | OP_ERROR_RESPONSE | Implemented | Response-only. Carries any structured error regardless of which opcode the request used. | {"error": {"code", "path", "message"}} — same shape as the HTTP error body. |
-
-**Two opcode ranges are reserved by removed features.** `0x0013` / `0x0014` were `push_table` / `delete_table`; they were removed by the v0 events-only invariant and are now treated as `unknown_op`. Tables return in v0.1+ if/when justified by demand.
+| Opcode | Name | Request payload | Response opcode & body |
+| --- | --- | --- | --- |
+| 0x0000 | OP_PING | Empty JSON ({} or zero-byte payload). | OP_GET_RESPONSE (0x0023) with {"pong": true, "registry_version": <n>}. |
+| 0x0001 | OP_REGISTER | Same JSON DAG body as POST /register: {"nodes":[...], "force"?, "dry_run"?}. | OP_GET_RESPONSE with the success body, or OP_ERROR_RESPONSE on conflict. |
+| 0x0010 | OP_PUSH | {"event": "<name>", "data": {...}} (or "body" as a synonym for data). | OP_GET_RESPONSE with {"ack_lsn", "idempotent_replay", "registry_version"}. |
+| 0x0020 | OP_GET | {"table": "<name>", "entity_id": "<key>", "features": [...]}. | OP_GET_RESPONSE with the flat row dict (cold-start: {}). |
+| 0x0021 | OP_MGET | Many keys, one feature: {"feature": "<name>", "keys": [...]}. | OP_GET_RESPONSE with {"results": [...]}. |
+| 0x0022 | OP_GET_MULTI | Multi-descriptor batched read. | OP_GET_RESPONSE. |
+| 0x0023 | OP_GET_RESPONSE | Response-only. Generic JSON success-frame opcode shared by OP_PING, OP_REGISTER, OP_PUSH, the OP_GET family, OP_BATCH_GET, and OP_RESET. | Body is opcode-of-the-request-specific. |
+| 0x0024 | OP_BATCH_GET | {"requests": [{"table","entity_id","features"?}, ...]} — heterogeneous keys across tables in one frame. | OP_GET_RESPONSE with {"results": [<row>, ...]} in submission order. |
+| 0x0040 | OP_RESET | Empty JSON ({}). Test-mode-gated — if the server is not in test mode, returns OP_ERROR_RESPONSE with reset_disabled_in_production. | OP_GET_RESPONSE with {"reset": true, "registry_version": <new>}. |
+| 0xFFFF | OP_ERROR_RESPONSE | Response-only. Carries any structured error regardless of which opcode the request used. | {"error": {"code", "path", "message"}} — same shape as the HTTP error body. |
 
 ## Content type byte
 
-The single-byte `content_type` field gates payload parsing. Two values are reserved.
+The single-byte `content_type` field gates payload parsing. v0 ships one value: `0x01` = `CT_JSON`. Every frame the SDKs send sets this byte; server-to-client response frames also use `0x01`.
 
-| Byte | Name | Status | Notes |
-| --- | --- | --- | --- |
-| 0x01 | CT_JSON | Implemented | The v0 default. Every frame the SDKs send sets this byte. Server-to-client response frames also use 0x01. |
-| 0x02 | CT_MSGPACK | Reserved (read-fast-path only) | Reserved for the read fast-path under the --enable-msgpack server flag. Not implemented in v0; setting this byte today returns unsupported_content_type. |
-
-Unknown content-type bytes return `OP_ERROR_RESPONSE` with code `unsupported_content_type`. The connection is *not* closed — only that frame is rejected, so a misconfigured client doesn't tear down a healthy long-lived session.
+Any other content-type byte returns `OP_ERROR_RESPONSE` with code `unsupported_content_type`. The connection is *not* closed — only that frame is rejected, so a misconfigured client doesn't tear down a healthy long-lived session.
 
 ## Strict-FIFO contract
 
@@ -3935,7 +3909,7 @@ Every error — HTTP or TCP — has the same body shape:
 }
 ```
 
-Over HTTP this body is returned with the appropriate `4xx` / `5xx` status. Over TCP it is wrapped in a frame whose opcode is `OP_ERROR_RESPONSE = 0xFFFF` regardless of which opcode the request used. The `code` field is a stable string SDK clients can match on (e.g. `event_not_found`, `schema_mismatch`, `invalid_event`, `reset_disabled_in_production`, `unsupported_content_type`, `op_not_implemented`, `unknown_op`, `frame_too_large`).
+Over HTTP this body is returned with the appropriate `4xx` / `5xx` status. Over TCP it is wrapped in a frame whose opcode is `OP_ERROR_RESPONSE = 0xFFFF` regardless of which opcode the request used. The `code` field is a stable string SDK clients can match on (e.g. `event_not_found`, `invalid_event`, `unknown_table`, `reset_disabled_in_production`, `unsupported_content_type`, `unknown_op`, `frame_too_large`).
 
 ## HTTP vs TCP — when to use which
 
@@ -3959,7 +3933,7 @@ The configured `tcp_max_frame_bytes` applies to the *payload*, not the whole fra
 
           Is the wire format stable?
 
-The opcodes and their semantics are locked for v0. Future versions add new opcodes in unused ranges (e.g. `0x0030`, `0x0031` are pre-reserved for direct feature writes); existing opcodes never change shape. Reserved-but-not-implemented opcodes return `op_not_implemented` with a stable error code today, so a forward-looking client can probe for support without crashing.
+The opcodes and their semantics are locked for v0. Existing opcodes never change shape; new wire features get new opcode numbers.
 
           How do I implement a third-party SDK?
 

@@ -58,7 +58,7 @@
             <p className="bv-lede">Direct ingestion into tables via <code>app.upsert(table, key, value)</code> and <code>app.delete(table, key)</code>. The native home for static and slowly-changing state in beava — user tiers, merchant categories, allow/block lists, feature flags — without forcing it through the event path.</p>
 
             <h2 id="motivation">Motivation</h2>
-            <p>Static or slowly-changing data — user tiers, merchant categories, allow/block lists, feature flags, tenant config — has no native home in beava today. Teams stuff this data into events and aggregate (which is awkward and lossy), or query an external store at decision time (which adds a network hop and a second system).</p>
+            <p>Static or slowly-changing data — user tiers, merchant categories, allow/block lists, feature flags, tenant config — has no native home in v0. Teams stuff this data into events and aggregate (which is awkward and lossy), or query an external store at decision time (which adds a network hop and a second system).</p>
             <p>Direct table ingestion is also a <strong>prerequisite for <a href="/docs/community/rfcs/rfc-003-stream-to-table-join/">RFC-003 stream-to-table joins</a></strong> — there has to be a clean way to maintain the joined-against table before joins become useful.</p>
             <h2 id="questions">Open questions</h2>
             <ul>
