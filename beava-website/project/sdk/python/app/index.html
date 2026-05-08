@@ -284,7 +284,7 @@ result <span class="tk-p">=</span> app<span class="tk-p">.</span>register<span c
       <h3>Args</h3>
       <ul>
         <li><code>table</code> — the registered table's name.</li>
-        <li><code>key</code> — entity key. Pass a string for single-column keys, a list for composite keys (matching the table's <code>key=[...]</code> declaration). <code>None</code> routes to the global-aggregation sentinel (empty-string entity id) for tables registered with <code>key=[]</code> per ADR-003.</li>
+        <li><code>key</code> — entity key. Pass a string for single-column keys, a list for composite keys (matching the table's <code>key=[...]</code> declaration). <code>None</code> routes to the empty-string sentinel that addresses the single row of a global table (registered with <code>key=[]</code>).</li>
         <li><code>features</code> — narrow the response to the named subset. <code>None</code> (default) returns the full row.</li>
       </ul>
 
@@ -477,7 +477,7 @@ app<span class="tk-p">.</span>close<span class="tk-p">()</span>  <span class="tk
         <details>
           <summary>What's the async story?</summary>
           <div class="acc-body">
-            <p><code>bv.App</code> is sync. The Python SDK ships a separate fire-and-forget async client at <code>bv.AsyncApp</code> (HTTP-only, batches pushes under the hood). Documented at <a href="#">AsyncApp</a> when that page lands.</p>
+            <p><code>bv.App</code> is sync. v0 doesn't ship an async client — wrap calls in <code>asyncio.to_thread(...)</code> from your event loop, or open multiple <code>App</code> instances in worker threads (HTTP transport is thread-safe).</p>
           </div>
         </details>
         <details>

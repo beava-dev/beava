@@ -475,7 +475,7 @@ Set to `1` to emit per-stage timing for every applied event (parse / validate / 
 
           BEAVA_CRASH_AT
 
-Crash-injection hook for recovery testing. Set to a known checkpoint name to abort the process at that point. See `crates/beava-server/src/lib.rs` for the recognized values.
+Crash-injection hook for recovery testing. Set to a known checkpoint name to abort the process at that point.
 
 ## YAML config
 
@@ -744,7 +744,7 @@ Get a single feature row by entity key. Cold-start (no events for that key) retu
 
 - table — the registered table's name.
 
-- key — entity key. Pass a string for single-column keys, a list for composite keys (matching the table's key=[...] declaration). None routes to the global-aggregation sentinel (empty-string entity id) for tables registered with key=[] per ADR-003.
+- key — entity key. Pass a string for single-column keys, a list for composite keys (matching the table's key=[...] declaration). None routes to the empty-string sentinel that addresses the single row of a global table (registered with key=[]).
 
 - features — narrow the response to the named subset. None (default) returns the full row.
 
@@ -919,7 +919,7 @@ No. Each method is one wire call; transient transport errors propagate as `httpx
 
           What's the async story?
 
-`bv.App` is sync. The Python SDK ships a separate fire-and-forget async client at `bv.AsyncApp` (HTTP-only, batches pushes under the hood). Documented at AsyncApp (#) when that page lands.
+`bv.App` is sync. v0 doesn't ship an async client — wrap calls in `asyncio.to_thread(...)` from your event loop, or open multiple `App` instances in worker threads (HTTP transport is thread-safe).
 
           Can I use one `App` against two servers?
 
@@ -970,7 +970,7 @@ def BigClick(click: Click):
     return click.filter(bv.col("page") == "/checkout")
 ```
 
-**Processing-time only in v0.** The server stamps wall-clock time on every push. The decorator rejects an `event_time` class field and the `event_time_field` / `tolerate_delay` kwargs with `TypeError` at decorator time. Event-time semantics are roadmapped for post-v0.
+**Processing-time only.** The server stamps wall-clock time on every push. The decorator rejects an `event_time` class field and the `event_time_field` / `tolerate_delay` kwargs with `TypeError` at decorator time.
 
 ## Class form
 
@@ -1335,7 +1335,7 @@ def SiteTotals3(c: Click):
     return c.agg(total_clicks_1h=bv.count(window="1h"))
 ```
 
-Per ADR-003, a global table&rsquo;s single row is addressed by the **empty-string sentinel entity id**. `app.get("SiteTotals")` with no `key` argument routes to that sentinel automatically:
+A global table&rsquo;s single row is addressed by the **empty-string sentinel entity id**. `app.get("SiteTotals")` with no `key` argument routes to that sentinel automatically:
 
             request
 
@@ -1431,7 +1431,7 @@ The full registry payload — the wrapper around `nodes`, additional flags like 
 
           Can a table key contain dots or slashes?
 
-Yes — the column *name* is restricted by your `@bv.event` schema, but the column *value* at lookup time is treated as an opaque string. `app.get("UserClicks", "a.b/c")` works fine. The wire encoding is JSON, so any UTF-8 string is permitted; the only forbidden value is the empty string, which is reserved as the global-table sentinel per ADR-003.
+Yes — the column *name* is restricted by your `@bv.event` schema, but the column *value* at lookup time is treated as an opaque string. `app.get("UserClicks", "a.b/c")` works fine. The wire encoding is JSON, so any UTF-8 string is permitted; the empty string is the global-table sentinel and not a valid entity id for keyed tables.
 
           What if my key column has nulls?
 
@@ -1443,7 +1443,7 @@ On arrival. Every `app.push(...)` applies the event to every aggregation that na
 
           Can one table read from multiple event sources?
 
-Not yet. v0 supports one upstream per table; the function takes one annotated parameter and the chain builds off that one source. Multi-source joins / unions are deferred to v0.1+ — see the locked `project_v0_events_only_scope` commitment.
+One upstream per table. The function takes one annotated parameter and the chain builds off that one source. Joins and unions are not part of the v0 surface.
 
 ## Where to go next
 
@@ -1518,7 +1518,7 @@ bv.lit(value: int | float | str | bool | None) -> _Literal
 
 Wrap a Python constant as an explicit literal expression. The implicit form (`bv.col("a") > 100`) and the explicit form (`bv.col("a") > bv.lit(100)`) are wire-equivalent inside operator overloads — Python's dispatch coerces the right-hand side automatically. `bv.lit` is required when the literal stands on its own (a constant column in `with_columns`, the left-hand side of an arithmetic expression, or the only operand of a derivation).
 
-Per **ADR-003**, `bv.lit` is also the canonical way to write a comparison-against-constant in any `where=` kwarg — bare strings are explicitly rejected (see the where= contract (#where)).
+`bv.lit` is the canonical way to write a comparison-against-constant in any `where=` kwarg — bare strings are rejected (see the where= contract (#where)).
 
 ### Args
 
@@ -1619,7 +1619,7 @@ Render the AST to its wire-grammar JSON form. Stable string representation; safe
 
 ## The where= contract
 
-Every kwarg that takes a predicate — every aggregation operator's `where=`, every filter clause — accepts an `_Expr` and only an `_Expr`. Bare strings are explicitly rejected per **ADR-003**. The check lives in `_serialize_where` on every aggregation operator: anything that isn't `None` or an `_Expr` raises `TypeError` client-side, before a single byte hits the wire.
+Every kwarg that takes a predicate — every aggregation operator's `where=`, every filter clause — accepts an `_Expr` and only an `_Expr`. Bare strings are rejected. The check lives in `_serialize_where` on every aggregation operator: anything that isn't `None` or an `_Expr` raises `TypeError` client-side, before a single byte hits the wire.
 
             rejected — bare string
 
@@ -1642,7 +1642,7 @@ bv.count(where=bv.col("amount") > 0)
 
           Why do I need `bv.lit` for constants? Polars does this automatically.
 
-Inside an operator overload (e.g. `bv.col("a") > 100`), Python's dispatch *does* auto-coerce the right-hand side via `_coerce`. `bv.lit` is needed when the literal isn't on the right side of an overload — for instance, when assigning a constant column in `with_columns` (no operator to dispatch through), or in the few `where=` shapes where ADR-003 wants the explicit form to remove ambiguity. Pick whichever reads better; both render to the same wire form.
+Inside an operator overload (e.g. `bv.col("a") > 100`), Python's dispatch *does* auto-coerce the right-hand side via `_coerce`. `bv.lit` is needed when the literal isn't on the right side of an overload — for instance, when assigning a constant column in `with_columns` (no operator to dispatch through). Pick whichever reads better; both render to the same wire form.
 
           Can I use Python's `and` / `or`?
 
@@ -1853,7 +1853,7 @@ e.group_by("user_id").agg(
 
 n_unique(field: str, *, window: str | None = None, where: _Expr | None = None) -> AggDescriptor
 
-Approximate distinct-value count for `field` (HyperLogLog under the hood). Returns `i64`.
+Approximate distinct-value count for `field`, computed with HyperLogLog. Returns `i64`.
 
         n_unique.pyCopy
 
@@ -2212,7 +2212,7 @@ Exponentially-weighted aggregates. Use `half_life=` instead of `window=`: each e
 
 ewma(field: str, *, half_life: str, where: _Expr | None = None) -> AggDescriptor
 
-Exponentially weighted moving average of `field`. Returns `f64`. Aliased as `bv.ema` (which simply forwards to `ewma`).
+Exponentially weighted moving average of `field`. Returns `f64`.
 
 - half_life — required duration string; e.g. "15m", "1h".
 
@@ -2607,7 +2607,7 @@ Three exception classes are exported from the top-level `beava` module. All thre
 
 RegistrationError(*, code: str, path: str = "", message: str = "", errors: list[ValidationError] | None = None)
 
-The SDK's general-purpose wire-error wrapper. The name is historical — it predates the wire-code expansion — and it's now raised for **any** non-2xx response from the data plane. Discriminate on `code`, not on the exception class.
+The SDK's general-purpose wire-error wrapper. Raised for every non-2xx response from the data plane. Discriminate on `code`, not on the exception class.
 
 ### Attributes
 
@@ -2786,7 +2786,7 @@ The register payload failed structural validation (malformed DAG, missing requir
 
 HTTP 400 · POST /register · path: descriptors[i].kind
 
-The register payload included a descriptor with `kind: "table"` in a v0 events-only build (the v0 surface is events-only per the locked architectural decision). If you need aggregation tables, that returns in v0.1+.
+The register payload included a descriptor with a `kind` the server doesn't accept. v0 accepts `"event"` and `"derivation"` only; aggregation tables are produced via `kind: "derivation", output_kind: "table"`.
 
 ### unbounded_op_in_lifetime_mode
 
@@ -2826,7 +2826,7 @@ The opcode in a TCP frame isn't in the dispatch table. Almost always a stale cli
 
 HTTP 400 · TCP fast-path
 
-The opcode is reserved (in the catalogue) but not yet wired up in this build. Distinguishes "you typo'd / are stale" (`unknown_op`) from "we know about it; not done yet."
+The opcode is recognised but not handled in this build. Distinct from `unknown_op` (the opcode is outside the dispatch table entirely).
 
 ### frame_too_large
 
@@ -2905,10 +2905,6 @@ SDK-side · raised on non-JSON server response
 **Client-only.** Generated by the transport layer when the server returns a non-2xx response that isn't valid JSON (a load-balancer 502 page, a TCP RST mid-frame, an unexpected HTML body). The exception's `message` contains the first 200 bytes of the response so you can diagnose. Never originates server-side.
 
 ## Common questions
-
-          Why is everything wrapped in `RegistrationError` even when it's not about registration?
-
-Historical naming. The class predates `push` / `get` / `batch_get` on the public API and was originally the registration-only error type. Rather than break `except bv.RegistrationError` in every existing user codebase, we kept the name and broadened the contract: it now wraps every wire error. Branch on `code` — that's the discriminator. A renamed alias may land in a future minor release; the existing class will stay for compatibility.
 
           How do I distinguish a 4xx from a 5xx?
 
@@ -3064,7 +3060,7 @@ Every non-2xx response carries a JSON body with the canonical error envelope:
 }
 ```
 
-The `code` field is a stable structured identifier; `path` and `message` are optional contextual detail. The push path emits the following codes (verified against `crates/beava-server/src/apply_shard.rs` and `crates/beava-runtime-core/src/http_listener.rs`):
+The `code` field is a stable structured identifier; `path` and `message` are optional contextual detail. The push path emits these codes:
 
             404 · event_not_found
 
@@ -3204,7 +3200,7 @@ Body shape:
 
 - table — the registered table's name. Required. Mismatched name → 404 unknown_table.
 
-- key — the entity key as a JSON string. For composite keys (declared with key=["a","b"]), the SDK pipe-joins the segments before serialising — e.g. "alice|merchant1". The empty string "" routes to the global-aggregation sentinel for tables registered with key=[] (per ADR-003).
+- key — the entity key as a JSON string. For composite keys (declared with key=["a","b"]), the SDK pipe-joins the segments before serialising — e.g. "alice|merchant1". The empty string "" routes to the global-aggregation sentinel for tables registered with key=[].
 
 - features — optional. When supplied, the server narrows the response to the named subset; when omitted, the full row is returned.
 
@@ -3351,7 +3347,7 @@ The number of pipe-separated segments must exactly match the registered key arit
 
 ## Errors
 
-Verified against `crates/beava-server/src/runtime_core_glue.rs` and `apply_shard.rs` on a live binary. Each error body has the shape `{"error": {"code": "", ...}}`.
+Each error body has the shape `{"error": {"code": "", ...}}`.
 
           404 — unknown_table
 
@@ -3403,7 +3399,7 @@ Content-Type: application/json
 
 The body was malformed JSON, or missed a required field, or named a feature in `features` that the table doesn't expose. The `reason` string carries the underlying serde / lookup error verbatim. Use it to fix your request.
 
-**Note on Content-Type:** `POST /get` does not enforce `application/json` at the route layer (only `POST /register` does). A request with `Content-Type: text/plain` and a JSON body still parses. Send the canonical header anyway — proxies, WAFs, and future strictness shouldn't surprise you.
+**Content-Type:** `POST /get` does not enforce `application/json` at the route layer; a request with `Content-Type: text/plain` and a JSON body still parses. Send `application/json` anyway so proxies and WAFs don't reject it upstream.
 
 ## TCP equivalent
 
@@ -3576,7 +3572,7 @@ A derivation is a chain of operators applied to one or more upstream nodes. `out
 
 - schema — optional. Required for output_kind: "event" derivations (declares the output event's field types); inferred for tables.
 
-- table_primary_key — array of field names. Required when output_kind: "table". An empty array ([]) declares a global aggregation — a single feature row keyed by the empty-string sentinel (per ADR-003).
+- table_primary_key — array of field names. Required when output_kind: "table". An empty array ([]) declares a global aggregation — a single feature row keyed by the empty-string sentinel.
 
 ### Example — table derivation (per-user)
 
@@ -3775,7 +3771,7 @@ Registration is atomic at the `registry_version` boundary: either the WAL-fsynce
 
           Can I unregister a node?
 
-Not in v0. The two ways to remove a descriptor are: (1) `force=true` a registration that replaces it with a new shape, or (2) restart the server with the desired registry. Explicit unregister is on the v0.1 roadmap.
+Two ways: (1) `force=true` a registration that replaces the descriptor with a new shape, or (2) restart the server with the desired registry.
 
           What goes in `optional_fields`?
 
@@ -3798,7 +3794,7 @@ Source: https://beava.dev/sdk/http/wire-spec/
 
 # Wire spec
 
-Two transports. One JSON body shape. Strict-FIFO on TCP. This page is the canonical reference for the bytes that move between any beava client and the server — implement a third-party SDK from this alone.
+Two transports. One JSON body shape. Strict-FIFO on TCP. The bytes that move between any beava client and the server — enough to implement a third-party SDK.
 
 ## Overview
 

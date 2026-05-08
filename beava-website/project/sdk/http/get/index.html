@@ -133,7 +133,7 @@
 
       <ul>
         <li><code>table</code> — the registered table's name. Required. Mismatched name → 404 <code>unknown_table</code>.</li>
-        <li><code>key</code> — the entity key as a JSON string. For composite keys (declared with <code>key=["a","b"]</code>), the SDK pipe-joins the segments before serialising — e.g. <code>"alice|merchant1"</code>. The empty string <code>""</code> routes to the global-aggregation sentinel for tables registered with <code>key=[]</code> (per ADR-003).</li>
+        <li><code>key</code> — the entity key as a JSON string. For composite keys (declared with <code>key=["a","b"]</code>), the SDK pipe-joins the segments before serialising — e.g. <code>"alice|merchant1"</code>. The empty string <code>""</code> routes to the global-aggregation sentinel for tables registered with <code>key=[]</code>.</li>
         <li><code>features</code> — optional. When supplied, the server narrows the response to the named subset; when omitted, the full row is returned.</li>
       </ul>
 
@@ -296,7 +296,7 @@
       <!-- =============== ERRORS =============== -->
       <h2 id="errors">Errors</h2>
 
-      <p>Verified against <code>crates/beava-server/src/runtime_core_glue.rs</code> and <code>apply_shard.rs</code> on a live binary. Each error body has the shape <code>{"error": {"code": "&lt;code&gt;", ...}}</code>.</p>
+      <p>Each error body has the shape <code>{"error": {"code": "&lt;code&gt;", ...}}</code>.</p>
 
       <div class="codeblock">
         <div class="codeblock-head">
@@ -348,7 +348,7 @@ Content-Type: application/json
       </div>
       <p>The body was malformed JSON, or missed a required field, or named a feature in <code>features</code> that the table doesn't expose. The <code>reason</code> string carries the underlying serde / lookup error verbatim. Use it to fix your request.</p>
 
-      <p><strong>Note on <code>Content-Type</code>:</strong> <code>POST /get</code> does not enforce <code>application/json</code> at the route layer (only <code>POST /register</code> does). A request with <code>Content-Type: text/plain</code> and a JSON body still parses. Send the canonical header anyway — proxies, WAFs, and future strictness shouldn't surprise you.</p>
+      <p><strong>Content-Type:</strong> <code>POST /get</code> does not enforce <code>application/json</code> at the route layer; a request with <code>Content-Type: text/plain</code> and a JSON body still parses. Send <code>application/json</code> anyway so proxies and WAFs don't reject it upstream.</p>
 
       <!-- =============== TCP EQUIVALENT =============== -->
       <h2 id="tcp">TCP equivalent</h2>

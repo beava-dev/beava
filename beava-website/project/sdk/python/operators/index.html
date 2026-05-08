@@ -291,7 +291,7 @@
         <h3 id="n_unique" data-toc-label="n_unique" class="name">n_unique(field, window=None, where=None)</h3>
 <div class="sig">n_unique(field: str, *, window: str | None = None, where: _Expr | None = None) -&gt; AggDescriptor</div>
       </div>
-      <p>Approximate distinct-value count for <code>field</code> (HyperLogLog under the hood). Returns <code>i64</code>.</p>
+      <p>Approximate distinct-value count for <code>field</code>, computed with HyperLogLog. Returns <code>i64</code>.</p>
       <div class="codeblock">
         <div class="codeblock-head"><span class="filename">n_unique.py</span><button class="copy-btn">Copy</button></div>
 <pre>e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
@@ -639,7 +639,7 @@
         <h3 id="ewma" data-toc-label="ewma" class="name">ewma(field, half_life, where=None)</h3>
 <div class="sig">ewma(field: str, *, half_life: str, where: _Expr | None = None) -&gt; AggDescriptor</div>
       </div>
-      <p>Exponentially weighted moving average of <code>field</code>. Returns <code>f64</code>. Aliased as <code>bv.ema</code> (which simply forwards to <code>ewma</code>).</p>
+      <p>Exponentially weighted moving average of <code>field</code>. Returns <code>f64</code>.</p>
       <ul>
         <li><code>half_life</code> — required duration string; e.g. <code>"15m"</code>, <code>"1h"</code>.</li>
       </ul>

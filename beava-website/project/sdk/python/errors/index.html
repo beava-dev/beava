@@ -122,7 +122,7 @@
         <h3 id="registration-error" data-toc-label="RegistrationError" class="name">RegistrationError</h3>
 <div class="sig">RegistrationError(*, code: str, path: str = "", message: str = "", errors: list[ValidationError] | None = None)</div>
       </div>
-      <p>The SDK's general-purpose wire-error wrapper. The name is historical — it predates the wire-code expansion — and it's now raised for <strong>any</strong> non-2xx response from the data plane. Discriminate on <code>code</code>, not on the exception class.</p>
+      <p>The SDK's general-purpose wire-error wrapper. Raised for every non-2xx response from the data plane. Discriminate on <code>code</code>, not on the exception class.</p>
 
       <h3>Attributes</h3>
       <ul>
@@ -294,7 +294,7 @@ app <span class="tk-p">=</span> bv<span class="tk-p">.</span>App<span class="tk-
         <h3 id="unsupported-node-kind" data-toc-label="unsupported_node_kind" class="name">unsupported_node_kind</h3>
 <div class="sig">HTTP 400 · POST /register · path: descriptors[i].kind</div>
       </div>
-      <p>The register payload included a descriptor with <code>kind: "table"</code> in a v0 events-only build (the v0 surface is events-only per the locked architectural decision). If you need aggregation tables, that returns in v0.1+.</p>
+      <p>The register payload included a descriptor with a <code>kind</code> the server doesn't accept. v0 accepts <code>"event"</code> and <code>"derivation"</code> only; aggregation tables are produced via <code>kind: "derivation", output_kind: "table"</code>.</p>
 
       <div class="method-head">
         <h3 id="unbounded-op-in-lifetime-mode" data-toc-label="unbounded_op_in_lifetime_mode" class="name">unbounded_op_in_lifetime_mode</h3>
@@ -334,7 +334,7 @@ app <span class="tk-p">=</span> bv<span class="tk-p">.</span>App<span class="tk-
         <h3 id="op-not-implemented" data-toc-label="op_not_implemented" class="name">op_not_implemented</h3>
 <div class="sig">HTTP 400 · TCP fast-path</div>
       </div>
-      <p>The opcode is reserved (in the catalogue) but not yet wired up in this build. Distinguishes "you typo'd / are stale" (<code>unknown_op</code>) from "we know about it; not done yet."</p>
+      <p>The opcode is recognised but not handled in this build. Distinct from <code>unknown_op</code> (the opcode is outside the dispatch table entirely).</p>
 
       <div class="method-head">
         <h3 id="frame-too-large" data-toc-label="frame_too_large" class="name">frame_too_large</h3>
@@ -416,12 +416,6 @@ app <span class="tk-p">=</span> bv<span class="tk-p">.</span>App<span class="tk-
       <h2 id="faq">Common questions</h2>
 
       <div class="accordion">
-        <details>
-          <summary>Why is everything wrapped in <code>RegistrationError</code> even when it's not about registration?</summary>
-          <div class="acc-body">
-            <p>Historical naming. The class predates <code>push</code> / <code>get</code> / <code>batch_get</code> on the public API and was originally the registration-only error type. Rather than break <code>except bv.RegistrationError</code> in every existing user codebase, we kept the name and broadened the contract: it now wraps every wire error. Branch on <code>code</code> — that's the discriminator. A renamed alias may land in a future minor release; the existing class will stay for compatibility.</p>
-          </div>
-        </details>
         <details>
           <summary>How do I distinguish a 4xx from a 5xx?</summary>
           <div class="acc-body">

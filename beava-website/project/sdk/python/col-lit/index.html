@@ -145,7 +145,7 @@ expr <span class="tk-p">=</span> amount <span class="tk-p">&gt;</span> <span cla
       </div>
       <p>Wrap a Python constant as an explicit literal expression. The implicit form (<code>bv.col("a") &gt; 100</code>) and the explicit form (<code>bv.col("a") &gt; bv.lit(100)</code>) are wire-equivalent inside operator overloads — Python's dispatch coerces the right-hand side automatically. <code>bv.lit</code> is required when the literal stands on its own (a constant column in <code>with_columns</code>, the left-hand side of an arithmetic expression, or the only operand of a derivation).</p>
 
-      <p>Per <strong>ADR-003</strong>, <code>bv.lit</code> is also the canonical way to write a comparison-against-constant in any <code>where=</code> kwarg — bare strings are explicitly rejected (see <a href="#where">the <code>where=</code> contract</a>).</p>
+      <p><code>bv.lit</code> is the canonical way to write a comparison-against-constant in any <code>where=</code> kwarg — bare strings are rejected (see <a href="#where">the <code>where=</code> contract</a>).</p>
 
       <h3>Args</h3>
       <ul>
@@ -294,7 +294,7 @@ negated<span class="tk-p">.</span>to_expr_string<span class="tk-p">()</span>
 
       <!-- =============== where contract =============== -->
       <h2 id="where">The <code>where=</code> contract</h2>
-      <p>Every kwarg that takes a predicate — every aggregation operator's <code>where=</code>, every filter clause — accepts an <code>_Expr</code> and only an <code>_Expr</code>. Bare strings are explicitly rejected per <strong>ADR-003</strong>. The check lives in <code>_serialize_where</code> on every aggregation operator: anything that isn't <code>None</code> or an <code>_Expr</code> raises <code>TypeError</code> client-side, before a single byte hits the wire.</p>
+      <p>Every kwarg that takes a predicate — every aggregation operator's <code>where=</code>, every filter clause — accepts an <code>_Expr</code> and only an <code>_Expr</code>. Bare strings are rejected. The check lives in <code>_serialize_where</code> on every aggregation operator: anything that isn't <code>None</code> or an <code>_Expr</code> raises <code>TypeError</code> client-side, before a single byte hits the wire.</p>
 
       <div class="reqres">
         <div class="codeblock">
@@ -323,7 +323,7 @@ negated<span class="tk-p">.</span>to_expr_string<span class="tk-p">()</span>
         <details>
           <summary>Why do I need <code>bv.lit</code> for constants? Polars does this automatically.</summary>
           <div class="acc-body">
-            <p>Inside an operator overload (e.g. <code>bv.col("a") &gt; 100</code>), Python's dispatch <em>does</em> auto-coerce the right-hand side via <code>_coerce</code>. <code>bv.lit</code> is needed when the literal isn't on the right side of an overload — for instance, when assigning a constant column in <code>with_columns</code> (no operator to dispatch through), or in the few <code>where=</code> shapes where ADR-003 wants the explicit form to remove ambiguity. Pick whichever reads better; both render to the same wire form.</p>
+            <p>Inside an operator overload (e.g. <code>bv.col("a") &gt; 100</code>), Python's dispatch <em>does</em> auto-coerce the right-hand side via <code>_coerce</code>. <code>bv.lit</code> is needed when the literal isn't on the right side of an overload — for instance, when assigning a constant column in <code>with_columns</code> (no operator to dispatch through). Pick whichever reads better; both render to the same wire form.</p>
           </div>
         </details>
         <details>

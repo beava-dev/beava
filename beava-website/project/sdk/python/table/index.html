@@ -265,7 +265,7 @@
     <span class="tk-k">return</span> c<span class="tk-p">.</span>agg<span class="tk-p">(</span>total_clicks_1h<span class="tk-p">=</span>bv<span class="tk-p">.</span>count<span class="tk-p">(</span>window<span class="tk-p">=</span><span class="tk-s">"1h"</span><span class="tk-p">))</span></pre>
       </div>
 
-      <p>Per ADR-003, a global table&rsquo;s single row is addressed by the <strong>empty-string sentinel entity id</strong>. <code>app.get(&quot;SiteTotals&quot;)</code> with no <code>key</code> argument routes to that sentinel automatically:</p>
+      <p>A global table&rsquo;s single row is addressed by the <strong>empty-string sentinel entity id</strong>. <code>app.get(&quot;SiteTotals&quot;)</code> with no <code>key</code> argument routes to that sentinel automatically:</p>
 
       <div class="reqres">
         <div class="codeblock">
@@ -374,7 +374,7 @@
         <details>
           <summary>Can a table key contain dots or slashes?</summary>
           <div class="acc-body">
-            <p>Yes — the column <em>name</em> is restricted by your <code>@bv.event</code> schema, but the column <em>value</em> at lookup time is treated as an opaque string. <code>app.get(&quot;UserClicks&quot;, &quot;a.b/c&quot;)</code> works fine. The wire encoding is JSON, so any UTF-8 string is permitted; the only forbidden value is the empty string, which is reserved as the global-table sentinel per ADR-003.</p>
+            <p>Yes — the column <em>name</em> is restricted by your <code>@bv.event</code> schema, but the column <em>value</em> at lookup time is treated as an opaque string. <code>app.get(&quot;UserClicks&quot;, &quot;a.b/c&quot;)</code> works fine. The wire encoding is JSON, so any UTF-8 string is permitted; the empty string is the global-table sentinel and not a valid entity id for keyed tables.</p>
           </div>
         </details>
         <details>
@@ -392,7 +392,7 @@
         <details>
           <summary>Can one table read from multiple event sources?</summary>
           <div class="acc-body">
-            <p>Not yet. v0 supports one upstream per table; the function takes one annotated parameter and the chain builds off that one source. Multi-source joins / unions are deferred to v0.1+ — see the locked <code>project_v0_events_only_scope</code> commitment.</p>
+            <p>One upstream per table. The function takes one annotated parameter and the chain builds off that one source. Joins and unions are not part of the v0 surface.</p>
           </div>
         </details>
       </div>

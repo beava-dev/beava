@@ -229,7 +229,7 @@
         <li><code>upstreams</code> — array of strings. Names of nodes (events or derivations) this node consumes. Compile-time-resolved against the registry.</li>
         <li><code>ops</code> — array of operator objects. Each operator carries an <code>op</code> name and a <code>params</code> object; operator-specific shapes are documented in the <a href="/sdk/python/operators/">Operator catalogue</a>.</li>
         <li><code>schema</code> — optional. Required for <code>output_kind: "event"</code> derivations (declares the output event's field types); inferred for tables.</li>
-        <li><code>table_primary_key</code> — array of field names. <strong>Required when <code>output_kind: "table"</code>.</strong> An empty array (<code>[]</code>) declares a global aggregation — a single feature row keyed by the empty-string sentinel (per ADR-003).</li>
+        <li><code>table_primary_key</code> — array of field names. <strong>Required when <code>output_kind: "table"</code>.</strong> An empty array (<code>[]</code>) declares a global aggregation — a single feature row keyed by the empty-string sentinel.</li>
       </ul>
 
       <h3>Example — table derivation (per-user)</h3>
@@ -436,7 +436,7 @@
         <details>
           <summary>Can I unregister a node?</summary>
           <div class="acc-body">
-            <p>Not in v0. The two ways to remove a descriptor are: (1) <code>force=true</code> a registration that replaces it with a new shape, or (2) restart the server with the desired registry. Explicit unregister is on the v0.1 roadmap.</p>
+            <p>Two ways: (1) <code>force=true</code> a registration that replaces the descriptor with a new shape, or (2) restart the server with the desired registry.</p>
           </div>
         </details>
         <details>
