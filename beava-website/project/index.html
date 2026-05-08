@@ -228,9 +228,17 @@
     };
 
     // v0 install surface: brew (recommended) / pip / docker.
+    //
+    // pip install ships ONLY the Python SDK (httpx-backed client + a
+    // `beava` shim that execs into the server binary on $PATH). The
+    // wheel does NOT bundle the server itself — users still need
+    // brew / docker / cargo for that. The note under the pip tab is
+    // load-bearing; don't drop it without sorting out the
+    // maturin-bundle path first.
     const INSTALL_TABS = [
       { id: 'brew',   label: 'brew',   cmd: 'brew tap beava-dev/beava && brew install beava', recommended: true },
-      { id: 'pip',    label: 'pip',    cmd: 'pip install beava' },
+      { id: 'pip',    label: 'pip',    cmd: 'pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"',
+        note: 'Python SDK only. Install the server separately via brew, docker, or cargo.' },
       { id: 'docker', label: 'docker', cmd: 'docker run -p 8080:8080 beavadev/beava:edge' },
     ];
 
@@ -291,6 +299,15 @@
               display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap',
             }}>{copied ? '✓ copied' : '⎘ copy'}</button>
           </div>
+          {tab.note && (
+            <div style={{
+              marginTop: 8, paddingLeft: 4,
+              fontFamily: 'var(--font-sans)', fontSize: 12.5, color: 'var(--fg3)',
+              lineHeight: 1.5, fontStyle: 'italic',
+            }}>
+              {tab.note}
+            </div>
+          )}
           <div style={{
             marginTop: 12, paddingLeft: 4,
             fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--fg3)', lineHeight: 1.5,
