@@ -29,17 +29,17 @@ const SDK_NAV = [
   ]},
   { heading: 'Python SDK', items: [
     { id: 'app',        label: 'App client',         href: '/sdk/python/app/' },
-    { id: 'event',      label: '@bv.event',          href: '#' },
-    { id: 'table',      label: '@bv.table',          href: '#' },
-    { id: 'col-lit',    label: 'bv.col / bv.lit',    href: '#' },
-    { id: 'operators',  label: 'Operator catalogue', href: '#' },
-    { id: 'errors',     label: 'Errors',             href: '#' },
+    { id: 'event',      label: '@bv.event',          href: '/sdk/python/event/' },
+    { id: 'table',      label: '@bv.table',          href: '/sdk/python/table/' },
+    { id: 'col-lit',    label: 'bv.col / bv.lit',    href: '/sdk/python/col-lit/' },
+    { id: 'operators',  label: 'Operator catalogue', href: '/sdk/python/operators/' },
+    { id: 'errors',     label: 'Errors',             href: '/sdk/python/errors/' },
   ]},
   { heading: 'HTTP API', items: [
-    { id: 'http-push',      label: 'POST /push',     href: '#' },
-    { id: 'http-get',       label: 'POST /get',      href: '#' },
-    { id: 'http-register',  label: 'POST /register', href: '#' },
-    { id: 'http-wire-spec', label: 'Wire spec',      href: '#' },
+    { id: 'http-push',      label: 'POST /push',     href: '/sdk/http/push/' },
+    { id: 'http-get',       label: 'POST /get',      href: '/sdk/http/get/' },
+    { id: 'http-register',  label: 'POST /register', href: '/sdk/http/register/' },
+    { id: 'http-wire-spec', label: 'Wire spec',      href: '/sdk/http/wire-spec/' },
   ]},
 ];
 
