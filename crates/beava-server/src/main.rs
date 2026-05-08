@@ -31,9 +31,7 @@ use std::path::Path;
 ///
 /// Returns `(cfg, source_label)` where `source_label` describes where the
 /// config came from for the boot banner.
-fn resolve_config(
-    cli: &Cli,
-) -> Result<(beava_server::Config, String), beava_server::ConfigError> {
+fn resolve_config(cli: &Cli) -> Result<(beava_server::Config, String), beava_server::ConfigError> {
     use beava_server::config::{defaults_with_env_overrides, load_config};
     let (mut cfg, source_label) = if let Some(path) = cli.config.as_ref() {
         let cfg = load_config(path)?;
@@ -48,12 +46,12 @@ fn resolve_config(
         overrides.push("--http-addr");
     }
     if let Some(addr) = cli.tcp_addr.as_deref() {
-        let parsed: std::net::SocketAddr = addr.parse().map_err(|_| {
-            beava_server::ConfigError::Validation {
-                field: "--tcp-addr",
-                reason: format!("expected `host:port`, got {addr:?}"),
-            }
-        })?;
+        let parsed: std::net::SocketAddr =
+            addr.parse()
+                .map_err(|_| beava_server::ConfigError::Validation {
+                    field: "--tcp-addr",
+                    reason: format!("expected `host:port`, got {addr:?}"),
+                })?;
         cfg.tcp.host = parsed.ip().to_string();
         cfg.tcp.port = parsed.port();
         cfg.tcp.enabled = true;

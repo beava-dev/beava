@@ -311,8 +311,8 @@ fn cli_flags_boot_and_dispatch_reset() {
     // server.rs::format_reset_response. cli_smoke is std-only (no tokio
     // reactor in scope), so write a minimal HTTP/1.1 request by hand.
     use std::io::{Read, Write};
-    let mut stream = std::net::TcpStream::connect(format!("127.0.0.1:{http_port}"))
-        .expect("connect /reset");
+    let mut stream =
+        std::net::TcpStream::connect(format!("127.0.0.1:{http_port}")).expect("connect /reset");
     stream
         .set_read_timeout(Some(Duration::from_secs(5)))
         .expect("set read timeout");
