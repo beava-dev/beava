@@ -8,6 +8,7 @@
     "build:docs": "node scripts/render-docs.mjs",
     "build:search": "node scripts/build-search.mjs",
     "check:links": "node scripts/check-links.mjs",
+    "check:copy-buttons": "node scripts/check-copy-buttons.mjs",
     "build": "npm run build:docs && npm run build:search"
   },
   "devDependencies": {
