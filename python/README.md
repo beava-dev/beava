@@ -1,72 +1,130 @@
 # beava — Python SDK
 
-Real-time feature server, Python SDK.
+Python SDK for [Beava](https://github.com/beava-dev/beava), the single-binary real-time feature server. Author pipelines with `@bv.event` / `@bv.table` decorators; push events and read features against a running `beava` server over HTTP or TCP.
 
 ## Install
 
-```
-pip install beava
+```bash
+pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"
 ```
 
-## Quickstart — HTTP
+PyPI publish (`pip install beava`) lands in v0.0.x — see the [root README](https://github.com/beava-dev/beava#readme) for status.
+
+You also need the `beava` server running. Quickest path:
+
+```bash
+docker run -p 8080:8080 -p 8081:8081 beavadev/beava:edge
+```
+
+Other install options (Homebrew, Cargo, source build) are listed in the [root README quickstart](https://github.com/beava-dev/beava#60-second-quickstart).
+
+## Quickstart
 
 ```python
 import beava as bv
 
 @bv.event
-class Transaction:
+class Click:
     user_id: str
-    amount: float
-    event_time: int
+    page: str
 
 @bv.table(key="user_id")
-class UserProfile:
-    user_id: str
-    balance: float
+def UserActivity(e: Click) -> bv.Table:
+    return e.group_by("user_id").agg(
+        clicks_1h=bv.count(window="1h"),
+        unique_pages_1h=bv.n_unique("page", window="1h"),
+    )
 
-with bv.App("http://localhost:7379") as app:
-    resp = app.register(Transaction, UserProfile)
-    print("registry_version:", resp["registry_version"])
+app = bv.App(url="http://localhost:8080")
+app.register(Click, UserActivity)
+
+app.push("Click", {"user_id": "alice", "page": "/home"})
+app.push("Click", {"user_id": "alice", "page": "/products"})
+
+app.get("UserActivity", "alice")
+# => {"clicks_1h": 2, "unique_pages_1h": 2}
 ```
 
-## Quickstart — TCP (faster path)
+## Transports
+
+The same SDK speaks three transports — pick by the URL you pass to `bv.App(...)`.
 
 ```python
-with bv.App("tcp://localhost:7380") as app:
-    resp = app.register(Transaction, UserProfile)
-    print("registry_version:", resp["registry_version"])
+# HTTP/JSON (curl-compatible debugging path)
+app = bv.App(url="http://localhost:8080")
+
+# Framed TCP (sub-millisecond fast-path; JSON or msgpack content)
+app = bv.App(url="tcp://localhost:8081")
+
+# Embed mode (no separate server — auto-spawns a local `beava` binary)
+app = bv.App()
 ```
 
-## Quickstart — Embed mode (no separate server)
+Embed mode requires the `beava` binary on `PATH` (`brew install beava` or `docker pull beavadev/beava`) or `BEAVA_BINARY=/path/to/beava` set.
+
+## Surface
+
+| Method | Wire | Notes |
+|--------|------|-------|
+| `app.register(*descriptors, force=False, dry_run=False)` | `POST /register` | Returns `{"registry_version": <n>}`. Pass `force=True` for destructive schema changes; `dry_run=True` returns a categorized diff without applying. |
+| `app.push(event_name, fields)` | `POST /push` body `{event, data}` | Fire-and-forget. Returns server ack. |
+| `app.get(table, key=None, features=None)` | `POST /get` body `{table, key}` | Returns a flat dict of feature values. `key=None` routes to the global-aggregation sentinel (ADR-003). `features=[...]` narrows to a subset. |
+| `app.batch_get(requests)` | `POST /batch_get` body `{requests: [...]}` | `requests` is a list of `(table, key)` or `(table, key, features)` tuples. Returns a list of dicts in input order. |
+| `app.reset()` | `POST /reset` (test_mode-only) | Wipes server state. Pass `test_mode=True` to `bv.App(...)` to enable. |
+| `app.ping()` | `POST /ping` | Liveness; returns `{"pong": True, "registry_version": <n>}`. |
+| `app.close()` | — | Releases the transport connection. |
+
+## Pipeline DSL
+
+`@bv.event` declares an event schema. Fields are typed Python class attributes; the SDK serializes them to JSON on push.
+
+`@bv.table(key=...)` declares a feature table. The decorated function takes one event-typed parameter and returns `e.group_by(...).agg(...)` over it. The runtime maintains the table incrementally — every event updates exactly the affected key's row.
+
+The `key=` kwarg accepts a string (single-column key) or a list of strings (composite key).
+
+`bv.col("name")` references an event field inside a `where=` filter or arithmetic expression. Strings in `where=` are rejected — pass an `_Expr` (e.g. `bv.col("event_type") == "click"`).
+
+`bv.lit(value)` wraps a Python literal so it can participate in the same expression grammar.
+
+## Operator catalogue
+
+50+ aggregation primitives are exported flat at the `bv.*` namespace. Inspect the live surface from Python:
 
 ```python
-with bv.App() as app:
-    resp = app.register(Transaction, UserProfile)
-    print("registry_version:", resp["registry_version"])
+import beava as bv
+print([x for x in dir(bv) if not x.startswith("_")])
 ```
 
-Embed mode auto-spawns a local `beava` binary on ephemeral ports. Requires
-the binary to be on `PATH` (`brew install beava` or `docker pull beava/beava`)
-or set `BEAVA_BINARY=/path/to/beava`.
+Selection by family:
 
-## Validate without network I/O
+- **Core** — `count`, `sum`, `mean`, `min`, `max`, `var`, `std`, `n_unique`, `quantile`
+- **Sketch** — `top_k`, `bloom_member`, `entropy`, `histogram`, `hour_of_day_histogram`, `dow_hour_histogram`
+- **Recency** — `first`, `last`, `first_n`, `last_n`, `lag`, `first_seen`, `last_seen`, `age`, `time_since`
+- **Decay** — `ewma`, `ema`, `ewvar`, `ew_zscore`, `decayed_sum`, `decayed_count`
+- **Velocity** — `rate_of_change`, `inter_arrival_stats`, `burst_count`, `delta_from_prev`, `trend`, `z_score`
+- **Buffer / geo** — `most_recent_n`, `reservoir_sample`, `geo_velocity`, `geo_distance`, `geo_spread`, `distance_from_home`
+
+Deprecation aliases retained: `avg → mean`, `variance → var`, `stddev → std`, `count_distinct → n_unique`, `percentile → quantile`. Use the canonical form in new code.
+
+## Demo data
+
+`bv.demo` exposes three pre-built pipelines + dataset loaders for trying the SDK without writing your own pipeline:
 
 ```python
-errs = bv.App("http://localhost:7379").validate(Transaction, UserProfile)
-assert errs == []
+import beava as bv
+adtech = bv.demo.adtech()      # ad-impression / click / conversion
+fraud = bv.demo.fraud()        # transaction fraud
+ecommerce = bv.demo.ecommerce()  # cart / view / purchase
 ```
 
-`validate` returns `list[beava.ValidationError]` — empty on success.
+Each returns a tuple of `(events, tables, dataset)` ready to register and push.
 
-## Expression DSL
+## Errors
 
-```python
-expr = bv.col("amount") > 100
-print(expr.to_expr_string())  # "(amount > 100)"
+Top-level error types: `bv.RegistrationError` (raised on register failures with structured `code` + `message`), `bv.ValidationError` (raised by client-side input validators), `bv.BinaryNotFoundError` (raised in embed mode if the `beava` binary isn't on `PATH`).
 
-compound = (bv.col("amount") > 0) & (bv.col("balance") < 1000)
-print(compound.to_expr_string())  # "((amount > 0) and (balance < 1000))"
-```
+## Learn more
 
-Expressions are compiled at register time (Phase 4+). Phase 3 accepts them
-in derivation definitions; server-side evaluation ships in Phase 4.
+- [beava.dev](https://beava.dev) — site, guide, docs
+- [Root README](https://github.com/beava-dev/beava#readme) — server install, wire surface, server CLI
+- [Discord](https://discord.gg/Jnx89PN9) — questions and feedback
