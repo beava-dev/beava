@@ -213,12 +213,126 @@ fn value_serde_roundtrip_each_variant() {
         Value::Str("hello".into()),
         Value::Bytes(vec![0x01, 0x02, 0x03]),
         Value::Datetime(1_700_000_000_000),
+        // The remaining three variants reach into `serde_json::Value` (Json)
+        // or recursive Value containers (List, Map). Bincode does not support
+        // `deserialize_any`, which `serde_json::Value::Deserialize` relies on
+        // — historical coverage was limited to bincode-clean primitives, so
+        // a Json-bearing snapshot decoded fine in tests but failed in prod.
+        Value::Json(serde_json::json!([{"value": "a", "count": 5}])),
+        Value::List(vec![Value::I64(1), Value::Str("two".into()), Value::Null]),
+        Value::Map({
+            let mut m = BTreeMap::new();
+            m.insert("k1".to_string(), Value::I64(10));
+            m.insert("k2".to_string(), Value::Bool(true));
+            m
+        }),
     ];
     for v in &variants {
         let bytes = bincode::serialize(v).expect("encode");
         let decoded: Value = bincode::deserialize(&bytes).expect("decode");
         assert_eq!(&decoded, v);
     }
+}
+
+/// Mirrors the live beava.dev SiteMetrics shape exactly: a derivation whose
+/// `OpNode::GroupBy` carries an `AggSpec` with `params: serde_json::Value`.
+/// The recovery log on prod (2026-05-08 04:04) showed:
+///
+/// ```text
+/// "snapshot body decode failed; trying older snapshot"
+/// "error":"bincode: Bincode does not support the
+///  serde::Deserializer::deserialize_any method"
+/// ```
+///
+/// This test isolates the same failure path: a SnapshotBody whose registry
+/// contains a SiteMetrics-shaped derivation. Without the fix, bincode hits
+/// `serde_json::Value`'s `deserialize_any` while decoding `AggSpec.params`
+/// and aborts the whole snapshot decode.
+#[test]
+fn snapshot_body_aggspec_params_bincode_roundtrip() {
+    use beava_core::op_node::{AggSpec, OpNode};
+    use beava_core::registry::{DerivationDescriptor, OutputKind};
+
+    let mut agg: BTreeMap<String, AggSpec> = BTreeMap::new();
+    agg.insert(
+        "median_dwell_1h".to_string(),
+        AggSpec {
+            op: "quantile".to_string(),
+            params: serde_json::json!({
+                "field": "dwell_ms",
+                "window": "1h",
+                "q": 0.5
+            }),
+        },
+    );
+    agg.insert(
+        "page_views_today".to_string(),
+        AggSpec {
+            op: "count".to_string(),
+            params: serde_json::json!({"window": "24h"}),
+        },
+    );
+    agg.insert(
+        "top_page_1h".to_string(),
+        AggSpec {
+            op: "top_k".to_string(),
+            params: serde_json::json!({
+                "field": "path",
+                "window": "1h",
+                "k": 1
+            }),
+        },
+    );
+
+    let derivation = DerivationDescriptor {
+        name: "SiteMetrics".to_string(),
+        output_kind: OutputKind::Table,
+        upstreams: vec!["PageView".to_string()],
+        ops: vec![OpNode::GroupBy { keys: vec![], agg }],
+        schema: small_derived_schema(),
+        table_primary_key: None,
+        registered_at_version: 0,
+    };
+
+    let mut registry = RegistryDescriptorsOnly::default();
+    registry.version = 1;
+    registry
+        .derivations
+        .insert("SiteMetrics".to_string(), derivation);
+
+    let body = SnapshotBody {
+        body_format_version: SNAPSHOT_BODY_FORMAT_VERSION,
+        registry,
+        state_tables: BTreeMap::new(),
+        next_event_id: 0,
+        query_time_ms: 0,
+    };
+
+    let bytes = body.encode().expect("encode");
+    // The current bug: this decode fails with the bincode/`deserialize_any`
+    // error, exactly matching the live recovery-log signature.
+    let decoded = SnapshotBody::decode(&bytes).expect(
+        "decode SiteMetrics-shape snapshot — prod failure path; \
+         AggSpec.params (serde_json::Value) must survive bincode round-trip",
+    );
+
+    let d = decoded
+        .registry
+        .derivations
+        .get("SiteMetrics")
+        .expect("derivation present after decode");
+    let group_by = match &d.ops[0] {
+        beava_core::op_node::OpNode::GroupBy { agg, .. } => agg,
+        other => panic!("expected GroupBy, got {other:?}"),
+    };
+    assert_eq!(group_by.len(), 3, "all three aggregations preserved");
+    let q = group_by.get("median_dwell_1h").unwrap();
+    assert_eq!(q.op, "quantile");
+    assert_eq!(
+        q.params["field"],
+        serde_json::Value::String("dwell_ms".to_string())
+    );
+    assert_eq!(q.params["q"], serde_json::Value::from(0.5));
 }
 
 // ─── SnapshotBody round-trips ────────────────────────────────────────────────
