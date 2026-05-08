@@ -88,21 +88,25 @@ class TestHttpTransportRegister:
         so SDK clients can use it for cheap registry-version invalidation
         (cache key, schema-evolution detection on long-lived connections).
 
-        Pre-register: registry_version is 0. After a successful register,
-        registry_version bumps to 1 — verify the SDK propagates the bumped
-        value.
+        After a successful register, registry_version increases by 1 —
+        verify the SDK propagates the bumped value. (Absolute pre-register
+        value is implementation-detail: in-process TestServer starts at 0,
+        subprocess spawn records an initial WAL bump and starts at 1; both
+        are valid. The contract is the +1 delta on register.)
         """
         http_url, _ = beava_server
         with HttpTransport(http_url) as t:
             pre = t.send_ping()
             assert pre["pong"] is True, f"pre-register pong=True; got {pre}"
-            assert pre["registry_version"] == 0, (
-                f"pre-register registry_version=0; got {pre}"
+            pre_version = pre["registry_version"]
+            assert isinstance(pre_version, int) and pre_version >= 0, (
+                f"pre-register registry_version must be non-negative int; got {pre}"
             )
 
             t.send_register(VALID_REGISTER_PAYLOAD)
             post = t.send_ping()
             assert post["pong"] is True, f"post-register pong=True; got {post}"
-            assert post["registry_version"] == 1, (
-                f"post-register registry_version=1; got {post}"
+            assert post["registry_version"] == pre_version + 1, (
+                f"post-register registry_version must bump by 1; "
+                f"pre={pre_version}, post={post['registry_version']}"
             )
