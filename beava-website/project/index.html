@@ -227,16 +227,17 @@
       );
     };
 
-    // Pre-release: pip / brew / docker-prebuilt all light up at v0.0.0.
-    // Until then, install paths go through GitHub.
+    // v0 install surface: brew (recommended) / pip / docker. Cargo dropped
+    // from the homepage tabs — install via cargo is documented in /docs/install
+    // for Rust users but isn't the magical first-touch path.
     const INSTALL_TABS = [
-      { id: 'pip',    label: 'pip',    cmd: 'pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"' },
-      { id: 'cargo',  label: 'cargo',  cmd: 'cargo install --git https://github.com/beava-dev/beava beava-server' },
+      { id: 'brew',   label: 'brew',   cmd: 'brew tap beava-dev/beava && brew install beava', recommended: true },
+      { id: 'pip',    label: 'pip',    cmd: 'pip install beava' },
       { id: 'docker', label: 'docker', cmd: 'docker run -p 8080:8080 beavadev/beava:edge' },
     ];
 
     const InstallTabs = () => {
-      const [tabId, setTabId] = React.useState('pip');
+      const [tabId, setTabId] = React.useState('brew');
       const [copied, setCopied] = React.useState(false);
       const tab = INSTALL_TABS.find(t => t.id === tabId);
       const copy = () => {
@@ -262,7 +263,18 @@
                   fontWeight: active ? 600 : 500,
                   color: active ? 'var(--fg1)' : 'var(--fg3)',
                   cursor: 'pointer',
-                }}>{t.label}</button>
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                }}>
+                  {t.label}
+                  {t.recommended && (
+                    <span style={{
+                      fontFamily: 'var(--font-sans)', fontSize: 9.5, fontWeight: 700,
+                      letterSpacing: '0.04em', textTransform: 'uppercase',
+                      color: 'var(--accent)', background: 'var(--beava-orange-wash)',
+                      padding: '1px 5px', borderRadius: 3,
+                    }}>recommended</span>
+                  )}
+                </button>
               );
             })}
           </div>
@@ -295,6 +307,30 @@
             Push events <span style={{ color: 'var(--border-strong)', margin: '0 4px' }}>·</span>
             Define pipelines <span style={{ color: 'var(--border-strong)', margin: '0 4px' }}>·</span>
             Query by key.
+          </div>
+          <div style={{ marginTop: 16, paddingLeft: 4 }}>
+            <div style={{
+              fontFamily: 'var(--font-sans)', fontSize: 12.5, color: 'var(--fg3)',
+              fontWeight: 500, marginBottom: 6, letterSpacing: '0.01em',
+            }}>
+              Then see it work in 5 seconds:
+            </div>
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 10,
+              padding: '8px 14px',
+              background: '#fff', border: '1px solid var(--accent)', borderRadius: 8,
+              fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--fg1)',
+              boxShadow: '0 0 0 3px rgba(184,92,32,0.08)',
+            }}>
+              <span style={{ color: 'var(--fg3)' }}>$</span>
+              <span style={{ fontWeight: 600 }}>beava quickstart</span>
+              <span style={{
+                fontFamily: 'var(--font-sans)', fontSize: 11, color: 'var(--fg3)',
+                fontWeight: 500, marginLeft: 8,
+              }}>
+                — register, push 5 events, query, drop a Python file
+              </span>
+            </div>
           </div>
         </div>
       );
@@ -346,7 +382,7 @@
               fontWeight: 400, fontSize: 22, lineHeight: 1.45,
               color: 'var(--fg1)', margin: '0 0 36px',
               maxWidth: 560, textWrap: 'pretty',
-            }}>Personalization, fraud rules, live dashboards &mdash; in hours, not quarters.</p>
+            }}>Declare aggregations in Python, push events over HTTP, query computed features in sub-millisecond &mdash; single binary, no Kafka.</p>
             <InstallTabs/>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
               <Button variant="primary" size="lg" href="/docs/" icon={<Icon name="arrow" size={16}/>}>Read the docs</Button>
