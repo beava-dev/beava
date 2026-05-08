@@ -1,12 +1,12 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
 
 [project]
 name = "beava"
-version = "0.3.0"
+version = "0.4.0"
 requires-python = ">=3.10"
-description = "Python SDK for Beava: real-time feature server with composable streaming pipelines."
+description = "Beava: real-time feature server with composable streaming pipelines (Python SDK + bundled Rust server binary)."
 readme = "../README.md"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Hoang Phan", email = "phan.minhhoang2606@gmail.com" }]
@@ -24,14 +24,12 @@ classifiers = [
 ]
 dependencies = ["httpx>=0.27,<1"]
 
-[project.scripts]
-# `pip install beava` installs a `beava` shell command that locates
-# the Rust server binary (via `$BEAVA_BINARY` → `$PATH` → workspace
-# `target/debug/beava`) and execs into it. The wheel does NOT bundle
-# the binary; users still install it via Docker, Cargo, or source.
-# This shim keeps `beava -c beava.yaml` working end-to-end after a
-# pip install + a separate binary install — see `beava/_cli.py`.
-beava = "beava._cli:main"
+# `[project.scripts]` is intentionally absent: the `beava` shell command
+# is the maturin-bundled Rust binary itself (lands in the wheel's
+# `<sysconfig.get_path("scripts")>/beava` directory). The legacy
+# `beava._cli:main` shim still ships as a Python module and remains
+# invokable via `python -m beava._cli` for the rare case where a user
+# wants the Python-level dispatch logic.
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<9", "ruff>=0.5,<1", "mypy>=1.10,<2", "hypothesis>=6", "pytest-benchmark>=4,<5"]
@@ -41,22 +39,35 @@ Homepage = "https://beava.dev"
 Repository = "https://github.com/petrpan26/beava"
 Issues = "https://github.com/petrpan26/beava/issues"
 
-[tool.hatch.build.targets.wheel]
-packages = ["beava"]
-# D-08 (Phase 19): benches/ is a developer tool, never shipped via pip.
-# `packages = ["beava"]` already restricts the wheel root to the beava package,
-# but the explicit exclude is belt-and-suspenders + matches CONTEXT.md D-08
-# language verbatim ("excluded from the pip wheel via [tool.hatch.build.targets.wheel]
-# exclude rules"). Same treatment for tests/ to keep the wheel slim.
-exclude = [
-    "benches/**",
-    "tests/**",
+[tool.maturin]
+# python-source = "." means pyproject.toml's directory (python/) is the
+# Python package root; maturin auto-discovers `beava/` underneath it.
+python-source = "."
+# Workspace-aware path to the binary crate. Cargo.lock is resolved at
+# the workspace root (../Cargo.toml), which maturin walks up to find.
+manifest-path = "../crates/beava-server/Cargo.toml"
+# Binary mode (not C-extension): builds the listed Rust binaries and
+# ships them in the wheel's scripts/ dir, polars/ruff/uv style.
+bindings = "bin"
+# beava-server crate has multiple bins (`beava`, `log_probe`); the
+# wheel ships only the production server binary.
+bins = ["beava"]
+# Strip debug symbols from the wheel binary — keeps wheel size near
+# ~14 MB; debug builds remain available via `cargo build` in dev.
+strip = true
+# Demo dataset JSON / JSONL files live inside the `beava.demos`
+# package but aren't .py modules; explicit include guarantees they
+# ship in both sdist and wheel regardless of maturin auto-discovery
+# rules. Matches the prior hatchling `force-include` behavior.
+include = [
+    { path = "beava/demos/**/*.json", format = ["sdist", "wheel"] },
+    { path = "beava/demos/**/*.jsonl", format = ["sdist", "wheel"] },
 ]
-
-# Phase 13.5 Plan 05 D-02: bundle demo dataset JSON / JSONL files in the wheel
-# so `pip install beava` ships the offline demos (Plan 06 generates the data).
-[tool.hatch.build.targets.wheel.force-include]
-"beava/demos" = "beava/demos"
+# Exclude developer-only paths from sdist + wheel (D-08, Phase 19).
+exclude = [
+    { path = "benches/**", format = ["sdist", "wheel"] },
+    { path = "tests/**", format = ["sdist", "wheel"] },
+]
 
 [tool.pytest.ini_options]
 # v0 acceptance suite — 100 canonical tests covering the public Python SDK
