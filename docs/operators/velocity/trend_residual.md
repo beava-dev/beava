@@ -50,7 +50,7 @@ amount of arithmetic — no iteration over history. The `window=` kwarg is
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `field` | `str` | Yes | — | Numeric field (`i64` or `f64`) to track. Non-numeric values are silently skipped. |
-| `window` | `str` | Yes | — | Duration string matching `\d+(ms\|s\|m\|h\|d)` or `"forever"`. See [shared.md window grammar](../../sdk-api/shared.md). |
+| `window` | `str` | Yes | — | Duration string matching `\d+(ms\|s\|m\|h\|d)` or `"forever"`. |
 | `where` | `bv.Col` | No | `None` | Boolean expression on event fields; only matching events update the regression and the last-event cache. |
 
 ## Returns

@@ -53,7 +53,7 @@ is itself lifetime-bound `O(1)`.
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `field` | `str` | Yes | — | Numeric field (`i64` or `f64`) to test for deviation. Non-numeric values are silently skipped. |
-| `window` | `str` | Yes | — | Duration string matching `\d+(ms\|s\|m\|h\|d)` or `"forever"`. See [shared.md window grammar](../../sdk-api/shared.md). |
+| `window` | `str` | Yes | — | Duration string matching `\d+(ms\|s\|m\|h\|d)` or `"forever"`. |
 | `sigma` | `float` | No | `3.0` | Threshold in **standard deviations** away from the running mean. Must be `> 0`. The classic three-sigma default catches values in roughly the 0.3% tail under a normal distribution. Lower (e.g. `2.0`) is more sensitive; higher (`4.0`+) is stricter. |
 | `where` | `bv.Col` | No | `None` | Boolean expression on event fields; only matching events update the baseline and the outlier counter. |
 

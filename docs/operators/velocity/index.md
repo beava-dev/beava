@@ -44,6 +44,5 @@ All 9 are `O(1)` memory per entity — see the per-op page Complexity section fo
 - [Decay family](../decay/) — sibling family for exponentially-weighted statistics; [`bv.ew_zscore`](../decay/ew_zscore.md) is the drift-aware counterpart to [`bv.z_score`](./z_score.md), and [`bv.ewma`](../decay/ewma.md) is the smoothed counterpart to the underlying signals fed into [`bv.trend`](./trend.md) / [`bv.rate_of_change`](./rate_of_change.md)
 - [Sketch family](../sketch/) — sibling family for cardinality / quantile / categorical estimators; [`bv.entropy`](../sketch/entropy.md) and [`bv.n_unique`](../sketch/n_unique.md) are non-numeric-friendly anomaly primitives
 - [Recency family](../recency/) — sibling family for "when did this entity last act?" — [`bv.streak`](../recency/streak.md) pairs naturally with [`bv.value_change_count`](./value_change_count.md) (consecutive matches vs. flips)
-- [shared.md window grammar](../../sdk-api/shared.md) — duration-string format (`\d+(ms\|s\|m\|h\|d)` and the `"forever"` literal)
 - Per-operator memory governance: [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) — every lifetime aggregation operator declares a finite per-entity memory ceiling at register-time
 - [Pipeline DSL compilation rules](../../pipeline-dsl/compilation-rules.md) — how `bv.<op>(...)` calls compile to JSON wire form

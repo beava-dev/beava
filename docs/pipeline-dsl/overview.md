@@ -98,11 +98,11 @@ class Txn:
     amount: float
 ```
 
-Field types come from the [shared.md § Field types](../sdk-api/shared.md#field-types)
-vocabulary: `str`, `i64` (Python `int`), `f64` (Python `float`), `bool`,
-`bytes`, `datetime`. `event_time` fields are **rejected at decoration time**
-per `project_redis_shaped_no_event_time_ever` — beava is processing-time only;
-the server stamps wall-clock arrival time on every push.
+Field types use the 6-element vocabulary: `str`, `i64` (Python `int`),
+`f64` (Python `float`), `bool`, `bytes`, `datetime`. `event_time` fields
+are **rejected at decoration time** per
+`project_redis_shaped_no_event_time_ever` — beava is processing-time
+only; the server stamps wall-clock arrival time on every push.
 
 ### Function form (derived event)
 
@@ -187,7 +187,7 @@ def Foo(c): return c.agg(total=bv.count(...))
 
 All 53 operators work with both per-entity and global aggregation — same op semantics, different state-keying dimension. See [`docs/concepts/global-aggregation.md`](../concepts/global-aggregation.md) for the full conceptual treatment (when to use global vs per-entity, performance characteristics, composition with `cold_after=`).
 
-Implementation deferred to the engine rename + v0 (Python SDK no-`key=` form) + v0 (TS + Go SDK overloads). Acceptance gate: `python/tests/v0/test_global.py` (an internal plan, 8 tests).
+Acceptance gate: `python/tests/v0/test_global.py` (8 tests).
 
 ## Chain methods overview
 

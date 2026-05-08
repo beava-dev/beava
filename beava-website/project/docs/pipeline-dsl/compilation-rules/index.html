@@ -55,12 +55,9 @@
     </ul>
   </div>
   <div class="side-section">
-    <div class="side-title">SDK references</div>
+    <div class="side-title">SDK reference</div>
     <ul class="side-list">
-      <li><a class="side-link" href="/docs/sdk-api/shared/">Cross-language parity</a></li>
       <li><a class="side-link" href="/docs/sdk-api/python/">Python SDK</a></li>
-      <li><a class="side-link" href="/docs/sdk-api/typescript/">TypeScript SDK</a></li>
-      <li><a class="side-link" href="/docs/sdk-api/go/">Go SDK</a></li>
     </ul>
   </div>
   <div class="side-section">
@@ -118,11 +115,9 @@
 <article class="docs-prose">
 <h1>Pipeline DSL Compilation Rules</h1>
 <blockquote>
-<p><strong>Status:</strong> Authoritative for v0. Documents the <strong>v0 target</strong> Python
-→ JSON wire compilation contract. SDK porters in v0 (TypeScript + Go)
-consume this doc as the canonical reference for what their compilers MUST
-emit. Where this doc and the current <code>python/beava/</code> source disagree, this
-doc wins — v0 implements the target shape.
+<p><strong>Status:</strong> Authoritative for v0. Documents the Python → JSON wire
+compilation contract. Where this doc and the current <code>python/beava/</code>
+source disagree, this doc wins.
 <strong>Last reviewed:</strong> 2026-05-03.</p>
 </blockquote>
 <h2 id="how-to-read-this-doc" tabindex="-1"><a class="header-anchor" href="#how-to-read-this-doc" aria-hidden="true">#</a> How to read this doc</h2>
@@ -139,13 +134,6 @@ section documents the v0-locked recommended pattern for conditional counts
 <p>The <a href="#ambiguity-matrix">Ambiguity Matrix</a> at the bottom rules out 20+ edge
 cases as ALLOWED / FORBIDDEN / UNDEFINED with a fixture link or structured
 error code per row.</p>
-<h2 id="cross-language-note" tabindex="-1"><a class="header-anchor" href="#cross-language-note" aria-hidden="true">#</a> Cross-language note</h2>
-<p>Every JSON-wire shape below is what <strong>all 3 SDKs</strong> (Python, TypeScript, Go)
-MUST emit. The Python source is the reference syntax — TS uses
-<code>event.filter(col(&quot;amount&quot;).gt(100))</code> and Go uses
-<code>event.Filter(col(&quot;amount&quot;).Gt(100))</code>, but both compile to the same wire JSON
-shown here. Cross-language semantic parity is locked in
-<a href="/docs/sdk-api/shared/">shared.md</a>.</p>
 <hr>
 <h3 id="eventsfilterexpr" tabindex="-1"><a class="header-anchor" href="#eventsfilterexpr" aria-hidden="true">#</a> events.filter(expr)</h3>
 <h4 id="python-source" tabindex="-1"><a class="header-anchor" href="#python-source" aria-hidden="true">#</a> Python source</h4>
@@ -490,9 +478,7 @@ evaluation walks the AST. Type checking is enforced at register time per
 <h3 id="window-kwarg-semantics" tabindex="-1"><a class="header-anchor" href="#window-kwarg-semantics" aria-hidden="true">#</a> window= kwarg semantics</h3>
 <blockquote>
 <p><strong>Important:</strong> the kwarg name is <code>window=</code>. All aggregation helpers in
-<code>bv.&lt;op&gt;(...)</code> use the <code>window</code> keyword per <code>python/beava/_agg.py</code>
-(verified RESEARCH §4 codebase verification). Do not append a <code>-d</code> suffix
-when porting to TS / Go — the keyword stays <code>window</code> across all 3 SDKs.</p>
+<code>bv.&lt;op&gt;(...)</code> use the <code>window</code> keyword per <code>python/beava/_agg.py</code>.</p>
 </blockquote>
 <h4 id="python-source-10" tabindex="-1"><a class="header-anchor" href="#python-source-10" aria-hidden="true">#</a> Python source</h4>
 <pre><code class="language-python"># Sliding-window mode (5-minute rolling window):
@@ -537,7 +523,7 @@ dropped from the result.</li>
 with <code>aggregation_invalid_half_life</code>.</li>
 </ul>
 <p>The grammar for <code>window</code> strings is <code>\d+(ms|s|m|h|d)</code> or <code>forever</code> — leading
-digit <code>1-9</code> (no <code>0ms</code>); see <a href="/docs/sdk-api/shared/#window-grammar">shared.md § Window grammar</a>.</p>
+digit <code>1-9</code> (no <code>0ms</code>).</p>
 <hr>
 <h3 id="bvtable-decorator-function-form-per-adr-001" tabindex="-1"><a class="header-anchor" href="#bvtable-decorator-function-form-per-adr-001" aria-hidden="true">#</a> @bv.table decorator (function form, per ADR-001)</h3>
 <h4 id="python-source-11" tabindex="-1"><a class="header-anchor" href="#python-source-11" aria-hidden="true">#</a> Python source</h4>
@@ -630,7 +616,7 @@ def Foo(c): return c.agg(total=bv.count(window=&quot;forever&quot;))
 <h4 id="server-semantics-12" tabindex="-1"><a class="header-anchor" href="#server-semantics-12" aria-hidden="true">#</a> Server semantics</h4>
 <p>Per ADR-003, the engine routes <code>entity_id = &quot;&quot;</code> (empty string) through the same per-entity hashmap machinery — no new code path. Register-time validation accepts <code>key: []</code> as a valid global-table declaration; <code>key</code> MUST be either non-empty (per-entity) or empty (global) — never null.</p>
 <p>All 53 operators work in both per-entity and global modes — semantics identical, only the state-keying dimension differs. Standard memory governance applies: <code>cold_after=</code> doesn't affect global state (always-live); lifetime ops still subject to V0-MEM-GOV-02 lifetime-bound enforcement.</p>
-<p>Implementation deferred to v0 (engine, ~30 LOC) + v0 (Python SDK, ~110 LOC) + v0 (TS + Go SDK overloads, ~150 LOC). Acceptance gate: <code>python/tests/v0/test_global.py</code> (an internal plan, 8 tests).</p>
+<p>Acceptance gate: <code>python/tests/v0/test_global.py</code> (8 tests).</p>
 <p>See <a href="/docs/concepts/global-aggregation/"><code>docs/concepts/global-aggregation.md</code></a> for the full conceptual treatment.</p>
 <hr>
 <h2 id="boolean-sum-trick-recommended-pattern-for-conditional-counts" tabindex="-1"><a class="header-anchor" href="#boolean-sum-trick-recommended-pattern-for-conditional-counts" aria-hidden="true">#</a> Boolean-sum trick (recommended pattern for conditional counts)</h2>
@@ -808,8 +794,8 @@ fixture (ALLOWED) or a structured error code (FORBIDDEN).</p>
 </tr>
 <tr>
 <td><code>app.get(&quot;GlobalTable&quot;)</code> (1-arg)</td>
-<td>ALLOWED per ADR-003 — Python+TS arity overload</td>
-<td>Returns the global feature dict. Equivalent to the wire request <code>{&quot;table&quot;: &quot;...&quot;, &quot;key&quot;: &quot;&quot;}</code>. Go SDK uses <code>app.GetGlobal(ctx, &quot;...&quot;)</code> (separate method per Go convention).</td>
+<td>ALLOWED per ADR-003 — arity overload</td>
+<td>Returns the global feature dict. Equivalent to the wire request <code>{&quot;table&quot;: &quot;...&quot;, &quot;key&quot;: &quot;&quot;}</code>.</td>
 <td><a href="https://github.com/beava-dev/beava/blob/main/examples/wire/get-global.request.json"><code>examples/wire/get-global.request.json</code></a> + <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/get-global.response.json"><code>examples/wire/get-global.response.json</code></a></td>
 </tr>
 <tr>
@@ -869,7 +855,7 @@ fixture (ALLOWED) or a structured error code (FORBIDDEN).</p>
 <tr>
 <td><code>dry_run=True</code> flag on <code>app.register(...)</code></td>
 <td>ALLOWED</td>
-<td>Returns the diff envelope without applying; per <a href="/docs/sdk-api/shared/#schema-evolution">shared.md § Schema evolution</a> and <a href="/docs/schema-evolution/">schema-evolution.md</a>.</td>
+<td>Returns the diff envelope without applying; per <a href="/docs/schema-evolution/">schema-evolution.md</a>.</td>
 <td><a href="https://github.com/beava-dev/beava/blob/main/examples/wire/register-dry-run.request.json"><code>examples/wire/register-dry-run.request.json</code></a></td>
 </tr>
 <tr>
@@ -906,7 +892,6 @@ first-class global aggregation (<code>@bv.table</code> no <code>key=</code> / <c
   <div class="toc-title">On this page</div>
   <ul class="toc-list">
       <li><a href="#how-to-read-this-doc">How to read this doc</a></li>
-      <li><a href="#cross-language-note">Cross-language note</a></li>
       <li><a href="#boolean-sum-trick-recommended-pattern-for-conditional-counts">Boolean-sum trick (recommended pattern for conditional counts)</a></li>
       <li><a href="#ambiguity-matrix">Ambiguity Matrix</a></li>
       <li><a href="#cross-references">Cross-references</a></li>

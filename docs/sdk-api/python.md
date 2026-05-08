@@ -1,19 +1,15 @@
 # beava Python SDK
 
-> **Status:** Authoritative for v0. Documents the **v0 target** Python
-> SDK shape — v0 implements the rewrite. Cross-language semantics
-> live in [shared.md](shared.md); wire-level body shapes live in
-> [docs/wire-spec.md](../wire-spec.md).
+> **Status:** Authoritative for v0. Wire-level body shapes live in
+> [docs/wire-spec.md](../wire-spec.md); structured error codes live in
+> [docs/error-codes.md](../error-codes.md).
 > **Last reviewed:** 2026-05-03.
 
 ## Overview
 
 Python is the **canonical authoring UX** for beava (per project memory
 `project_v2_devex_first` + `project_beava_product`). Feature engineers reach
-for Python first; the TypeScript and Go SDKs are ports of the Python surface
-into idiomatic JS / Go. Wire semantics are identical across languages
-(per [shared.md](shared.md)); per-language idioms differ where the language
-demands them.
+for Python first; v0 ships the Python SDK only.
 
 The v0 Python public surface is:
 
@@ -106,8 +102,7 @@ Each public method maps 1:1 to a wire opcode:
 
 ### Constructor
 
-`bv.App(url=None, *, timeout=30.0)` — the URL controls transport selection
-per [shared.md § Wire transports](shared.md#wire-transports):
+`bv.App(url=None, *, timeout=30.0)` — the URL controls transport selection:
 
 - `http://...` / `https://...` → HTTP/JSON transport.
 - `tcp://...` → custom-framed TCP transport.
@@ -165,9 +160,8 @@ JSON payload, and dispatches.
 **Raises:**
 
 - `RegistrationError` — local validation failed OR server returned 4xx / 5xx.
-  `.code` carries the structured error code per [shared.md § ValidationError envelope](shared.md#validationerror-envelope);
-  `.errors` lists all `ValidationError` entries when the server returns
-  multiple problems.
+  `.code` carries the structured error code; `.errors` lists all
+  `ValidationError` entries when the server returns multiple problems.
 - `RuntimeError` — App is closed, or embed-mode used without context manager.
 
 ### `app.push(event_name, fields)`
@@ -211,7 +205,7 @@ name → value — for the requested `(table, key)` pair.
 
 **Returns:** `dict[str, Any]` mapping feature name to value. **Cold-start**
 (no events ever pushed for this key) returns `{}` — this is **not** an
-error per [shared.md § FeatureResult shape](shared.md#featureresult-shape).
+error.
 
 **Raises:**
 
@@ -237,8 +231,7 @@ cold-start is `{}`.
 **Raises:**
 
 - `ValidationError` — same set as `app.get(...)` plus `batch_too_large`
-  (when more than `max_batch_size` entries; default 10000). Per
-  [shared.md § Error semantics](shared.md#error-semantics), v0 has **no
+  (when more than `max_batch_size` entries; default 10000). v0 has **no
   partial success** — any single bad entry fails the whole batch.
 
 ### `app.reset()`
@@ -292,13 +285,13 @@ class Txn:
     user_id: str
     amount: float
     merchant: str
-    ip: bv.Optional[str] # nullable per shared.md § Field types
+    ip: bv.Optional[str] # nullable
 ```
 
 The class body declares the event's **schema** via Python type annotations.
-Supported field types are the 6-element vocabulary from
-[shared.md § Field types](shared.md#field-types). Use `bv.Optional[T]` (NOT
-`typing.Optional[T]`) for nullable fields.
+Supported field types are the 6-element vocabulary: `str`, `i64` (Python
+`int`), `f64` (Python `float`), `bool`, `bytes`, `datetime`. Use
+`bv.Optional[T]` (NOT `typing.Optional[T]`) for nullable fields.
 
 **Per-source kwargs:**
 
@@ -510,12 +503,9 @@ bv.sum(bv.col("is_fraud").cast(int), window="1h") # ✗ raises RegistrationError
 bv.sum(bv.col("amount") * 2, window="1h") # ✗ same
 ```
 
-Why: v0 keeps the `bv.sum(field: str)` shape stable across all 3 SDKs (TS
-`bv.sum("field", { window: "1h" })`, Go `beava.Sum("field", beava.Window("1h"))`).
-Allowing arbitrary `_ExprAST` field args in Python only would split the
-contract — TS and Go would either need feature-parity (extra wire surface)
-or stay narrower (unequal SDKs). Locking the signature to `field: str`
-keeps every SDK at parity and keeps the wire contract minimal.
+Why: locking the signature to `field: str` keeps the wire contract minimal
+and forces materialisation of derived columns through `with_columns(...)`,
+which the engine can reason about explicitly at register time.
 
 The SDK raises `RegistrationError(code="schema_mismatch")` at register-time
 when the field arg is not a string.
@@ -541,19 +531,12 @@ event row before the `group_by(...)` keys it. The aggregation then sums a
 plain `i64` field, exactly as the wire shape expects.
 
 > **See:** [`docs/pipeline-dsl/compilation-rules.md`](../pipeline-dsl/compilation-rules.md)
-> § Boolean-sum recipe (forthcoming) for the canonical
-> worked example, the corresponding wire JSON, and the ambiguity-matrix
-> FORBIDDEN row that locks this rule across all 3 SDKs.
+> § Boolean-sum recipe (forthcoming) for the canonical worked example, the
+> corresponding wire JSON, and the ambiguity-matrix FORBIDDEN row.
 
-This narrowing applies **symmetrically** across the
-[TypeScript SDK](typescript.md) and the [Go SDK](go.md). All three express
-the same rule with idiomatic syntax:
-
-| Language | Forbidden | Recommended |
-|----------|-----------|-------------|
-| Python | `bv.sum(bv.col("flag").cast(int), window="1h")` | `events.with_columns(flag_int=bv.col("flag").cast(int)).group_by(...).agg(c=bv.sum("flag_int", window="1h"))` |
-| TypeScript | `bv.sum(bv.col("flag").cast("int"), { window: "1h" })` | `events.withColumns({ flag_int: bv.col("flag").cast("int") }).groupBy(...).agg({ c: bv.sum("flag_int", { window: "1h" }) })` |
-| Go | `beava.Sum(beava.Col("flag").Cast("int"), beava.Window("1h"))` | `events.WithColumns(map[string]beava.Expr{ "flag_int": beava.Col("flag").Cast("int") }).GroupBy(...).Agg(...)` |
+| Forbidden | Recommended |
+|-----------|-------------|
+| `bv.sum(bv.col("flag").cast(int), window="1h")` | `events.with_columns(flag_int=bv.col("flag").cast(int)).group_by(...).agg(c=bv.sum("flag_int", window="1h"))` |
 
 ## Pipeline DSL (chained methods on Event/Table)
 
@@ -631,7 +614,7 @@ events.with_columns(rate=bv.col("count") / bv.lit(60.0))
 events.filter(bv.col("amount") > bv.lit(100))
 ```
 
-The implicit operator-overloading coercion (`bv.col("x") > 100`) still works — `bv.lit` is for cases where explicit construction matters (constant columns, type-coercion patterns, cross-language parity with TS/Go SDKs that lack Python's flexible operator overloading).
+The implicit operator-overloading coercion (`bv.col("x") > 100`) still works — `bv.lit` is for cases where explicit construction matters (constant columns, type-coercion patterns).
 
 `bv.lit` lands in v0 (`python/beava/__init__.py`, ~5 LOC). Acceptance gate: `python/tests/v0/test_lit.py` (an internal plan, 5 tests).
 
@@ -746,11 +729,9 @@ class ValidationError:
     message: str
 ```
 
-The 9 valid `ValidationError.kind` values are documented in
-[shared.md § ValidationError envelope](shared.md#validationerror-envelope).
-The full alphabetised structured-code list with HTTP status mapping lives
-at [`docs/error-codes.md`](../error-codes.md) (an internal plan — forward
-reference).
+The 9 valid `ValidationError.kind` values and the full alphabetised
+structured-code list with HTTP status mapping live at
+[`docs/error-codes.md`](../error-codes.md).
 
 ## bv.test fixtures
 
@@ -807,14 +788,10 @@ near-equality (relative tolerance `1e-9`) for sketch-based ops like
 
 ## Plan-level traceability
 
-This document is authored by an internal plan (Wave 1). Downstream consumers:
-
-- [`docs/sdk-api/typescript.md`](typescript.md) — TS SDK port mirrors this surface.
-- [`docs/sdk-api/go.md`](go.md) — Go SDK port mirrors this surface.
-- **v0** — Python SDK rewrite reads this doc as the canonical
-  surface; lands the v0-target shape (full `_agg.py` 53 helpers, full
-  `_app.py` with `batch_get` / `reset`, `@bv.table` revival).
-- **v0** — TS + Go SDK ports use this doc as the parity reference.
+This document is the canonical surface for the v0 Python SDK. The Python
+SDK lives at `python/beava/` and reads this doc as its acceptance contract
+(full `_agg.py` 53 helpers, full `_app.py` with `batch_get` / `reset`,
+`@bv.table` revival).
 
 For the planning history, see
 [`.planning/phases/v0-design-contract-spec-docs/v0-PLAN.md`](../../.planning/phases/v0-design-contract-spec-docs/v0-PLAN.md).

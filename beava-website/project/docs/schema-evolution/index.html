@@ -55,12 +55,9 @@
     </ul>
   </div>
   <div class="side-section">
-    <div class="side-title">SDK references</div>
+    <div class="side-title">SDK reference</div>
     <ul class="side-list">
-      <li><a class="side-link" href="/docs/sdk-api/shared/">Cross-language parity</a></li>
       <li><a class="side-link" href="/docs/sdk-api/python/">Python SDK</a></li>
-      <li><a class="side-link" href="/docs/sdk-api/typescript/">TypeScript SDK</a></li>
-      <li><a class="side-link" href="/docs/sdk-api/go/">Go SDK</a></li>
     </ul>
   </div>
   <div class="side-section">
@@ -120,9 +117,7 @@
 <blockquote>
 <p><strong>Status:</strong> Authoritative for v0. Documents the register-time semantics for
 additive descriptor changes (the default), destructive changes (<code>force=true</code>),
-and dry-run validation (<code>dry_run=true</code>). The contract is shared across all 3
-SDKs (Python / TypeScript / Go) per
-<a href="/docs/sdk-api/shared/#schema-evolution">shared.md § Schema evolution</a>.
+and dry-run validation (<code>dry_run=true</code>).
 <strong>Last reviewed:</strong> 2026-05-03.</p>
 </blockquote>
 <h2 id="overview" tabindex="-1"><a class="header-anchor" href="#overview" aria-hidden="true">#</a> Overview</h2>
@@ -524,12 +519,7 @@ and response shapes.</li>
 this document references (<code>registration_conflict</code>, <code>schema_mismatch</code>,
 <code>unsupported_node_kind</code>, <code>unbounded_op_in_lifetime_mode</code>, etc.) with HTTP
 status mapping.</li>
-<li><a href="/docs/sdk-api/shared/#schema-evolution">SDK API — shared</a> — cross-language
-surface for the <code>force</code> and <code>dry_run</code> flags (Python kwargs / TS options /
-Go functional options).</li>
-<li><a href="/docs/sdk-api/python/">SDK API — Python</a> — Python-specific <code>app.register(*, force=False, dry_run=False)</code> signature.</li>
-<li><a href="/docs/sdk-api/typescript/">SDK API — TypeScript</a> — TS <code>app.register(descs, { force, dryRun })</code> signature.</li>
-<li><a href="/docs/sdk-api/go/">SDK API — Go</a> — Go <code>app.Register(ctx, descs, beava.WithForce(), beava.WithDryRun())</code> signature.</li>
+<li><a href="/docs/sdk-api/python/">SDK API — Python</a> — <code>app.register(*, force=False, dry_run=False)</code> signature.</li>
 <li><a href="/docs/pipeline-dsl/compilation-rules/#ambiguity-matrix">Pipeline DSL Compilation Rules — Ambiguity Matrix</a>
 — the FORBIDDEN rows enumerate which structural changes the validator
 rejects unconditionally (<code>force=true</code> does NOT bypass them).</li>

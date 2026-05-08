@@ -55,12 +55,9 @@
     </ul>
   </div>
   <div class="side-section">
-    <div class="side-title">SDK references</div>
+    <div class="side-title">SDK reference</div>
     <ul class="side-list">
-      <li><a class="side-link" href="/docs/sdk-api/shared/">Cross-language parity</a></li>
       <li><a class="side-link" href="/docs/sdk-api/python/">Python SDK</a></li>
-      <li><a class="side-link" href="/docs/sdk-api/typescript/">TypeScript SDK</a></li>
-      <li><a class="side-link" href="/docs/sdk-api/go/">Go SDK</a></li>
     </ul>
   </div>
   <div class="side-section">
@@ -288,7 +285,7 @@ and backslash-escape <code>\\</code> and <code>'</code> per the grammar.</p>
 auto-wraps Python scalars on either side of binary ops. Use it when you
 need an explicit literal at a position the SDK cannot infer (e.g., as a
 positional argument to a future call expression).</p>
-<p>Per <a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-003-global-aggregation-and-bv-lit.md">ADR-003</a>, <code>bv.lit</code> is the <strong>canonical public surface</strong> for literal construction across all three SDKs (Python <code>bv.lit(value)</code>, TypeScript <code>bv.lit(value)</code>, Go <code>beava.Lit(value)</code>). The implicit operator-overloading coercion path keeps working in Python; <code>bv.lit</code> is exposed for explicit cases (constant columns via <code>events.with_columns(source=bv.lit(&quot;web&quot;))</code>, type-coercion patterns, and cross-language parity with TS/Go SDKs that lack Python's flexible operator overloading).</p>
+<p>Per <a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-003-global-aggregation-and-bv-lit.md">ADR-003</a>, <code>bv.lit</code> is the <strong>canonical public surface</strong> for literal construction in the Python SDK. The implicit operator-overloading coercion path keeps working; <code>bv.lit</code> is exposed for explicit cases (constant columns via <code>events.with_columns(source=bv.lit(&quot;web&quot;))</code>, type-coercion patterns).</p>
 <h2 id="compilation-every-node-knows-how-to-emit" tabindex="-1"><a class="header-anchor" href="#compilation-every-node-knows-how-to-emit" aria-hidden="true">#</a> Compilation: every node knows how to emit</h2>
 <p>Each <code>_ExprAST</code> subclass implements <code>to_expr_string()</code>. The SDK calls this
 at register time when serialising:</p>

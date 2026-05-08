@@ -2,9 +2,7 @@
 
 > **Status:** Authoritative for v0. Documents the register-time semantics for
 > additive descriptor changes (the default), destructive changes (`force=true`),
-> and dry-run validation (`dry_run=true`). The contract is shared across all 3
-> SDKs (Python / TypeScript / Go) per
-> [shared.md § Schema evolution](sdk-api/shared.md#schema-evolution).
+> and dry-run validation (`dry_run=true`).
 > **Last reviewed:** 2026-05-03.
 
 ## Overview
@@ -238,15 +236,8 @@ returns a generic "unknown variant" / "unknown field" message.
   this document references (`registration_conflict`, `schema_mismatch`,
   `unsupported_node_kind`, `unbounded_op_in_lifetime_mode`, etc.) with HTTP
   status mapping.
-- [SDK API — shared](sdk-api/shared.md#schema-evolution) — cross-language
-  surface for the `force` and `dry_run` flags (Python kwargs / TS options /
-  Go functional options).
-- [SDK API — Python](sdk-api/python.md) — Python-specific `app.register(*,
-  force=False, dry_run=False)` signature.
-- [SDK API — TypeScript](sdk-api/typescript.md) — TS `app.register(descs,
-  { force, dryRun })` signature.
-- [SDK API — Go](sdk-api/go.md) — Go `app.Register(ctx, descs,
-  beava.WithForce(), beava.WithDryRun())` signature.
+- [SDK API — Python](sdk-api/python.md) — `app.register(*, force=False,
+  dry_run=False)` signature.
 - [Pipeline DSL Compilation Rules — Ambiguity Matrix](pipeline-dsl/compilation-rules.md#ambiguity-matrix)
   — the FORBIDDEN rows enumerate which structural changes the validator
   rejects unconditionally (`force=true` does NOT bypass them).

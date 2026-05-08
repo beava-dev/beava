@@ -55,12 +55,9 @@
     </ul>
   </div>
   <div class="side-section">
-    <div class="side-title">SDK references</div>
+    <div class="side-title">SDK reference</div>
     <ul class="side-list">
-      <li><a class="side-link" href="/docs/sdk-api/shared/">Cross-language parity</a></li>
       <li><a class="side-link" href="/docs/sdk-api/python/">Python SDK</a></li>
-      <li><a class="side-link" href="/docs/sdk-api/typescript/">TypeScript SDK</a></li>
-      <li><a class="side-link" href="/docs/sdk-api/go/">Go SDK</a></li>
     </ul>
   </div>
   <div class="side-section">
@@ -196,13 +193,24 @@
 </blockquote>
 <h2 id="see-also" tabindex="-1"><a class="header-anchor" href="#see-also" aria-hidden="true">#</a> See also</h2>
 <ul>
-<li><a href="/docs/operators/">Operator catalog index</a> — full 53-op catalogue (decay is the 6-op family)</li>
-<li><a href="/docs/operators/cost-class/">cost-class.md</a> — per-op CPU tier metadata (all six decay ops are Tier 1)</li>
-<li><a href="../velocity/">Velocity family</a> — sibling family for slope-style and inter-arrival statistics, including <code>rate_of_change</code></li>
-<li><a href="../core/">Core family</a> — fixed-window arithmetic mean / variance / sum / count counterparts</li>
-<li><a href="/docs/sdk-api/shared/">shared.md window grammar</a> — duration-string format (<code>\d+(ms\|s\|m\|h\|d)</code> and the <code>&quot;forever&quot;</code> literal)</li>
-<li>Per-operator memory governance: <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a> — every lifetime aggregation operator declares a finite per-entity memory ceiling at register-time</li>
-<li><a href="/docs/pipeline-dsl/compilation-rules/">Pipeline DSL compilation rules</a> — how <code>bv.&lt;op&gt;(...)</code> calls compile to JSON wire form</li>
+<li>
+<p><a href="/docs/operators/">Operator catalog index</a> — full 53-op catalogue (decay is the 6-op family)</p>
+</li>
+<li>
+<p><a href="/docs/operators/cost-class/">cost-class.md</a> — per-op CPU tier metadata (all six decay ops are Tier 1)</p>
+</li>
+<li>
+<p><a href="../velocity/">Velocity family</a> — sibling family for slope-style and inter-arrival statistics, including <code>rate_of_change</code></p>
+</li>
+<li>
+<p><a href="../core/">Core family</a> — fixed-window arithmetic mean / variance / sum / count counterparts</p>
+</li>
+<li>
+<p>Per-operator memory governance: <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a> — every lifetime aggregation operator declares a finite per-entity memory ceiling at register-time</p>
+</li>
+<li>
+<p><a href="/docs/pipeline-dsl/compilation-rules/">Pipeline DSL compilation rules</a> — how <code>bv.&lt;op&gt;(...)</code> calls compile to JSON wire form</p>
+</li>
 </ul>
 
 </article>

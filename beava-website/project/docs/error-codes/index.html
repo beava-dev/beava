@@ -55,12 +55,9 @@
     </ul>
   </div>
   <div class="side-section">
-    <div class="side-title">SDK references</div>
+    <div class="side-title">SDK reference</div>
     <ul class="side-list">
-      <li><a class="side-link" href="/docs/sdk-api/shared/">Cross-language parity</a></li>
       <li><a class="side-link" href="/docs/sdk-api/python/">Python SDK</a></li>
-      <li><a class="side-link" href="/docs/sdk-api/typescript/">TypeScript SDK</a></li>
-      <li><a class="side-link" href="/docs/sdk-api/go/">Go SDK</a></li>
     </ul>
   </div>
   <div class="side-section">
@@ -136,8 +133,8 @@ conforming to <a href="https://github.com/beava-dev/beava/blob/main/examples/wir
 </code></pre>
 <p>The <strong><code>code</code></strong> field is a stable structured identifier — renaming a code
 (e.g., <code>schema_mismatch</code> → <code>field_type_mismatch</code>) is a breaking change that
-requires an ADR. Across all 3 SDKs (Python / TypeScript / Go), error handling
-should dispatch on <code>code</code>, <strong>not</strong> on the human-readable <code>message</code>.</p>
+requires an ADR. Error handling should dispatch on <code>code</code>, <strong>not</strong> on the
+human-readable <code>message</code>.</p>
 <p>The <strong><code>path</code></strong> field is an optional DAG / JSON path locating the offending
 element. Examples: <code>&quot;descriptors[1].schema.amount&quot;</code> (during register
 validation), <code>&quot;fields.amount&quot;</code> (during push), <code>&quot;requests[2].table&quot;</code> (during
@@ -186,8 +183,6 @@ language-idiomatic dispatching.</p>
 validation errors in a single response (the fail-soft batching pattern).
 For single-error responses, <code>errors</code> is empty and the top-level <code>code</code> /
 <code>path</code> / <code>message</code> carries the singleton.</p>
-<p>For TypeScript and Go equivalents see
-<a href="/docs/sdk-api/shared/#error-semantics">shared.md § Error semantics</a>.</p>
 <h2 id="validationerror-kinds-9-frozen-values" tabindex="-1"><a class="header-anchor" href="#validationerror-kinds-9-frozen-values" aria-hidden="true">#</a> ValidationError kinds (9 frozen values)</h2>
 <p>The 9 <code>kind</code> values are <strong>frozen for v0</strong> — adding a new kind requires an
 ADR. Source: <code>python/beava/_errors.py::VALIDATION_ERROR_KINDS</code>.</p>
@@ -267,9 +262,9 @@ windowed-only op (e.g., <code>bloom_member</code>) was given a <code>window=</co
 (<code>window_not_supported</code>). Or: required-window op (<code>sum</code>, <code>avg</code>, <code>min</code>, <code>max</code>,
 <code>variance</code>, <code>stddev</code>) had <code>window=</code> omitted.
 <strong>Path:</strong> <code>descriptors[&lt;i&gt;].agg.&lt;feature&gt;.params.window</code>.
-<strong>Recovery:</strong> Provide a valid duration string per the
-<a href="/docs/sdk-api/shared/#window-grammar">shared.md window grammar</a>. Examples: <code>&quot;5m&quot;</code>,
-<code>&quot;1h&quot;</code>, <code>&quot;100ms&quot;</code>, <code>&quot;7d&quot;</code>, <code>&quot;forever&quot;</code>.</p>
+<strong>Recovery:</strong> Provide a valid duration string matching <code>\d+(ms|s|m|h|d)</code>
+or the literal <code>&quot;forever&quot;</code>. Examples: <code>&quot;5m&quot;</code>, <code>&quot;1h&quot;</code>, <code>&quot;100ms&quot;</code>, <code>&quot;7d&quot;</code>,
+<code>&quot;forever&quot;</code>.</p>
 <h3 id="code-aggregationontablenotsupported" tabindex="-1"><a class="header-anchor" href="#code-aggregationontablenotsupported" aria-hidden="true">#</a> code = &quot;aggregation_on_table_not_supported&quot;</h3>
 <p><strong>HTTP status:</strong> 400
 <strong>When:</strong> A <code>@bv.table</code> aggregation references another <code>@bv.table</code> as its
@@ -800,8 +795,6 @@ appears in a per-opcode error table in the wire spec.</li>
 destructive paths; <code>force=true</code> and <code>dry_run=true</code> flag semantics.</li>
 <li><a href="/docs/pipeline-dsl/compilation-rules/#ambiguity-matrix">Pipeline DSL Compilation Rules — Ambiguity Matrix</a>
 — every FORBIDDEN row links to one of the codes above.</li>
-<li><a href="/docs/sdk-api/shared/#error-semantics">SDK API — shared</a> — cross-language
-error-handling semantics.</li>
 <li><a href="/docs/sdk-api/python/">SDK API — Python</a> — <code>RegistrationError</code> /
 <code>BinaryNotFoundError</code> / <code>ValidationError</code> Python signatures.</li>
 <li><a href="https://github.com/beava-dev/beava/blob/main/examples/wire/schemas/error.schema.json"><code>examples/wire/schemas/error.schema.json</code></a>

@@ -55,12 +55,9 @@
     </ul>
   </div>
   <div class="side-section">
-    <div class="side-title">SDK references</div>
+    <div class="side-title">SDK reference</div>
     <ul class="side-list">
-      <li><a class="side-link" href="/docs/sdk-api/shared/">Cross-language parity</a></li>
       <li><a class="side-link" href="/docs/sdk-api/python/">Python SDK</a></li>
-      <li><a class="side-link" href="/docs/sdk-api/typescript/">TypeScript SDK</a></li>
-      <li><a class="side-link" href="/docs/sdk-api/go/">Go SDK</a></li>
     </ul>
   </div>
   <div class="side-section">
@@ -132,12 +129,9 @@
 <li><a href="https://github.com/beava-dev/beava/blob/main/examples/wire/schemas/">examples/wire/schemas/</a> — 13 JSON Schema 2020-12 contract files</li>
 <li><a href="https://github.com/beava-dev/beava/blob/main/examples/wire/">examples/wire/</a> — 20 worked-example fixtures (per opcode + global-table fixtures per ADR-003)</li>
 </ul>
-<h2 id="sdk-references" tabindex="-1"><a class="header-anchor" href="#sdk-references" aria-hidden="true">#</a> SDK references</h2>
+<h2 id="sdk-reference" tabindex="-1"><a class="header-anchor" href="#sdk-reference" aria-hidden="true">#</a> SDK reference</h2>
 <ul>
-<li><a href="/docs/sdk-api/shared/">docs/sdk-api/shared.md</a> — cross-language semantic parity contract</li>
-<li><a href="/docs/sdk-api/python/">docs/sdk-api/python.md</a> — Python SDK (canonical implementation)</li>
-<li><a href="/docs/sdk-api/typescript/">docs/sdk-api/typescript.md</a> — TypeScript SDK</li>
-<li><a href="/docs/sdk-api/go/">docs/sdk-api/go.md</a> — Go SDK</li>
+<li><a href="/docs/sdk-api/python/">docs/sdk-api/python.md</a> — Python SDK</li>
 </ul>
 <h2 id="pipeline-dsl" tabindex="-1"><a class="header-anchor" href="#pipeline-dsl" aria-hidden="true">#</a> Pipeline DSL</h2>
 <ul>
@@ -191,10 +185,8 @@
 <h2 id="examples-runnable" tabindex="-1"><a class="header-anchor" href="#examples-runnable" aria-hidden="true">#</a> Examples (runnable)</h2>
 <ul>
 <li>Python: <a href="https://github.com/beava-dev/beava/blob/main/examples/python/">examples/python/{adtech,fraud,ecommerce}.py</a> (run with <code>python3</code>)</li>
-<li>TypeScript: <a href="https://github.com/beava-dev/beava/blob/main/examples/typescript/">examples/typescript/{adtech,fraud,ecommerce}.ts</a> (run with <code>npx tsx</code>)</li>
-<li>Go: <a href="https://github.com/beava-dev/beava/blob/main/examples/go/">examples/go/{adtech,fraud,ecommerce}.go</a> (run with <code>go run</code>)</li>
 </ul>
-<p>Smoke test: <code>bash examples/test_examples.sh</code> — runs all 9 demos against language-local mocks (Python <code>MockApp</code> shim, TS+Go stubs).</p>
+<p>Smoke test: <code>bash examples/test_examples.sh</code> — runs the demos against the Python <code>MockApp</code> shim.</p>
 <p>Wire fixtures: <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/">examples/wire/</a> — 20 JSON request + response + error fixtures per opcode (REGISTER / PUSH / GET / BATCH_GET / RESET / PING).</p>
 <h2 id="project-commitments-locked" tabindex="-1"><a class="header-anchor" href="#project-commitments-locked" aria-hidden="true">#</a> Project commitments (locked)</h2>
 <ul>
@@ -219,7 +211,7 @@ Everything not in scope for v0 is out of scope.</p>
   <ul class="toc-list">
       <li><a href="#quickstart">Quickstart</a></li>
       <li><a href="#wire-contract">Wire contract</a></li>
-      <li><a href="#sdk-references">SDK references</a></li>
+      <li><a href="#sdk-reference">SDK reference</a></li>
       <li><a href="#pipeline-dsl">Pipeline DSL</a></li>
       <li><a href="#operator-catalog">Operator catalog</a></li>
       <li><a href="#concepts">Concepts</a></li>

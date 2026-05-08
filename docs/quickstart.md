@@ -250,13 +250,6 @@ resulting features. Source:
 [examples/python/fraud.py](../examples/python/fraud.py),
 [examples/python/ecommerce.py](../examples/python/ecommerce.py).
 
-> **Cross-language note:** Pipeline authoring is **Python-only** in v0.
-> The [TypeScript](./sdk-api/typescript.md) and [Go](./sdk-api/go.md)
-> SDKs push events, register pre-compiled JSON descriptors (authored
-> from Python), and read features. Use Python to design the pipeline;
-> TS/Go services push events + read features against the same
-> registered pipeline.
-
 ## Next steps
 
 - **API reference:** [docs/sdk-api/python.md](./sdk-api/python.md) —
@@ -265,8 +258,7 @@ resulting features. Source:
   — all 54 op pages (`count`, `sum`, `mean`, `n_unique`, `quantile`,
   `ewma`, …)
 - **Wire contract:** [docs/wire-spec.md](./wire-spec.md) — frame
-  format + JSON Schema 2020-12 contracts (for porting to other
-  languages)
+  format + JSON Schema 2020-12 contracts
 - **Pipeline DSL:** [docs/pipeline-dsl/overview.md](./pipeline-dsl/overview.md)
   — `@bv.event`, `@bv.table`, chain methods, expressions
 - **Architecture:** [docs/architecture/](./architecture/) —

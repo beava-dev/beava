@@ -1,6 +1,6 @@
 # beava Wire Spec
 
-> **Status:** Authoritative for v0. Engine and all SDKs (Python, TypeScript, Go) MUST conform to this spec.
+> **Status:** Authoritative for v0. The engine and the Python SDK MUST conform to this spec.
 > **JSON Schema dialect:** [Draft 2020-12](https://json-schema.org/draft/2020-12/schema).
 > **Last reviewed:** 2026-05-03.
 
@@ -10,7 +10,7 @@ beava speaks two transports — **HTTP/1.1 + JSON** for compatibility with curl,
 
 Correlation on the TCP transport follows **Redis-style strict-FIFO**: the order of responses on a connection matches the order of requests, and there is no `request_id` or `correlation_id` field anywhere in the wire format. This keeps the protocol simple, eliminates an entire class of header-bookkeeping bugs in client implementations, and makes the framed envelope as small as possible.
 
-This document is **authoritative**. Where prose and JSON Schema disagree, the JSON Schema in [`examples/wire/schemas/`](../examples/wire/schemas/) wins — schemas are machine-validatable contracts, prose is explanatory. A CI test in the engine (`crates/beava-server/tests/wire_spec_validates.rs`) loads every schema and asserts every fixture under [`examples/wire/`](../examples/wire/) validates against its corresponding schema. The Python, TypeScript, and Go SDKs consume the same fixtures via language-native validators.
+This document is **authoritative**. Where prose and JSON Schema disagree, the JSON Schema in [`examples/wire/schemas/`](../examples/wire/schemas/) wins — schemas are machine-validatable contracts, prose is explanatory. A CI test in the engine (`crates/beava-server/tests/wire_spec_validates.rs`) loads every schema and asserts every fixture under [`examples/wire/`](../examples/wire/) validates against its corresponding schema. The Python SDK consumes the same fixtures via `jsonschema`.
 
 The opcode-discovery question — "which family of body shape do I parse?" — is answered by the **opcode** in the TCP frame header (or the URL path on HTTP). Within a body, polymorphic shapes are disambiguated by a JSON **`kind`** discriminator. Specifically, `OP_REGISTER` carries a `kind=event|table|derivation` discriminator that selects between three sub-shapes; all other opcodes have a single body shape per direction.
 
@@ -211,7 +211,7 @@ See [`examples/wire/register-global-counter.request.json`](../examples/wire/regi
 
 `OP_BATCH_GET` accepts mixed per-entity + global lookups in the same batch (heterogeneous batches can include both shapes — global lookups simply set `key` to `""`). See `examples/wire/batch_get-heterogeneous.request.json` for the per-entity variant; the global variant inside the same batch is `{"table": "GlobalCounter", "key": ""}`.
 
-**Surface in v0:** `@bv.table` with no `key=` declares a global table; `events.group_by()` with no keys + `events.agg(**aggs)` produces global aggregations; `App.get(table_name)` (1-arg overload) reads the global row. The TS and Go SDKs expose equivalent overloads. Acceptance gate: `python/tests/v0/test_global.py` (8 tests).
+**Surface in v0:** `@bv.table` with no `key=` declares a global table; `events.group_by()` with no keys + `events.agg(**aggs)` produces global aggregations; `App.get(table_name)` (1-arg overload) reads the global row. Acceptance gate: `python/tests/v0/test_global.py` (8 tests).
 
 ### OP_PUSH (0x0010)
 
@@ -422,7 +422,7 @@ This wire spec is shaped by the following Architecture Decision Records:
 
 - **[ADR-001](../.planning/decisions/ADR-001-bv-table-partial-overturn.md)** — `@bv.table` aggregation-output revival (partial overturn of v0 events-only scope). The wire-spec uses `kind=table` in register payloads per ADR-001. Mutation paths (`upsert` / `delete` / `retract`) and MVCC remain killed.
 
-- **[ADR-002](../.planning/decisions/ADR-002-polars-op-rename.md)** — Polars op renames. Register payloads use the **new** op-string names (`mean`, `var`, `std`, `n_unique`, `quantile`). The Rust engine's internal `AggKind` enum variant names (`AggKind::Avg`, `AggKind::Variance`, etc.) are unchanged — only the public string mapping changes. The Python SDK ships deprecation aliases for the old names; the TS and Go SDKs ship no aliases.
+- **[ADR-002](../.planning/decisions/ADR-002-polars-op-rename.md)** — Polars op renames. Register payloads use the **new** op-string names (`mean`, `var`, `std`, `n_unique`, `quantile`). The Rust engine's internal `AggKind` enum variant names (`AggKind::Avg`, `AggKind::Variance`, etc.) are unchanged — only the public string mapping changes. The Python SDK ships deprecation aliases for the old names.
 
 ## Validation harness.
 
@@ -430,13 +430,7 @@ The schemas under [`examples/wire/schemas/`](../examples/wire/schemas/) and the 
 
 - **Engine-side (Rust):** `crates/beava-server/tests/wire_spec_validates.rs` (lands in v0) loads every `examples/wire/schemas/*.schema.json` and asserts every `examples/wire/*.json` (excluding the `schemas/` subdirectory) validates against its corresponding schema. The Rust validator crate is **`boon`** — chosen because it has full Draft 2020-12 support; the older `jsonschema` Rust crate has only partial 2020-12 coverage.
 
-- **Python SDK:** the SDK test suite runs the same fixtures through Python's [`jsonschema`](https://pypi.org/project/jsonschema/) library (`Draft202012Validator`) as part of its unit tests. The harness lives at [`examples/wire/_validate_examples.py`](../examples/wire/_validate_examples.py) and is the authoritative cross-language validation reference.
-
-- **TypeScript SDK:** uses [Ajv](https://ajv.js.org/) v8+ via `import Ajv2020 from "ajv/dist/2020"` (Ajv splits Draft 2020-12 into a separate import to avoid bundling bloat).
-
-- **Go SDK:** uses [`santhosh-tekuri/jsonschema/v6`](https://github.com/santhosh-tekuri/jsonschema), which supports Draft 2020-12.
-
-this doc ships the schemas + examples + Python validator. The Rust engine harness ships in v0. The TS + Go validators ship in v0 alongside the SDK ports themselves.
+- **Python SDK:** the SDK test suite runs the same fixtures through Python's [`jsonschema`](https://pypi.org/project/jsonschema/) library (`Draft202012Validator`) as part of its unit tests. The harness lives at [`examples/wire/_validate_examples.py`](../examples/wire/_validate_examples.py) and is the authoritative validation reference.
 
 ## Stable contract guarantees
 

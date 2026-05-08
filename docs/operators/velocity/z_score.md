@@ -50,7 +50,7 @@ The wire-form `params` field is still `"window"`.
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `field` | `str` | Yes | — | Numeric field (`i64` or `f64`) to track. Non-numeric values are silently skipped. |
-| `baseline_window` | `str` | Yes | — | Duration string matching `\d+(ms\|s\|m\|h\|d)` or `"forever"`. Defines the look-back baseline against which the current event is z-scored. See [shared.md window grammar](../../sdk-api/shared.md). |
+| `baseline_window` | `str` | Yes | — | Duration string matching `\d+(ms\|s\|m\|h\|d)` or `"forever"`. Defines the look-back baseline against which the current event is z-scored. |
 | `where` | `bv.Col` | No | `None` | Boolean expression on event fields; only matching events update the baseline (and the cached `last_value`). |
 
 ## Returns

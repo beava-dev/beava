@@ -15,12 +15,9 @@ beava is a single-binary feature server. Push events in over HTTP, declare aggre
 - [examples/wire/schemas/](../examples/wire/schemas/) — 13 JSON Schema 2020-12 contract files
 - [examples/wire/](../examples/wire/) — 20 worked-example fixtures (per opcode + global-table fixtures per ADR-003)
 
-## SDK references
+## SDK reference
 
-- [docs/sdk-api/shared.md](./sdk-api/shared.md) — cross-language semantic parity contract
-- [docs/sdk-api/python.md](./sdk-api/python.md) — Python SDK (canonical implementation)
-- [docs/sdk-api/typescript.md](./sdk-api/typescript.md) — TypeScript SDK
-- [docs/sdk-api/go.md](./sdk-api/go.md) — Go SDK
+- [docs/sdk-api/python.md](./sdk-api/python.md) — Python SDK
 
 ## Pipeline DSL
 
@@ -71,10 +68,8 @@ beava is a single-binary feature server. Push events in over HTTP, declare aggre
 ## Examples (runnable)
 
 - Python: [examples/python/{adtech,fraud,ecommerce}.py](../examples/python/) (run with `python3`)
-- TypeScript: [examples/typescript/{adtech,fraud,ecommerce}.ts](../examples/typescript/) (run with `npx tsx`)
-- Go: [examples/go/{adtech,fraud,ecommerce}.go](../examples/go/) (run with `go run`)
 
-Smoke test: `bash examples/test_examples.sh` — runs all 9 demos against language-local mocks (Python `MockApp` shim, TS+Go stubs).
+Smoke test: `bash examples/test_examples.sh` — runs the demos against the Python `MockApp` shim.
 
 Wire fixtures: [examples/wire/](../examples/wire/) — 20 JSON request + response + error fixtures per opcode (REGISTER / PUSH / GET / BATCH_GET / RESET / PING).
 

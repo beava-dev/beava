@@ -55,12 +55,9 @@
     </ul>
   </div>
   <div class="side-section">
-    <div class="side-title">SDK references</div>
+    <div class="side-title">SDK reference</div>
     <ul class="side-list">
-      <li><a class="side-link" href="/docs/sdk-api/shared/">Cross-language parity</a></li>
       <li><a class="side-link" href="/docs/sdk-api/python/">Python SDK</a></li>
-      <li><a class="side-link" href="/docs/sdk-api/typescript/">TypeScript SDK</a></li>
-      <li><a class="side-link" href="/docs/sdk-api/go/">Go SDK</a></li>
     </ul>
   </div>
   <div class="side-section">
@@ -224,7 +221,6 @@
 <li><a href="../decay/">Decay family</a> — sibling family for exponentially-weighted statistics; <a href="/docs/operators/decay/ew_zscore/"><code>bv.ew_zscore</code></a> is the drift-aware counterpart to <a href="/docs/operators/velocity/z_score/"><code>bv.z_score</code></a>, and <a href="/docs/operators/decay/ewma/"><code>bv.ewma</code></a> is the smoothed counterpart to the underlying signals fed into <a href="/docs/operators/velocity/trend/"><code>bv.trend</code></a> / <a href="/docs/operators/velocity/rate_of_change/"><code>bv.rate_of_change</code></a></li>
 <li><a href="../sketch/">Sketch family</a> — sibling family for cardinality / quantile / categorical estimators; <a href="/docs/operators/sketch/entropy/"><code>bv.entropy</code></a> and <a href="/docs/operators/sketch/n_unique/"><code>bv.n_unique</code></a> are non-numeric-friendly anomaly primitives</li>
 <li><a href="../recency/">Recency family</a> — sibling family for &quot;when did this entity last act?&quot; — <a href="/docs/operators/recency/streak/"><code>bv.streak</code></a> pairs naturally with <a href="/docs/operators/velocity/value_change_count/"><code>bv.value_change_count</code></a> (consecutive matches vs. flips)</li>
-<li><a href="/docs/sdk-api/shared/">shared.md window grammar</a> — duration-string format (<code>\d+(ms\|s\|m\|h\|d)</code> and the <code>&quot;forever&quot;</code> literal)</li>
 <li>Per-operator memory governance: <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a> — every lifetime aggregation operator declares a finite per-entity memory ceiling at register-time</li>
 <li><a href="/docs/pipeline-dsl/compilation-rules/">Pipeline DSL compilation rules</a> — how <code>bv.&lt;op&gt;(...)</code> calls compile to JSON wire form</li>
 </ul>

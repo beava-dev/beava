@@ -55,12 +55,9 @@
     </ul>
   </div>
   <div class="side-section">
-    <div class="side-title">SDK references</div>
+    <div class="side-title">SDK reference</div>
     <ul class="side-list">
-      <li><a class="side-link" href="/docs/sdk-api/shared/">Cross-language parity</a></li>
       <li><a class="side-link active" href="/docs/sdk-api/python/">Python SDK</a></li>
-      <li><a class="side-link" href="/docs/sdk-api/typescript/">TypeScript SDK</a></li>
-      <li><a class="side-link" href="/docs/sdk-api/go/">Go SDK</a></li>
     </ul>
   </div>
   <div class="side-section">
@@ -118,19 +115,15 @@
 <article class="docs-prose">
 <h1>beava Python SDK</h1>
 <blockquote>
-<p><strong>Status:</strong> Authoritative for v0. Documents the <strong>v0 target</strong> Python
-SDK shape — v0 implements the rewrite. Cross-language semantics
-live in <a href="/docs/sdk-api/shared/">shared.md</a>; wire-level body shapes live in
-<a href="/docs/wire-spec/">docs/wire-spec.md</a>.
+<p><strong>Status:</strong> Authoritative for v0. Wire-level body shapes live in
+<a href="/docs/wire-spec/">docs/wire-spec.md</a>; structured error codes live in
+<a href="/docs/error-codes/">docs/error-codes.md</a>.
 <strong>Last reviewed:</strong> 2026-05-03.</p>
 </blockquote>
 <h2 id="overview" tabindex="-1"><a class="header-anchor" href="#overview" aria-hidden="true">#</a> Overview</h2>
 <p>Python is the <strong>canonical authoring UX</strong> for beava (per project memory
 <code>project_v2_devex_first</code> + <code>project_beava_product</code>). Feature engineers reach
-for Python first; the TypeScript and Go SDKs are ports of the Python surface
-into idiomatic JS / Go. Wire semantics are identical across languages
-(per <a href="/docs/sdk-api/shared/">shared.md</a>); per-language idioms differ where the language
-demands them.</p>
+for Python first; v0 ships the Python SDK only.</p>
 <p>The v0 Python public surface is:</p>
 <ul>
 <li>The <code>bv.App</code> client class (the 7 lifecycle methods plus context-manager support).</li>
@@ -250,8 +243,7 @@ class App:
 </tbody>
 </table>
 <h3 id="constructor" tabindex="-1"><a class="header-anchor" href="#constructor" aria-hidden="true">#</a> Constructor</h3>
-<p><code>bv.App(url=None, *, timeout=30.0)</code> — the URL controls transport selection
-per <a href="/docs/sdk-api/shared/#wire-transports">shared.md § Wire transports</a>:</p>
+<p><code>bv.App(url=None, *, timeout=30.0)</code> — the URL controls transport selection:</p>
 <ul>
 <li><code>http://...</code> / <code>https://...</code> → HTTP/JSON transport.</li>
 <li><code>tcp://...</code> → custom-framed TCP transport.</li>
@@ -299,9 +291,8 @@ carries <code>{added, removed, changed, diff}</code>; <code>registry_version</co
 <p><strong>Raises:</strong></p>
 <ul>
 <li><code>RegistrationError</code> — local validation failed OR server returned 4xx / 5xx.
-<code>.code</code> carries the structured error code per <a href="/docs/sdk-api/shared/#validationerror-envelope">shared.md § ValidationError envelope</a>;
-<code>.errors</code> lists all <code>ValidationError</code> entries when the server returns
-multiple problems.</li>
+<code>.code</code> carries the structured error code; <code>.errors</code> lists all
+<code>ValidationError</code> entries when the server returns multiple problems.</li>
 <li><code>RuntimeError</code> — App is closed, or embed-mode used without context manager.</li>
 </ul>
 <h3 id="apppusheventname-fields" tabindex="-1"><a class="header-anchor" href="#apppusheventname-fields" aria-hidden="true">#</a> <code>app.push(event_name, fields)</code></h3>
@@ -338,7 +329,7 @@ for composite-key tables.</li>
 </ul>
 <p><strong>Returns:</strong> <code>dict[str, Any]</code> mapping feature name to value. <strong>Cold-start</strong>
 (no events ever pushed for this key) returns <code>{}</code> — this is <strong>not</strong> an
-error per <a href="/docs/sdk-api/shared/#featureresult-shape">shared.md § FeatureResult shape</a>.</p>
+error.</p>
 <p><strong>Raises:</strong></p>
 <ul>
 <li><code>ValidationError</code> — <code>unknown_table</code>, <code>feature_not_in_table</code>, <code>key_shape_mismatch</code>.</li>
@@ -359,8 +350,7 @@ cold-start is <code>{}</code>.</p>
 <p><strong>Raises:</strong></p>
 <ul>
 <li><code>ValidationError</code> — same set as <code>app.get(...)</code> plus <code>batch_too_large</code>
-(when more than <code>max_batch_size</code> entries; default 10000). Per
-<a href="/docs/sdk-api/shared/#error-semantics">shared.md § Error semantics</a>, v0 has <strong>no
+(when more than <code>max_batch_size</code> entries; default 10000). v0 has <strong>no
 partial success</strong> — any single bad entry fails the whole batch.</li>
 </ul>
 <h3 id="appreset" tabindex="-1"><a class="header-anchor" href="#appreset" aria-hidden="true">#</a> <code>app.reset()</code></h3>
@@ -398,12 +388,12 @@ class Txn:
     user_id: str
     amount: float
     merchant: str
-    ip: bv.Optional[str] # nullable per shared.md § Field types
+    ip: bv.Optional[str] # nullable
 </code></pre>
 <p>The class body declares the event's <strong>schema</strong> via Python type annotations.
-Supported field types are the 6-element vocabulary from
-<a href="/docs/sdk-api/shared/#field-types">shared.md § Field types</a>. Use <code>bv.Optional[T]</code> (NOT
-<code>typing.Optional[T]</code>) for nullable fields.</p>
+Supported field types are the 6-element vocabulary: <code>str</code>, <code>i64</code> (Python
+<code>int</code>), <code>f64</code> (Python <code>float</code>), <code>bool</code>, <code>bytes</code>, <code>datetime</code>. Use
+<code>bv.Optional[T]</code> (NOT <code>typing.Optional[T]</code>) for nullable fields.</p>
 <p><strong>Per-source kwargs:</strong></p>
 <pre><code class="language-python">@bv.event(
     keep_events_for=&quot;30d&quot;, # event retention; default None (unbounded)
@@ -629,12 +619,9 @@ The Python <code>bv.sum(field: str, ...)</code> signature accepts a string colum
 bv.sum(bv.col(&quot;is_fraud&quot;).cast(int), window=&quot;1h&quot;) # ✗ raises RegistrationError
 bv.sum(bv.col(&quot;amount&quot;) * 2, window=&quot;1h&quot;) # ✗ same
 </code></pre>
-<p>Why: v0 keeps the <code>bv.sum(field: str)</code> shape stable across all 3 SDKs (TS
-<code>bv.sum(&quot;field&quot;, { window: &quot;1h&quot; })</code>, Go <code>beava.Sum(&quot;field&quot;, beava.Window(&quot;1h&quot;))</code>).
-Allowing arbitrary <code>_ExprAST</code> field args in Python only would split the
-contract — TS and Go would either need feature-parity (extra wire surface)
-or stay narrower (unequal SDKs). Locking the signature to <code>field: str</code>
-keeps every SDK at parity and keeps the wire contract minimal.</p>
+<p>Why: locking the signature to <code>field: str</code> keeps the wire contract minimal
+and forces materialisation of derived columns through <code>with_columns(...)</code>,
+which the engine can reason about explicitly at register time.</p>
 <p>The SDK raises <code>RegistrationError(code=&quot;schema_mismatch&quot;)</code> at register-time
 when the field arg is not a string.</p>
 <h3 id="recommended-pattern-two-stage-withcolumns-sum" tabindex="-1"><a class="header-anchor" href="#recommended-pattern-two-stage-withcolumns-sum" aria-hidden="true">#</a> Recommended pattern: two-stage <code>with_columns</code> + <code>sum</code></h3>
@@ -654,36 +641,20 @@ event row before the <code>group_by(...)</code> keys it. The aggregation then su
 plain <code>i64</code> field, exactly as the wire shape expects.</p>
 <blockquote>
 <p><strong>See:</strong> <a href="/docs/pipeline-dsl/compilation-rules/"><code>docs/pipeline-dsl/compilation-rules.md</code></a>
-§ Boolean-sum recipe (forthcoming) for the canonical
-worked example, the corresponding wire JSON, and the ambiguity-matrix
-FORBIDDEN row that locks this rule across all 3 SDKs.</p>
+§ Boolean-sum recipe (forthcoming) for the canonical worked example, the
+corresponding wire JSON, and the ambiguity-matrix FORBIDDEN row.</p>
 </blockquote>
-<p>This narrowing applies <strong>symmetrically</strong> across the
-<a href="/docs/sdk-api/typescript/">TypeScript SDK</a> and the <a href="/docs/sdk-api/go/">Go SDK</a>. All three express
-the same rule with idiomatic syntax:</p>
 <table>
 <thead>
 <tr>
-<th>Language</th>
 <th>Forbidden</th>
 <th>Recommended</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Python</td>
 <td><code>bv.sum(bv.col(&quot;flag&quot;).cast(int), window=&quot;1h&quot;)</code></td>
 <td><code>events.with_columns(flag_int=bv.col(&quot;flag&quot;).cast(int)).group_by(...).agg(c=bv.sum(&quot;flag_int&quot;, window=&quot;1h&quot;))</code></td>
-</tr>
-<tr>
-<td>TypeScript</td>
-<td><code>bv.sum(bv.col(&quot;flag&quot;).cast(&quot;int&quot;), { window: &quot;1h&quot; })</code></td>
-<td><code>events.withColumns({ flag_int: bv.col(&quot;flag&quot;).cast(&quot;int&quot;) }).groupBy(...).agg({ c: bv.sum(&quot;flag_int&quot;, { window: &quot;1h&quot; }) })</code></td>
-</tr>
-<tr>
-<td>Go</td>
-<td><code>beava.Sum(beava.Col(&quot;flag&quot;).Cast(&quot;int&quot;), beava.Window(&quot;1h&quot;))</code></td>
-<td><code>events.WithColumns(map[string]beava.Expr{ &quot;flag_int&quot;: beava.Col(&quot;flag&quot;).Cast(&quot;int&quot;) }).GroupBy(...).Agg(...)</code></td>
 </tr>
 </tbody>
 </table>
@@ -796,7 +767,7 @@ events.with_columns(rate=bv.col(&quot;count&quot;) / bv.lit(60.0))
 # Explicit literal in filter (equivalent to implicit operator-overloading coercion)
 events.filter(bv.col(&quot;amount&quot;) &gt; bv.lit(100))
 </code></pre>
-<p>The implicit operator-overloading coercion (<code>bv.col(&quot;x&quot;) &gt; 100</code>) still works — <code>bv.lit</code> is for cases where explicit construction matters (constant columns, type-coercion patterns, cross-language parity with TS/Go SDKs that lack Python's flexible operator overloading).</p>
+<p>The implicit operator-overloading coercion (<code>bv.col(&quot;x&quot;) &gt; 100</code>) still works — <code>bv.lit</code> is for cases where explicit construction matters (constant columns, type-coercion patterns).</p>
 <p><code>bv.lit</code> lands in v0 (<code>python/beava/__init__.py</code>, ~5 LOC). Acceptance gate: <code>python/tests/v0/test_lit.py</code> (an internal plan, 5 tests).</p>
 <h2 id="global-aggregation-per-adr-003" tabindex="-1"><a class="header-anchor" href="#global-aggregation-per-adr-003" aria-hidden="true">#</a> Global aggregation — per ADR-003</h2>
 <p>Per <a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-003-global-aggregation-and-bv-lit.md">ADR-003</a>, beava ships first-class <strong>global aggregation</strong> alongside the per-entity surface. Declare a global table by omitting the <code>key=</code> kwarg on <code>@bv.table</code>:</p>
@@ -966,11 +937,9 @@ class ValidationError:
     path: str
     message: str
 </code></pre>
-<p>The 9 valid <code>ValidationError.kind</code> values are documented in
-<a href="/docs/sdk-api/shared/#validationerror-envelope">shared.md § ValidationError envelope</a>.
-The full alphabetised structured-code list with HTTP status mapping lives
-at <a href="/docs/error-codes/"><code>docs/error-codes.md</code></a> (an internal plan — forward
-reference).</p>
+<p>The 9 valid <code>ValidationError.kind</code> values and the full alphabetised
+structured-code list with HTTP status mapping live at
+<a href="/docs/error-codes/"><code>docs/error-codes.md</code></a>.</p>
 <h2 id="bvtest-fixtures" tabindex="-1"><a class="header-anchor" href="#bvtest-fixtures" aria-hidden="true">#</a> bv.test fixtures</h2>
 <pre><code class="language-python">import pytest
 import beava as bv
@@ -1021,15 +990,10 @@ in v0.0.x and are removed in v0.1. The <code>DeprecationWarning</code> includes
 the new name.</li>
 </ul>
 <h2 id="plan-level-traceability" tabindex="-1"><a class="header-anchor" href="#plan-level-traceability" aria-hidden="true">#</a> Plan-level traceability</h2>
-<p>This document is authored by an internal plan (Wave 1). Downstream consumers:</p>
-<ul>
-<li><a href="/docs/sdk-api/typescript/"><code>docs/sdk-api/typescript.md</code></a> — TS SDK port mirrors this surface.</li>
-<li><a href="/docs/sdk-api/go/"><code>docs/sdk-api/go.md</code></a> — Go SDK port mirrors this surface.</li>
-<li><strong>v0</strong> — Python SDK rewrite reads this doc as the canonical
-surface; lands the v0-target shape (full <code>_agg.py</code> 53 helpers, full
-<code>_app.py</code> with <code>batch_get</code> / <code>reset</code>, <code>@bv.table</code> revival).</li>
-<li><strong>v0</strong> — TS + Go SDK ports use this doc as the parity reference.</li>
-</ul>
+<p>This document is the canonical surface for the v0 Python SDK. The Python
+SDK lives at <code>python/beava/</code> and reads this doc as its acceptance contract
+(full <code>_agg.py</code> 53 helpers, full <code>_app.py</code> with <code>batch_get</code> / <code>reset</code>,
+<code>@bv.table</code> revival).</p>
 <p>For the planning history, see
 <a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/v0-design-contract-spec-docs/v0-PLAN.md"><code>.planning/phases/v0-design-contract-spec-docs/v0-PLAN.md</code></a>.</p>
 

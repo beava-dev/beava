@@ -55,12 +55,9 @@
     </ul>
   </div>
   <div class="side-section">
-    <div class="side-title">SDK references</div>
+    <div class="side-title">SDK reference</div>
     <ul class="side-list">
-      <li><a class="side-link" href="/docs/sdk-api/shared/">Cross-language parity</a></li>
       <li><a class="side-link" href="/docs/sdk-api/python/">Python SDK</a></li>
-      <li><a class="side-link" href="/docs/sdk-api/typescript/">TypeScript SDK</a></li>
-      <li><a class="side-link" href="/docs/sdk-api/go/">Go SDK</a></li>
     </ul>
   </div>
   <div class="side-section">
@@ -202,8 +199,7 @@ the older <code>POST /push/{event_name}</code> form. The legacy event-name-suffi
 routes (<code>POST /push/{event_name}</code>, <code>POST /push-sync/{event_name}</code>,
 <code>POST /push-batch/{event_name}</code>) stay alive for back-compat and are
 documented in <a href="#note-on-event-name-routing">Note on event-name routing</a> at
-the bottom of this page. New code, including all 3 SDKs, uses the verb-style
-routes.</p>
+the bottom of this page. New code uses the verb-style routes.</p>
 <h2 id="authentication-and-headers" tabindex="-1"><a class="header-anchor" href="#authentication-and-headers" aria-hidden="true">#</a> Authentication and headers</h2>
 <p>beava v0 ships <strong>unauthenticated</strong>. The OSS launch is intentionally an
 &quot;unauthenticated single-process server&quot; — operators front it with whatever
@@ -438,10 +434,9 @@ types). Type coercion on the JSON boundary is allowed in v0 — string <code>&qu
 for an <code>i64</code> field is accepted (the JSON-to-Rust coercer handles common
 mismatches). Strict-mode rejection is v0.1+.</p>
 <blockquote>
-<p><strong>Pre-v0 form:</strong> the current engine accepts <code>POST /push/{event_name}</code> with
-body <code>{fields: {...}}</code> (no <code>event_name</code> key — it is in the URL path). Phase
-v0 mechanically renames to the verb-style form documented above. SDKs ship
-against the v0 form from day one (an internal plan Python, an internal plan TS + Go).</p>
+<p><strong>Legacy form:</strong> the engine still accepts <code>POST /push/{event_name}</code> with
+body <code>{fields: {...}}</code> (no <code>event_name</code> key — it is in the URL path) for
+back-compat. The Python SDK uses the verb-style form documented above.</p>
 </blockquote>
 <p><strong>Response body (success):</strong> see the wire-spec
 <a href="/docs/wire-spec/#op_push-0x0010"><code>OP_PUSH</code> response schema</a>. The full JSON
@@ -1232,36 +1227,19 @@ the HTTP transformation is <code>frame.body → request.body</code>).</li>
 characters require URL-encoding in the path-arg style; the body-arg style
 treats them as plain JSON strings.</li>
 </ul>
-<p>SDKs (an internal plan Python, an internal plan TS + Go) ship against the v0 form
-from day one. The Python SDK does NOT carry a deprecation-alias path for the
-old route — pre-v0 dev users (small group, no production deploys yet) move
-to the new form directly when they upgrade past v0.0.0. The deprecation
-window for the route rename is &quot;the gap between current code and v0.0.0
-release&quot;; once v0.0.0 ships, only the new form is supported.</p>
-<h2 id="plan-level-traceability" tabindex="-1"><a class="header-anchor" href="#plan-level-traceability" aria-hidden="true">#</a> Plan-level traceability</h2>
-<p>This document is authored by an internal plan (Wave 1). It declares the
-v0 target HTTP route table and is read by:</p>
+<p>The Python SDK ships against the verb-style form. The legacy
+<code>POST /push/{event_name}</code> form stays alive for back-compat with older
+dev clients; once v0.0.0 ships, new code should use the verb-style form.</p>
+<h2 id="see-also" tabindex="-1"><a class="header-anchor" href="#see-also" aria-hidden="true">#</a> See also</h2>
 <ul>
-<li>
-<p><strong>an internal plan</strong> (<code>docs/sdk-api/{python,typescript,go}.md</code>) — per-language
-SDK API specs target the verb-style routes documented here.</p>
-</li>
-<li>
-<p><strong>an internal plan</strong> (<code>docs/error-codes.md</code>) — alphabetised structured-code list
-referenced by the <code>code</code> field in this doc's error tables.</p>
-</li>
-<li>
-<p><strong>an internal plan</strong> (<code>docs/architecture/observability.md</code>) — admin sidecar
-metric catalogue referenced by <a href="#get-metrics">GET /metrics</a> above.</p>
-<p>to the verb-style form documented here.</p>
-</li>
-<li>
-<p>Python / TS / Go SDKs that send requests against
-these routes.</p>
-</li>
+<li><a href="/docs/sdk-api/python/"><code>docs/sdk-api/python.md</code></a> — Python SDK API surface
+targeting the verb-style routes documented here.</li>
+<li><a href="/docs/error-codes/"><code>docs/error-codes.md</code></a> — alphabetised structured-code list
+referenced by the <code>code</code> field in this doc's error tables.</li>
+<li><a href="/docs/architecture/observability/"><code>docs/architecture/observability.md</code></a> —
+admin sidecar metric catalogue referenced by <a href="#get-metrics">GET /metrics</a>
+above.</li>
 </ul>
-<p>For the planning history, see
-<a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/v0-design-contract-spec-docs/v0-PLAN.md"><code>.planning/phases/v0-design-contract-spec-docs/v0-PLAN.md</code></a>.</p>
 
 </article>
 </main>
@@ -1275,7 +1253,7 @@ these routes.</p>
       <li><a href="#error-envelope-format">Error envelope format</a></li>
       <li><a href="#connection-lifecycle">Connection lifecycle</a></li>
       <li><a href="#note-on-event-name-routing">Note on event-name routing</a></li>
-      <li><a href="#plan-level-traceability">Plan-level traceability</a></li>
+      <li><a href="#see-also">See also</a></li>
   </ul>
 </aside>
 </div>

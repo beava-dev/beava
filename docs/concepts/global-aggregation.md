@@ -63,8 +63,6 @@ Note the `App.get` arity:
 - **Global table:** `app.get(table_name)` → 1 arg required.
 - **Mismatch raises `KeyError`** with a clear message indicating the table's expected arity.
 
-In the Go SDK (per Go's typing convention favoring separate methods over arity overloading), use `app.GetGlobal(tableName)` instead of an overloaded `app.Get`.
-
 ## Sentinel mechanism (implementation detail)
 
 On the wire, global state lives at the sentinel `key = ""` (empty string). The engine routes empty-string entity_id through the same per-entity hashmap machinery — no new code path, no new opcode, no new schema. The `&str` key path handles `""` natively.

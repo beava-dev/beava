@@ -227,7 +227,7 @@ auto-wraps Python scalars on either side of binary ops. Use it when you
 need an explicit literal at a position the SDK cannot infer (e.g., as a
 positional argument to a future call expression).
 
-Per [ADR-003](../../.planning/decisions/ADR-003-global-aggregation-and-bv-lit.md), `bv.lit` is the **canonical public surface** for literal construction across all three SDKs (Python `bv.lit(value)`, TypeScript `bv.lit(value)`, Go `beava.Lit(value)`). The implicit operator-overloading coercion path keeps working in Python; `bv.lit` is exposed for explicit cases (constant columns via `events.with_columns(source=bv.lit("web"))`, type-coercion patterns, and cross-language parity with TS/Go SDKs that lack Python's flexible operator overloading).
+Per [ADR-003](../../.planning/decisions/ADR-003-global-aggregation-and-bv-lit.md), `bv.lit` is the **canonical public surface** for literal construction in the Python SDK. The implicit operator-overloading coercion path keeps working; `bv.lit` is exposed for explicit cases (constant columns via `events.with_columns(source=bv.lit("web"))`, type-coercion patterns).
 
 ## Compilation: every node knows how to emit
 

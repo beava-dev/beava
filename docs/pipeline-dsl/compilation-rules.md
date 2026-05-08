@@ -1,10 +1,8 @@
 # Pipeline DSL Compilation Rules
 
-> **Status:** Authoritative for v0. Documents the **v0 target** Python
-> → JSON wire compilation contract. SDK porters in v0 (TypeScript + Go)
-> consume this doc as the canonical reference for what their compilers MUST
-> emit. Where this doc and the current `python/beava/` source disagree, this
-> doc wins — v0 implements the target shape.
+> **Status:** Authoritative for v0. Documents the Python → JSON wire
+> compilation contract. Where this doc and the current `python/beava/`
+> source disagree, this doc wins.
 > **Last reviewed:** 2026-05-03.
 
 ## How to read this doc
@@ -23,15 +21,6 @@ section documents the v0-locked recommended pattern for conditional counts
 The [Ambiguity Matrix](#ambiguity-matrix) at the bottom rules out 20+ edge
 cases as ALLOWED / FORBIDDEN / UNDEFINED with a fixture link or structured
 error code per row.
-
-## Cross-language note
-
-Every JSON-wire shape below is what **all 3 SDKs** (Python, TypeScript, Go)
-MUST emit. The Python source is the reference syntax — TS uses
-`event.filter(col("amount").gt(100))` and Go uses
-`event.Filter(col("amount").Gt(100))`, but both compile to the same wire JSON
-shown here. Cross-language semantic parity is locked in
-[shared.md](../sdk-api/shared.md).
 
 ---
 
@@ -442,9 +431,7 @@ evaluation walks the AST. Type checking is enforced at register time per
 ### window= kwarg semantics
 
 > **Important:** the kwarg name is `window=`. All aggregation helpers in
-> `bv.<op>(...)` use the `window` keyword per `python/beava/_agg.py`
-> (verified RESEARCH §4 codebase verification). Do not append a `-d` suffix
-> when porting to TS / Go — the keyword stays `window` across all 3 SDKs.
+> `bv.<op>(...)` use the `window` keyword per `python/beava/_agg.py`.
 
 #### Python source
 
@@ -497,7 +484,7 @@ The `window=` kwarg controls per-entity state shape:
   with `aggregation_invalid_half_life`.
 
 The grammar for `window` strings is `\d+(ms|s|m|h|d)` or `forever` — leading
-digit `1-9` (no `0ms`); see [shared.md § Window grammar](../sdk-api/shared.md#window-grammar).
+digit `1-9` (no `0ms`).
 
 ---
 
@@ -622,7 +609,7 @@ Per ADR-003, the engine routes `entity_id = ""` (empty string) through the same 
 
 All 53 operators work in both per-entity and global modes — semantics identical, only the state-keying dimension differs. Standard memory governance applies: `cold_after=` doesn't affect global state (always-live); lifetime ops still subject to V0-MEM-GOV-02 lifetime-bound enforcement.
 
-Implementation deferred to v0 (engine, ~30 LOC) + v0 (Python SDK, ~110 LOC) + v0 (TS + Go SDK overloads, ~150 LOC). Acceptance gate: `python/tests/v0/test_global.py` (an internal plan, 8 tests).
+Acceptance gate: `python/tests/v0/test_global.py` (8 tests).
 
 See [`docs/concepts/global-aggregation.md`](../concepts/global-aggregation.md) for the full conceptual treatment.
 
@@ -714,7 +701,7 @@ fixture (ALLOWED) or a structured error code (FORBIDDEN).
 | `@bv.table(key="user_id")` function form | ALLOWED per ADR-001 | Wraps `events.group_by(...).agg(...)` into a derivation node with `output_kind=table`. | [`examples/wire/register-fraud-team.request.json`](../../examples/wire/register-fraud-team.request.json) |
 | `@bv.table` (no `key=` kwarg) → global table | ALLOWED + RECOMMENDED for global use cases per ADR-003 | Declares a global table — single output dict, wire-level signal `key: []`. Use for monitoring / dashboards / anomaly detection / top-K-globally features. | [`examples/wire/register-global-counter.request.json`](../../examples/wire/register-global-counter.request.json) |
 | `events.agg(**aggs)` direct (no `group_by`) | ALLOWED per ADR-003 — equivalent to `events.group_by().agg(...)` | Polars-aligned shorthand for global aggregation. Compiles to the same wire payload as the explicit empty `group_by`. | (no fixture; same wire payload as global `@bv.table` row above) |
-| `app.get("GlobalTable")` (1-arg) | ALLOWED per ADR-003 — Python+TS arity overload | Returns the global feature dict. Equivalent to the wire request `{"table": "...", "key": ""}`. Go SDK uses `app.GetGlobal(ctx, "...")` (separate method per Go convention). | [`examples/wire/get-global.request.json`](../../examples/wire/get-global.request.json) + [`examples/wire/get-global.response.json`](../../examples/wire/get-global.response.json) |
+| `app.get("GlobalTable")` (1-arg) | ALLOWED per ADR-003 — arity overload | Returns the global feature dict. Equivalent to the wire request `{"table": "...", "key": ""}`. | [`examples/wire/get-global.request.json`](../../examples/wire/get-global.request.json) + [`examples/wire/get-global.response.json`](../../examples/wire/get-global.response.json) |
 | `bv.lit(value)` in expression chains | ALLOWED per ADR-003 — public literal factory | Promotes the existing internal `_Literal` AST node to public namespace. Use cases: constant columns, type-coercion patterns, cross-language parity. | (no fixture; existing literal grammar) |
 | `@bv.table` aggregating ANOTHER table | FORBIDDEN — table-to-table aggregation deferred | Only events feed aggregations in v0; aggregation on a `Table` upstream is rejected. | `RegistrationError(code="aggregation_on_table_not_supported")` |
 | `@bv.table` class form | FORBIDDEN — class form deferred to v0.1+ | v0 ships function form only per ADR-001. The class-form decorator is captured in `.planning/ideas/v0.1-deferrals.md`. | `RegistrationError(code="bv_table_class_form_not_supported")` |
@@ -724,7 +711,7 @@ fixture (ALLOWED) or a structured error code (FORBIDDEN).
 | `bv.session(gap_ms=..., inner=...)` (session windows) | FORBIDDEN — session windows v0.1+ | Per `.planning/ideas/session-windows-v0.1.md`. | `RegistrationError(code="session_windows_not_supported_in_v0")` |
 | `bv.fork(...)` | FORBIDDEN — `bv.fork` dropped from v0 + v0.1 | Per ROADMAP §13 deferral list. | `AttributeError` on `bv` namespace |
 | `bv.union(*events)` | FORBIDDEN — deferred with joins | Multiplex client-side for v0; first-class union returns alongside joins in a future minor. | `RegistrationError(code="unions_not_supported_in_v0")` |
-| `dry_run=True` flag on `app.register(...)` | ALLOWED | Returns the diff envelope without applying; per [shared.md § Schema evolution](../sdk-api/shared.md#schema-evolution) and [schema-evolution.md](../schema-evolution.md). | [`examples/wire/register-dry-run.request.json`](../../examples/wire/register-dry-run.request.json) |
+| `dry_run=True` flag on `app.register(...)` | ALLOWED | Returns the diff envelope without applying; per [schema-evolution.md](../schema-evolution.md). | [`examples/wire/register-dry-run.request.json`](../../examples/wire/register-dry-run.request.json) |
 | `force=True` flag on `app.register(...)` | ALLOWED | Permits destructive register (field type change / removal). Affected aggregations are zeroed. | [`examples/wire/register-force.request.json`](../../examples/wire/register-force.request.json) |
 
 ## Cross-references

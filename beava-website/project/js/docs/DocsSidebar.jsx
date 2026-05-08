@@ -20,7 +20,7 @@ const Chev = () => (
 //                     /docs/concepts/global-aggregation/
 //   Vision          — /docs/vision/open-source/, /docs/vision/benchmarks/
 //   Reference       — /docs/operators/cost-class/ + 7 operator family pages,
-//                     /docs/pipeline-dsl/* (3), /docs/sdk-api/{typescript,go,shared}/,
+//                     /docs/pipeline-dsl/* (3), /docs/sdk-api/python/,
 //                     /docs/wire-spec/, /docs/schema-evolution/, /docs/error-codes/
 //   Architecture    — entire section (6 pages)
 //   Community       — /docs/community/dev-calls/,

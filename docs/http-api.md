@@ -52,8 +52,7 @@ the older `POST /push/{event_name}` form. The legacy event-name-suffixed
 routes (`POST /push/{event_name}`, `POST /push-sync/{event_name}`,
 `POST /push-batch/{event_name}`) stay alive for back-compat and are
 documented in [Note on event-name routing](#note-on-event-name-routing) at
-the bottom of this page. New code, including all 3 SDKs, uses the verb-style
-routes.
+the bottom of this page. New code uses the verb-style routes.
 
 ## Authentication and headers
 
@@ -178,10 +177,9 @@ types). Type coercion on the JSON boundary is allowed in v0 — string `"42"`
 for an `i64` field is accepted (the JSON-to-Rust coercer handles common
 mismatches). Strict-mode rejection is v0.1+.
 
-> **Pre-v0 form:** the current engine accepts `POST /push/{event_name}` with
-> body `{fields: {...}}` (no `event_name` key — it is in the URL path). Phase
-> v0 mechanically renames to the verb-style form documented above. SDKs ship
-> against the v0 form from day one (an internal plan Python, an internal plan TS + Go).
+> **Legacy form:** the engine still accepts `POST /push/{event_name}` with
+> body `{fields: {...}}` (no `event_name` key — it is in the URL path) for
+> back-compat. The Python SDK uses the verb-style form documented above.
 
 **Response body (success):** see the wire-spec
 [`OP_PUSH` response schema](wire-spec.md#op_push-0x0010). The full JSON
@@ -664,28 +662,16 @@ Polars / DuckDB voice (`feedback_beava_website_voice`):
   characters require URL-encoding in the path-arg style; the body-arg style
   treats them as plain JSON strings.
 
-SDKs (an internal plan Python, an internal plan TS + Go) ship against the v0 form
-from day one. The Python SDK does NOT carry a deprecation-alias path for the
-old route — pre-v0 dev users (small group, no production deploys yet) move
-to the new form directly when they upgrade past v0.0.0. The deprecation
-window for the route rename is "the gap between current code and v0.0.0
-release"; once v0.0.0 ships, only the new form is supported.
+The Python SDK ships against the verb-style form. The legacy
+`POST /push/{event_name}` form stays alive for back-compat with older
+dev clients; once v0.0.0 ships, new code should use the verb-style form.
 
-## Plan-level traceability
+## See also
 
-This document is authored by an internal plan (Wave 1). It declares the
-v0 target HTTP route table and is read by:
-
-- **an internal plan** (`docs/sdk-api/{python,typescript,go}.md`) — per-language
-  SDK API specs target the verb-style routes documented here.
-- **an internal plan** (`docs/error-codes.md`) — alphabetised structured-code list
+- [`docs/sdk-api/python.md`](sdk-api/python.md) — Python SDK API surface
+  targeting the verb-style routes documented here.
+- [`docs/error-codes.md`](error-codes.md) — alphabetised structured-code list
   referenced by the `code` field in this doc's error tables.
-- **an internal plan** (`docs/architecture/observability.md`) — admin sidecar
-  metric catalogue referenced by [GET /metrics](#get-metrics) above.
-
-  to the verb-style form documented here.
-- Python / TS / Go SDKs that send requests against
-  these routes.
-
-For the planning history, see
-[`.planning/phases/v0-design-contract-spec-docs/v0-PLAN.md`](../.planning/phases/v0-design-contract-spec-docs/v0-PLAN.md).
+- [`docs/architecture/observability.md`](architecture/observability.md) —
+  admin sidecar metric catalogue referenced by [GET /metrics](#get-metrics)
+  above.

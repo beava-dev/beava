@@ -136,10 +136,9 @@ The whole flow — discover binary, spawn, register, push, query, tear down
 - [`python/beava/_embed.py`](../../python/beava/_embed.py) — binary
   discovery + spawn / teardown implementation.
 - [sdk-api/python.md](../sdk-api/python.md) — `App.__init__` signature,
-  `App.close()`, `App.__enter__` / `__exit__`.
-- [sdk-api/shared.md](../sdk-api/shared.md) — transport selection (URL
+  `App.close()`, `App.__enter__` / `__exit__`, transport selection (URL
   scheme `tcp://` vs `http://` vs no-URL = embed).
 - [error-codes.md](../error-codes.md) — `BinaryNotFoundError` error
   envelope.
-- `docs/quickstart.md` (forthcoming, an internal plan) — `bv.demo()` flow
-  that uses embed mode.
+- [`docs/quickstart.md`](../quickstart.md) — `bv.demo()` flow that uses
+  embed mode.

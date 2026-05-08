@@ -20,12 +20,9 @@
       ]
     },
     {
-      "title": "SDK references",
+      "title": "SDK reference",
       "items": [
-        { "label": "Cross-language parity", "href": "/docs/sdk-api/shared/" },
-        { "label": "Python SDK",            "href": "/docs/sdk-api/python/" },
-        { "label": "TypeScript SDK",        "href": "/docs/sdk-api/typescript/" },
-        { "label": "Go SDK",                "href": "/docs/sdk-api/go/" }
+        { "label": "Python SDK", "href": "/docs/sdk-api/python/" }
       ]
     },
     {

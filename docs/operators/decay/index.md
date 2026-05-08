@@ -38,6 +38,6 @@ All six are `O(1)` memory per entity and Tier 1 CPU per [cost-class.md](../cost-
 - [cost-class.md](../cost-class.md) — per-op CPU tier metadata (all six decay ops are Tier 1)
 - [Velocity family](../velocity/) — sibling family for slope-style and inter-arrival statistics, including `rate_of_change`
 - [Core family](../core/) — fixed-window arithmetic mean / variance / sum / count counterparts
-- [shared.md window grammar](../../sdk-api/shared.md) — duration-string format (`\d+(ms\|s\|m\|h\|d)` and the `"forever"` literal)
+
 - Per-operator memory governance: [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) — every lifetime aggregation operator declares a finite per-entity memory ceiling at register-time
 - [Pipeline DSL compilation rules](../../pipeline-dsl/compilation-rules.md) — how `bv.<op>(...)` calls compile to JSON wire form

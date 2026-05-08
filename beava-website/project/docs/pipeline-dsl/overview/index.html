@@ -55,12 +55,9 @@
     </ul>
   </div>
   <div class="side-section">
-    <div class="side-title">SDK references</div>
+    <div class="side-title">SDK reference</div>
     <ul class="side-list">
-      <li><a class="side-link" href="/docs/sdk-api/shared/">Cross-language parity</a></li>
       <li><a class="side-link" href="/docs/sdk-api/python/">Python SDK</a></li>
-      <li><a class="side-link" href="/docs/sdk-api/typescript/">TypeScript SDK</a></li>
-      <li><a class="side-link" href="/docs/sdk-api/go/">Go SDK</a></li>
     </ul>
   </div>
   <div class="side-section">
@@ -200,11 +197,11 @@ class Txn:
     user_id: str
     amount: float
 </code></pre>
-<p>Field types come from the <a href="/docs/sdk-api/shared/#field-types">shared.md § Field types</a>
-vocabulary: <code>str</code>, <code>i64</code> (Python <code>int</code>), <code>f64</code> (Python <code>float</code>), <code>bool</code>,
-<code>bytes</code>, <code>datetime</code>. <code>event_time</code> fields are <strong>rejected at decoration time</strong>
-per <code>project_redis_shaped_no_event_time_ever</code> — beava is processing-time only;
-the server stamps wall-clock arrival time on every push.</p>
+<p>Field types use the 6-element vocabulary: <code>str</code>, <code>i64</code> (Python <code>int</code>),
+<code>f64</code> (Python <code>float</code>), <code>bool</code>, <code>bytes</code>, <code>datetime</code>. <code>event_time</code> fields
+are <strong>rejected at decoration time</strong> per
+<code>project_redis_shaped_no_event_time_ever</code> — beava is processing-time
+only; the server stamps wall-clock arrival time on every push.</p>
 <h3 id="function-form-derived-event" tabindex="-1"><a class="header-anchor" href="#function-form-derived-event" aria-hidden="true">#</a> Function form (derived event)</h3>
 <p>The function form takes one or more upstream event sources as
 parameter-annotated arguments and returns the result of a stateless op chain.
@@ -268,7 +265,7 @@ clicks.group_by().agg(total=bv.count(...)) # explicit empty group_by
 def Foo(c): return c.agg(total=bv.count(...))
 </code></pre>
 <p>All 53 operators work with both per-entity and global aggregation — same op semantics, different state-keying dimension. See <a href="/docs/concepts/global-aggregation/"><code>docs/concepts/global-aggregation.md</code></a> for the full conceptual treatment (when to use global vs per-entity, performance characteristics, composition with <code>cold_after=</code>).</p>
-<p>Implementation deferred to the engine rename + v0 (Python SDK no-<code>key=</code> form) + v0 (TS + Go SDK overloads). Acceptance gate: <code>python/tests/v0/test_global.py</code> (an internal plan, 8 tests).</p>
+<p>Acceptance gate: <code>python/tests/v0/test_global.py</code> (8 tests).</p>
 <h2 id="chain-methods-overview" tabindex="-1"><a class="header-anchor" href="#chain-methods-overview" aria-hidden="true">#</a> Chain methods overview</h2>
 <p>Stateless op methods are available on every <code>EventSource</code> and
 <code>EventDerivation</code> (and on the result of <code>.filter(...)</code> etc., enabling

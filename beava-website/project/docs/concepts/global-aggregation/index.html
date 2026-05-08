@@ -55,12 +55,9 @@
     </ul>
   </div>
   <div class="side-section">
-    <div class="side-title">SDK references</div>
+    <div class="side-title">SDK reference</div>
     <ul class="side-list">
-      <li><a class="side-link" href="/docs/sdk-api/shared/">Cross-language parity</a></li>
       <li><a class="side-link" href="/docs/sdk-api/python/">Python SDK</a></li>
-      <li><a class="side-link" href="/docs/sdk-api/typescript/">TypeScript SDK</a></li>
-      <li><a class="side-link" href="/docs/sdk-api/go/">Go SDK</a></li>
     </ul>
   </div>
   <div class="side-section">
@@ -217,7 +214,6 @@ app.get(&quot;TotalClicks&quot;)
 <li><strong>Global table:</strong> <code>app.get(table_name)</code> → 1 arg required.</li>
 <li><strong>Mismatch raises <code>KeyError</code></strong> with a clear message indicating the table's expected arity.</li>
 </ul>
-<p>In the Go SDK (per Go's typing convention favoring separate methods over arity overloading), use <code>app.GetGlobal(tableName)</code> instead of an overloaded <code>app.Get</code>.</p>
 <h2 id="sentinel-mechanism-implementation-detail" tabindex="-1"><a class="header-anchor" href="#sentinel-mechanism-implementation-detail" aria-hidden="true">#</a> Sentinel mechanism (implementation detail)</h2>
 <p>On the wire, global state lives at the sentinel <code>key = &quot;&quot;</code> (empty string). The engine routes empty-string entity_id through the same per-entity hashmap machinery — no new code path, no new opcode, no new schema. The <code>&amp;str</code> key path handles <code>&quot;&quot;</code> natively.</p>
 <p>This is intentionally implementation-leaking: alternatives like a dedicated <code>OP_GET_GLOBAL</code> opcode or a special header bit were rejected during ADR-003 discussion in favor of the simpler &quot;global is just another entity with key = ''&quot; model. The trade-off: empty-string sentinel composes cleanly with <code>OP_BATCH_GET</code> (heterogeneous batches can mix per-entity and global lookups by entity_id alone).</p>

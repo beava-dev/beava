@@ -44,7 +44,7 @@ state is itself lifetime-bound `O(1)`.
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `window` | `str` | Yes | — | Duration string matching `\d+(ms\|s\|m\|h\|d)` or `"forever"`. See [shared.md window grammar](../../sdk-api/shared.md). |
+| `window` | `str` | Yes | — | Duration string matching `\d+(ms\|s\|m\|h\|d)` or `"forever"`. |
 | `where` | `bv.Col` | No | `None` | Boolean expression on event fields; only matching events advance the inter-arrival accumulator. Non-matching events do not update `last_t`. |
 
 (No `field=` kwarg — `inter_arrival_stats` is field-less by design; passing a positional argument raises `TypeError` at SDK-helper-call time.)

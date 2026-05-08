@@ -22,8 +22,8 @@ conforming to [`error.schema.json`](../examples/wire/schemas/error.schema.json):
 
 The **`code`** field is a stable structured identifier — renaming a code
 (e.g., `schema_mismatch` → `field_type_mismatch`) is a breaking change that
-requires an ADR. Across all 3 SDKs (Python / TypeScript / Go), error handling
-should dispatch on `code`, **not** on the human-readable `message`.
+requires an ADR. Error handling should dispatch on `code`, **not** on the
+human-readable `message`.
 
 The **`path`** field is an optional DAG / JSON path locating the offending
 element. Examples: `"descriptors[1].schema.amount"` (during register
@@ -86,9 +86,6 @@ validation errors in a single response (the fail-soft batching pattern).
 For single-error responses, `errors` is empty and the top-level `code` /
 `path` / `message` carries the singleton.
 
-For TypeScript and Go equivalents see
-[shared.md § Error semantics](sdk-api/shared.md#error-semantics).
-
 ## ValidationError kinds (9 frozen values)
 
 The 9 `kind` values are **frozen for v0** — adding a new kind requires an
@@ -145,9 +142,9 @@ windowed-only op (e.g., `bloom_member`) was given a `window=` kwarg
 (`window_not_supported`). Or: required-window op (`sum`, `avg`, `min`, `max`,
 `variance`, `stddev`) had `window=` omitted.
 **Path:** `descriptors[<i>].agg.<feature>.params.window`.
-**Recovery:** Provide a valid duration string per the
-[shared.md window grammar](sdk-api/shared.md#window-grammar). Examples: `"5m"`,
-`"1h"`, `"100ms"`, `"7d"`, `"forever"`.
+**Recovery:** Provide a valid duration string matching `\d+(ms|s|m|h|d)`
+or the literal `"forever"`. Examples: `"5m"`, `"1h"`, `"100ms"`, `"7d"`,
+`"forever"`.
 
 ### code = "aggregation_on_table_not_supported"
 
@@ -752,8 +749,6 @@ even though the **codes** are retrospective.
   destructive paths; `force=true` and `dry_run=true` flag semantics.
 - [Pipeline DSL Compilation Rules — Ambiguity Matrix](pipeline-dsl/compilation-rules.md#ambiguity-matrix)
   — every FORBIDDEN row links to one of the codes above.
-- [SDK API — shared](sdk-api/shared.md#error-semantics) — cross-language
-  error-handling semantics.
 - [SDK API — Python](sdk-api/python.md) — `RegistrationError` /
   `BinaryNotFoundError` / `ValidationError` Python signatures.
 - [`examples/wire/schemas/error.schema.json`](../examples/wire/schemas/error.schema.json)

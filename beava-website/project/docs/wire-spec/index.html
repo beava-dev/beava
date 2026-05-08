@@ -55,12 +55,9 @@
     </ul>
   </div>
   <div class="side-section">
-    <div class="side-title">SDK references</div>
+    <div class="side-title">SDK reference</div>
     <ul class="side-list">
-      <li><a class="side-link" href="/docs/sdk-api/shared/">Cross-language parity</a></li>
       <li><a class="side-link" href="/docs/sdk-api/python/">Python SDK</a></li>
-      <li><a class="side-link" href="/docs/sdk-api/typescript/">TypeScript SDK</a></li>
-      <li><a class="side-link" href="/docs/sdk-api/go/">Go SDK</a></li>
     </ul>
   </div>
   <div class="side-section">
@@ -118,14 +115,14 @@
 <article class="docs-prose">
 <h1>beava Wire Spec</h1>
 <blockquote>
-<p><strong>Status:</strong> Authoritative for v0. Engine and all SDKs (Python, TypeScript, Go) MUST conform to this spec.
+<p><strong>Status:</strong> Authoritative for v0. The engine and the Python SDK MUST conform to this spec.
 <strong>JSON Schema dialect:</strong> <a href="https://json-schema.org/draft/2020-12/schema">Draft 2020-12</a>.
 <strong>Last reviewed:</strong> 2026-05-03.</p>
 </blockquote>
 <h2 id="overview" tabindex="-1"><a class="header-anchor" href="#overview" aria-hidden="true">#</a> Overview</h2>
 <p>beava speaks two transports — <strong>HTTP/1.1 + JSON</strong> for compatibility with curl, load balancers, WAFs, and any HTTP client; and a <strong>custom-framed TCP</strong> path for low-latency fast-path traffic. Both transports carry the <strong>same logical opcode set</strong> and the <strong>same JSON body shapes</strong>. Choosing one transport over the other is an operational decision (HTTP for reach + observability, TCP for tail latency); it is never a contract decision.</p>
 <p>Correlation on the TCP transport follows <strong>Redis-style strict-FIFO</strong>: the order of responses on a connection matches the order of requests, and there is no <code>request_id</code> or <code>correlation_id</code> field anywhere in the wire format. This keeps the protocol simple, eliminates an entire class of header-bookkeeping bugs in client implementations, and makes the framed envelope as small as possible.</p>
-<p>This document is <strong>authoritative</strong>. Where prose and JSON Schema disagree, the JSON Schema in <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/schemas/"><code>examples/wire/schemas/</code></a> wins — schemas are machine-validatable contracts, prose is explanatory. A CI test in the engine (<code>crates/beava-server/tests/wire_spec_validates.rs</code>) loads every schema and asserts every fixture under <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/"><code>examples/wire/</code></a> validates against its corresponding schema. The Python, TypeScript, and Go SDKs consume the same fixtures via language-native validators.</p>
+<p>This document is <strong>authoritative</strong>. Where prose and JSON Schema disagree, the JSON Schema in <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/schemas/"><code>examples/wire/schemas/</code></a> wins — schemas are machine-validatable contracts, prose is explanatory. A CI test in the engine (<code>crates/beava-server/tests/wire_spec_validates.rs</code>) loads every schema and asserts every fixture under <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/"><code>examples/wire/</code></a> validates against its corresponding schema. The Python SDK consumes the same fixtures via <code>jsonschema</code>.</p>
 <p>The opcode-discovery question — &quot;which family of body shape do I parse?&quot; — is answered by the <strong>opcode</strong> in the TCP frame header (or the URL path on HTTP). Within a body, polymorphic shapes are disambiguated by a JSON <strong><code>kind</code></strong> discriminator. Specifically, <code>OP_REGISTER</code> carries a <code>kind=event|table|derivation</code> discriminator that selects between three sub-shapes; all other opcodes have a single body shape per direction.</p>
 <h2 id="frame-format" tabindex="-1"><a class="header-anchor" href="#frame-format" aria-hidden="true">#</a> Frame Format</h2>
 <p>The TCP transport frames every request and every response identically:</p>
@@ -390,7 +387,7 @@
 <p>See <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/register-global-counter.request.json"><code>examples/wire/register-global-counter.request.json</code></a>, <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/get-global.request.json"><code>examples/wire/get-global.request.json</code></a>, and <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/get-global.response.json"><code>examples/wire/get-global.response.json</code></a> for the full fixture set. The <code>examples/wire/schemas/register.request.schema.json</code> JSON Schema accepts <code>key: []</code> (the <code>minItems: 1</code> constraint is relaxed to <code>minItems: 0</code> per ADR-003); <code>examples/wire/schemas/get.request.schema.json</code> accepts the empty-string <code>key: &quot;&quot;</code> sentinel for global GET.</p>
 <p><strong>Validation contract:</strong> <code>key</code> MUST be either non-empty (per-entity table) or empty array (global table) — never null. The server rejects null <code>key</code> at the JSON-prelude validator with <code>schema_invalid</code>. The corresponding GET MUST send <code>key: &quot;&quot;</code> for a global table; sending a non-empty key against a global table raises <code>KeyError</code>-style rejection (or returns <code>{}</code> cold-start, depending on the SDK convention; per v0 the Python SDK raises). Symmetric: sending <code>key: &quot;&quot;</code> against a per-entity table is a misuse and the server returns <code>{}</code> cold-start (no error — the empty entity simply has no state).</p>
 <p><code>OP_BATCH_GET</code> accepts mixed per-entity + global lookups in the same batch (heterogeneous batches can include both shapes — global lookups simply set <code>key</code> to <code>&quot;&quot;</code>). See <code>examples/wire/batch_get-heterogeneous.request.json</code> for the per-entity variant; the global variant inside the same batch is <code>{&quot;table&quot;: &quot;GlobalCounter&quot;, &quot;key&quot;: &quot;&quot;}</code>.</p>
-<p><strong>Surface in v0:</strong> <code>@bv.table</code> with no <code>key=</code> declares a global table; <code>events.group_by()</code> with no keys + <code>events.agg(**aggs)</code> produces global aggregations; <code>App.get(table_name)</code> (1-arg overload) reads the global row. The TS and Go SDKs expose equivalent overloads. Acceptance gate: <code>python/tests/v0/test_global.py</code> (8 tests).</p>
+<p><strong>Surface in v0:</strong> <code>@bv.table</code> with no <code>key=</code> declares a global table; <code>events.group_by()</code> with no keys + <code>events.agg(**aggs)</code> produces global aggregations; <code>App.get(table_name)</code> (1-arg overload) reads the global row. Acceptance gate: <code>python/tests/v0/test_global.py</code> (8 tests).</p>
 <h3 id="oppush-0x0010" tabindex="-1"><a class="header-anchor" href="#oppush-0x0010" aria-hidden="true">#</a> OP_PUSH (0x0010)</h3>
 <p>Push a single event into a registered event source. Default ack semantics is <code>acks=1</code> — the server returns success after the event is durably written to the local WAL (per the active sync mode; default is periodic fsync per v0 <code>SyncMode::Periodic</code>).</p>
 <p>The <strong>event name</strong> comes from the URL path on HTTP (<code>POST /push/&lt;event_name&gt;</code>) or from a routing prefix on the TCP transport. The wire body itself carries only the <strong>fields</strong> dict.</p>
@@ -596,7 +593,7 @@
 <p><strong><a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-001-bv-table-partial-overturn.md">ADR-001</a></strong> — <code>@bv.table</code> aggregation-output revival (partial overturn of v0 events-only scope). The wire-spec uses <code>kind=table</code> in register payloads per ADR-001. Mutation paths (<code>upsert</code> / <code>delete</code> / <code>retract</code>) and MVCC remain killed.</p>
 </li>
 <li>
-<p><strong><a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-002-polars-op-rename.md">ADR-002</a></strong> — Polars op renames. Register payloads use the <strong>new</strong> op-string names (<code>mean</code>, <code>var</code>, <code>std</code>, <code>n_unique</code>, <code>quantile</code>). The Rust engine's internal <code>AggKind</code> enum variant names (<code>AggKind::Avg</code>, <code>AggKind::Variance</code>, etc.) are unchanged — only the public string mapping changes. The Python SDK ships deprecation aliases for the old names; the TS and Go SDKs ship no aliases.</p>
+<p><strong><a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-002-polars-op-rename.md">ADR-002</a></strong> — Polars op renames. Register payloads use the <strong>new</strong> op-string names (<code>mean</code>, <code>var</code>, <code>std</code>, <code>n_unique</code>, <code>quantile</code>). The Rust engine's internal <code>AggKind</code> enum variant names (<code>AggKind::Avg</code>, <code>AggKind::Variance</code>, etc.) are unchanged — only the public string mapping changes. The Python SDK ships deprecation aliases for the old names.</p>
 </li>
 </ul>
 <h2 id="validation-harness" tabindex="-1"><a class="header-anchor" href="#validation-harness" aria-hidden="true">#</a> Validation harness.</h2>
@@ -606,16 +603,9 @@
 <p><strong>Engine-side (Rust):</strong> <code>crates/beava-server/tests/wire_spec_validates.rs</code> (lands in v0) loads every <code>examples/wire/schemas/*.schema.json</code> and asserts every <code>examples/wire/*.json</code> (excluding the <code>schemas/</code> subdirectory) validates against its corresponding schema. The Rust validator crate is <strong><code>boon</code></strong> — chosen because it has full Draft 2020-12 support; the older <code>jsonschema</code> Rust crate has only partial 2020-12 coverage.</p>
 </li>
 <li>
-<p><strong>Python SDK:</strong> the SDK test suite runs the same fixtures through Python's <a href="https://pypi.org/project/jsonschema/"><code>jsonschema</code></a> library (<code>Draft202012Validator</code>) as part of its unit tests. The harness lives at <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/_validate_examples.py"><code>examples/wire/_validate_examples.py</code></a> and is the authoritative cross-language validation reference.</p>
-</li>
-<li>
-<p><strong>TypeScript SDK:</strong> uses <a href="https://ajv.js.org/">Ajv</a> v8+ via <code>import Ajv2020 from &quot;ajv/dist/2020&quot;</code> (Ajv splits Draft 2020-12 into a separate import to avoid bundling bloat).</p>
-</li>
-<li>
-<p><strong>Go SDK:</strong> uses <a href="https://github.com/santhosh-tekuri/jsonschema"><code>santhosh-tekuri/jsonschema/v6</code></a>, which supports Draft 2020-12.</p>
+<p><strong>Python SDK:</strong> the SDK test suite runs the same fixtures through Python's <a href="https://pypi.org/project/jsonschema/"><code>jsonschema</code></a> library (<code>Draft202012Validator</code>) as part of its unit tests. The harness lives at <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/_validate_examples.py"><code>examples/wire/_validate_examples.py</code></a> and is the authoritative validation reference.</p>
 </li>
 </ul>
-<p>this doc ships the schemas + examples + Python validator. The Rust engine harness ships in v0. The TS + Go validators ship in v0 alongside the SDK ports themselves.</p>
 <h2 id="stable-contract-guarantees" tabindex="-1"><a class="header-anchor" href="#stable-contract-guarantees" aria-hidden="true">#</a> Stable contract guarantees</h2>
 <ul>
 <li><strong>Frame layout</strong> is locked. Adding a request_id, changing endianness, or reordering header bytes is a breaking wire-format change requiring a <code>FORMAT_VERSION</code> bump; the v0 commitment is <code>FORMAT_VERSION = 1</code>.</li>

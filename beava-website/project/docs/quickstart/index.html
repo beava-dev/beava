@@ -55,12 +55,9 @@
     </ul>
   </div>
   <div class="side-section">
-    <div class="side-title">SDK references</div>
+    <div class="side-title">SDK reference</div>
     <ul class="side-list">
-      <li><a class="side-link" href="/docs/sdk-api/shared/">Cross-language parity</a></li>
       <li><a class="side-link" href="/docs/sdk-api/python/">Python SDK</a></li>
-      <li><a class="side-link" href="/docs/sdk-api/typescript/">TypeScript SDK</a></li>
-      <li><a class="side-link" href="/docs/sdk-api/go/">Go SDK</a></li>
     </ul>
   </div>
   <div class="side-section">
@@ -315,14 +312,6 @@ resulting features. Source:
 <a href="https://github.com/beava-dev/beava/blob/main/examples/python/adtech.py">examples/python/adtech.py</a>,
 <a href="https://github.com/beava-dev/beava/blob/main/examples/python/fraud.py">examples/python/fraud.py</a>,
 <a href="https://github.com/beava-dev/beava/blob/main/examples/python/ecommerce.py">examples/python/ecommerce.py</a>.</p>
-<blockquote>
-<p><strong>Cross-language note:</strong> Pipeline authoring is <strong>Python-only</strong> in v0.
-The <a href="/docs/sdk-api/typescript/">TypeScript</a> and <a href="/docs/sdk-api/go/">Go</a>
-SDKs push events, register pre-compiled JSON descriptors (authored
-from Python), and read features. Use Python to design the pipeline;
-TS/Go services push events + read features against the same
-registered pipeline.</p>
-</blockquote>
 <h2 id="next-steps" tabindex="-1"><a class="header-anchor" href="#next-steps" aria-hidden="true">#</a> Next steps</h2>
 <ul>
 <li><strong>API reference:</strong> <a href="/docs/sdk-api/python/">docs/sdk-api/python.md</a> —
@@ -331,8 +320,7 @@ full Python SDK surface (App, decorators, expressions, op helpers)</li>
 — all 54 op pages (<code>count</code>, <code>sum</code>, <code>mean</code>, <code>n_unique</code>, <code>quantile</code>,
 <code>ewma</code>, …)</li>
 <li><strong>Wire contract:</strong> <a href="/docs/wire-spec/">docs/wire-spec.md</a> — frame
-format + JSON Schema 2020-12 contracts (for porting to other
-languages)</li>
+format + JSON Schema 2020-12 contracts</li>
 <li><strong>Pipeline DSL:</strong> <a href="/docs/pipeline-dsl/overview/">docs/pipeline-dsl/overview.md</a>
 — <code>@bv.event</code>, <code>@bv.table</code>, chain methods, expressions</li>
 <li><strong>Architecture:</strong> <a href="./architecture/">docs/architecture/</a> —
