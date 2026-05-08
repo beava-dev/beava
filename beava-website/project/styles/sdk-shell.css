@@ -478,31 +478,41 @@
   text-transform: uppercase; letter-spacing: 0.1em;
   color: var(--fg3); margin: 0 0 10px;
 }
+/* Hierarchical right-rail TOC.
+ *
+ * Pattern follows the docs-page TOC (docs.css `.docs-toc`): a single
+ * continuous 1px left border on the <ul> with each <li><a>'s 2px
+ * border-left negative-margined onto it. The active item's border
+ * becomes the orange accent — visually it "fills in" a slot on the
+ * shared rail. Two refinements over docs.css:
+ *
+ *   1. h2 vs h3: h3 entries are indented 10px further and rendered
+ *      slightly smaller for hierarchy.
+ *   2. h2 groups: a 6px margin-top on non-first h2 LIs gives subtle
+ *      grouping WITHOUT a horizontal divider line — the previous
+ *      attempt at horizontal rules looked busy on a narrow column. */
 .toc ul {
   list-style: none; padding: 0; margin: 0;
-  display: flex; flex-direction: column; gap: 0;
+  border-left: 1px solid var(--border);
 }
 .toc li a {
   display: block;
-  padding: 2px 0 2px 12px;
+  margin-left: -1px;
+  padding: 3px 0 3px 12px;
   font-family: var(--font-sans);
-  font-size: 12.5px; line-height: 1.3;
+  font-size: 12.5px; line-height: 1.4;
   font-weight: 500;
-  color: var(--fg3); text-decoration: none;
+  color: var(--fg2); text-decoration: none;
   border-left: 2px solid transparent;
   transition: color 120ms var(--ease-out), border-color 120ms var(--ease-out);
 }
-.toc li a:hover { color: var(--fg1); }
+.toc li a:hover { color: var(--accent); }
 .toc li.h3 a {
   padding-left: 22px;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--fg3);
 }
-/* Subtle dividers between top-level (h2) sections so the dense list
-   still has visual structure. The :not(:first-child).h2 selector
-   tags non-leading h2 entries; we add a 6px top margin + faint
-   border to break sections. h3 entries cluster under their h2. */
-.toc li:not(:first-child).h2 { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
+.toc li.h2 + li.h2 { margin-top: 6px; }
 .toc li.active a {
   color: var(--accent); font-weight: 600;
   border-left-color: var(--accent);
