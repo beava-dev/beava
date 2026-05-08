@@ -14,17 +14,14 @@ const Chev = () => (
 // for search; just removed from sidebar nav. Re-surface by adding back here.
 //
 // Hidden-but-on-disk:
-//   Getting started — /docs/install/, /docs/get-started/query-features/
+//   Getting started — /docs/get-started/query-features/
 //   Concepts        — /docs/concepts/get-and-batch-get/, /docs/concepts/windows/,
-//                     /docs/concepts/freshness/, /docs/concepts/embed-mode/,
-//                     /docs/concepts/global-aggregation/
-//   Vision          — /docs/vision/open-source/, /docs/vision/benchmarks/
-//   Reference       — /docs/operators/cost-class/ + 7 operator family pages,
-//                     /docs/pipeline-dsl/* (3), /docs/sdk-api/python/,
-//                     /docs/wire-spec/, /docs/schema-evolution/, /docs/error-codes/
-//   Architecture    — entire section (6 pages)
-//   Community       — /docs/community/dev-calls/,
-//                     /docs/community/rfcs/rfc-00{1..7}-*
+//                     /docs/concepts/freshness/
+//   Vision          — (none currently on disk)
+//
+// Reference / Architecture / Community sub-trees from the prior render-docs
+// site were nuked in commit f99a09e1; re-add a section here when their
+// hand-written replacements land.
 const SECTIONS = [
   { title: 'Getting started', open: true, items: [
     { label: 'Introduction',         href: '/docs/' },
@@ -39,11 +36,6 @@ const SECTIONS = [
     { label: 'Events',                   href: '/docs/concepts/streams/' },
     { label: 'Tables',                   href: '/docs/concepts/tables/' },
     { label: 'Push and fetch features',  href: '/docs/get-started/push-events/' },
-  ]},
-  { title: 'Reference', open: false, items: [
-    { label: 'Operator catalog',     href: '/docs/operators/' },
-    { label: 'Python SDK',           href: '/docs/sdk-api/python/' },
-    { label: 'HTTP API',             href: '/docs/http-api/' },
   ]},
   { title: 'Community', open: false, items: [
     { label: 'About RFCs',           href: '/docs/community/rfcs/' },

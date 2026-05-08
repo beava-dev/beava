@@ -227,9 +227,7 @@
       );
     };
 
-    // v0 install surface: brew (recommended) / pip / docker. Cargo dropped
-    // from the homepage tabs — install via cargo is documented in /docs/install
-    // for Rust users but isn't the magical first-touch path.
+    // v0 install surface: brew (recommended) / pip / docker.
     const INSTALL_TABS = [
       { id: 'brew',   label: 'brew',   cmd: 'brew tap beava-dev/beava && brew install beava', recommended: true },
       { id: 'pip',    label: 'pip',    cmd: 'pip install beava' },
