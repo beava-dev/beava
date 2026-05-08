@@ -49,7 +49,7 @@ class Click:
 def UserActivity(e: Click) -> bv.Table:
     return e.group_by("user_id").agg(
         clicks_1h=bv.count(window="1h"),
-        unique_pages_1h=bv.count_distinct("page", window="1h"),
+        unique_pages_1h=bv.n_unique("page", window="1h"),
     )
 
 app = bv.App(url="http://localhost:8080")

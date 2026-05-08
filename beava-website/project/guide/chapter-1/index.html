@@ -466,11 +466,11 @@
 {'$ pip install beava\n'}
 {'\n'}
 {'# docker (zero deps on host — :edge tag rebuilt from main on every push)\n'}
-{'$ docker run -p 8080:8080 -p 8090:8090 beavadev/beava:edge\n'}
+{'$ docker run -p 8080:8080 -p 8081:8081 beavadev/beava:edge\n'}
 {'\n'}
 {'# verify\n'}
-{'$ curl http://localhost:8090/health\n'}
-{'{"status":"ok"}'}
+{'$ curl -X POST http://localhost:8080/ping\n'}
+{'{"pong":true,"registry_version":0}'}
             </pre>
             <p style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: 'var(--fg3)', margin: '12px 0 0' }}>
               ~14 MB binary · ~62 ms cold start · runs on 1 GB RAM · single binary, no Kafka.
@@ -1531,11 +1531,9 @@
         color: 'var(--fg1)',
       }}>
         <strong style={{ color: 'var(--accent)' }}>This guidebook chapter is coming in v0.1.</strong>
-        {' '}Phase 13.7 ships the spec docs site; the interactive guidebook is deferred to a
-        v0.1+ follow-up. Meanwhile, see the
-        {' '}<a href="/docs/quickstart/" style={{ color: 'var(--accent)', fontWeight: 600 }}>quickstart</a>,
-        the <a href="/docs/operators/" style={{ color: 'var(--accent)', fontWeight: 600 }}>operator catalog</a>,
-        or jump straight into <a href="/docs/" style={{ color: 'var(--accent)', fontWeight: 600 }}>the docs index</a>.
+        {' '}The interactive guidebook is deferred to a v0.1+ follow-up. Meanwhile, see the
+        {' '}<a href="/docs/get-started/quickstart/" style={{ color: 'var(--accent)', fontWeight: 600 }}>quickstart</a>
+        {' '}or jump straight into <a href="/docs/" style={{ color: 'var(--accent)', fontWeight: 600 }}>the docs index</a>.
       </div>
     );
 
