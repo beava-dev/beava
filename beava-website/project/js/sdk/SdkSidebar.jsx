@@ -27,6 +27,9 @@ const SDK_NAV = [
   { heading: 'Start here', items: [
     { id: 'quickstart', label: 'Quickstart', href: '/sdk/python/' },
   ]},
+  { heading: 'Server', items: [
+    { id: 'server',     label: 'Configuration',      href: '/sdk/server/' },
+  ]},
   { heading: 'Python SDK', items: [
     { id: 'app',        label: 'App client',         href: '/sdk/python/app/' },
     { id: 'event',      label: '@bv.event',          href: '/sdk/python/event/' },

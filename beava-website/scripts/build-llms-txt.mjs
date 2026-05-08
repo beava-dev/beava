@@ -22,6 +22,7 @@ const OUT_PATH  = path.join(SITE_ROOT, 'sdk/llms.txt');
 // reads in the same logical order as a user would click through.
 const PAGES = [
   { url: '/sdk/python/',              file: 'sdk/python/index.html',           title: 'Quickstart' },
+  { url: '/sdk/server/',              file: 'sdk/server/index.html',           title: 'Server configuration' },
   { url: '/sdk/python/app/',          file: 'sdk/python/app/index.html',       title: 'App client (bv.App)' },
   { url: '/sdk/python/event/',        file: 'sdk/python/event/index.html',     title: '@bv.event' },
   { url: '/sdk/python/table/',        file: 'sdk/python/table/index.html',     title: '@bv.table' },

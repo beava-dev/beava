@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Server configuration · beava SDK reference</title>
+<meta name="description" content="Boot the beava server: CLI flags, environment variables, and YAML config. The full surface for spinning up a beava instance.">
+<link rel="stylesheet" href="/styles/colors_and_type.css">
+<link rel="stylesheet" href="/styles/site.css">
+<link rel="stylesheet" href="/styles/sdk-shell.css">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+<link rel="shortcut icon" href="/assets/favicon.ico">
+<style>
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--fg1); font-family: var(--font-sans); }
+
+  .ref-hero {
+    margin: 0 0 28px;
+    padding-bottom: 26px;
+    border-bottom: 1px solid var(--border);
+  }
+  .ref-hero .eyebrow {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-family: var(--font-mono); font-weight: 600; font-size: 12px;
+    color: var(--fg3);
+    margin-bottom: 14px;
+  }
+  .ref-hero .eyebrow .pill {
+    display: inline-block;
+    font-family: var(--font-mono); font-size: 10.5px; font-weight: 600;
+    color: var(--accent); background: var(--beava-orange-wash);
+    padding: 2px 8px; border-radius: 999px;
+    letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .ref-hero h1 {
+    font-family: var(--font-serif); font-weight: 700;
+    font-size: 44px; line-height: 1.05; letter-spacing: -0.025em;
+    color: var(--fg1);
+    margin: 0 0 14px;
+  }
+  .ref-hero h1 code {
+    font-family: var(--font-mono); font-weight: 700; font-size: 0.78em;
+    background: var(--beava-paper); border: 1px solid var(--border-inset);
+    padding: 2px 9px; border-radius: 8px; color: var(--accent);
+    letter-spacing: 0;
+  }
+  .ref-hero .lede {
+    font-family: var(--font-serif);
+    font-size: 19px; line-height: 1.5;
+    color: var(--fg2); font-weight: 400;
+    margin: 0; max-width: 60ch;
+  }
+
+  /* Two-column ENV var table — fits in the .content's 760px max
+     without horizontal scroll. Mono name on left, prose on right. */
+  .env-table {
+    border-top: 1px solid var(--border);
+    margin: 0 0 24px;
+  }
+  .env-row {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    gap: 24px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .env-row .name {
+    font-family: var(--font-mono); font-size: 13px; font-weight: 600;
+    color: var(--fg1);
+    word-break: break-all;
+  }
+  .env-row .body {
+    font-size: 14px; line-height: 1.55; color: var(--fg2);
+  }
+  .env-row .body p { margin: 0 0 4px; font-size: inherit; line-height: inherit; }
+  .env-row .body .meta {
+    font-family: var(--font-mono); font-size: 12px; color: var(--fg3);
+    margin-top: 4px;
+  }
+</style>
+</head>
+<body class="beava">
+
+  <div id="bv-site-header"></div>
+
+  <div class="shell">
+
+    <!-- ============ SIDEBAR ============ -->
+    <aside class="sidebar">
+      <div id="bv-sdk-sidebar"></div>
+    </aside>
+
+    <!-- ============ MAIN ============ -->
+    <main class="content" data-pagefind-body>
+
+      <div class="crumbs">
+        <a href="/">beava</a><span class="sep">/</span>
+        <a href="/sdk/python/">SDK reference</a><span class="sep">/</span>
+        <span class="cur">Server configuration</span>
+      </div>
+
+      <header class="ref-hero">
+        <div class="eyebrow">
+          <span class="pill">Server</span>
+          <span><code>beava</code> binary</span>
+        </div>
+        <h1>Server configuration</h1>
+        <p class="lede">CLI flags, environment variables, and YAML config — the full surface for spinning up a beava instance. CLI flags win over env vars; env vars win over YAML; YAML wins over the built-in defaults.</p>
+      </header>
+
+      <!-- =============== OVERVIEW =============== -->
+      <h2 id="overview">Overview</h2>
+      <p>The <code>beava</code> binary boots a single-process feature server. With no flags, no env vars, and no config file present, it listens on <code>127.0.0.1:8080</code> (HTTP) and <code>127.0.0.1:8081</code> (TCP), persists state under <code>./.beava/</code>, and accepts events. Three layers tune it:</p>
+
+      <ul>
+        <li><strong>CLI flags</strong> (highest precedence) — every-day knobs for boot scripts and ad-hoc runs.</li>
+        <li><strong>Environment variables</strong> — production-friendly overrides; great for container deployments.</li>
+        <li><strong>YAML config</strong> (lowest precedence; opt-in via <code>--config</code>) — long-form settings you'd rather not encode in a shell command.</li>
+      </ul>
+
+      <p>There's no implicit <code>./beava.yaml</code> lookup. If you want to use a YAML config, point at it explicitly with <code>-c</code> / <code>--config</code>.</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">three boot styles</span>
+        </div>
+<pre><span class="tk-c"># 1. Built-in defaults (good for first-touch + tests)</span>
+<span class="tk-k">beava</span>
+
+<span class="tk-c"># 2. CLI flags only (good for one-off runs)</span>
+<span class="tk-k">beava</span> --http-addr <span class="tk-n">0.0.0.0</span>:<span class="tk-n">8080</span> --data-dir <span class="tk-s">/var/lib/beava</span>
+
+<span class="tk-c"># 3. YAML + flag override (production)</span>
+<span class="tk-k">beava</span> --config <span class="tk-s">/etc/beava/beava.yaml</span> --memory-only</pre>
+      </div>
+
+      <!-- =============== CLI FLAGS =============== -->
+      <h2 id="cli">CLI flags</h2>
+      <p>All flags are global — they work whether you boot the server (default) or run a subcommand like <code>beava quickstart</code>.</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">usage</span>
+        </div>
+<pre><span class="tk-k">beava</span> <span class="tk-p">[</span>OPTIONS<span class="tk-p">]</span> <span class="tk-p">[</span>COMMAND<span class="tk-p">]</span></pre>
+      </div>
+
+      <div class="params">
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">-c, --config &lt;PATH&gt;</span>
+            <span class="param-tags">
+              <span class="param-tag type">path</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>Load settings from a YAML config file. Optional. There's no implicit <code>./beava.yaml</code> lookup; if you want a config, point at one explicitly. The resolved config (which path was loaded — or whether built-in defaults applied) is logged at startup.</p>
+            <p class="default">no default — env + built-in defaults apply when omitted</p>
+          </div>
+        </div>
+
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">--http-addr &lt;ADDR&gt;</span>
+            <span class="param-tags">
+              <span class="param-tag type">host:port</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>Override the HTTP data-plane listener address. Highest precedence — wins over <code>BEAVA_LISTEN_ADDR</code> and any <code>--config</code> YAML.</p>
+            <p class="default">default <code>127.0.0.1:8080</code></p>
+          </div>
+        </div>
+
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">--tcp-addr &lt;ADDR&gt;</span>
+            <span class="param-tags">
+              <span class="param-tag type">host:port</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>Override the TCP fast-path listener address. Highest precedence — wins over <code>BEAVA_TCP_HOST</code> / <code>BEAVA_TCP_PORT</code> and YAML. The TCP transport carries the same JSON envelope as HTTP but with sub-millisecond P99 latency on long-lived connections.</p>
+            <p class="default">default <code>127.0.0.1:8081</code></p>
+          </div>
+        </div>
+
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">--data-dir &lt;PATH&gt;</span>
+            <span class="param-tags">
+              <span class="param-tag type">path</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>Override both WAL and snapshot directories under a single root: WAL lands at <code>&lt;PATH&gt;/wal</code>, snapshots at <code>&lt;PATH&gt;/snapshots</code>. Highest precedence — wins over <code>BEAVA_WAL_DIR</code> / <code>BEAVA_SNAPSHOT_DIR</code> and YAML.</p>
+            <p class="default">default <code>./.beava/</code> (so <code>./.beava/wal/</code> + <code>./.beava/snapshots/</code>)</p>
+          </div>
+        </div>
+
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">--memory-only</span>
+            <span class="param-tags">
+              <span class="param-tag type">bool flag</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>In-memory only — no WAL writer, no periodic snapshot, no recovery on boot. State is lost on restart. Use for <code>docker run</code> smoke tests, demo boots, ephemeral CI runs, and any "I'm just kicking the tyres" workflow that shouldn't leave bytes on disk.</p>
+            <p class="default">default <code>false</code> (durable mode)</p>
+          </div>
+        </div>
+
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">--test-mode</span>
+            <span class="param-tags">
+              <span class="param-tag type">bool flag</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>Enable <code>POST /reset</code> and <code>OP_RESET</code> — the destructive registry-wipe endpoint. Off by default; production deploys leave it off so they can't be wiped by accident. Equivalent to setting <code>BEAVA_TEST_MODE=1</code>; the flag wins if both are set.</p>
+            <p class="default">default <code>false</code></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- =============== SUBCOMMANDS =============== -->
+      <h2 id="subcommands">Subcommands</h2>
+      <p>When no subcommand is provided, <code>beava</code> boots the server. One subcommand is exposed in v0:</p>
+
+      <div class="method-head">
+        <h3 id="quickstart" data-toc-label="quickstart" class="name">beava quickstart [--no-file]</h3>
+<div class="sig">beava quickstart [--no-file]</div>
+      </div>
+      <p>Run the in-process 4-step first-touch demo. Spawns an in-process server on an ephemeral port, registers a <code>PageView</code> / <code>SiteMetrics</code> pipeline (mirrors the homepage hero), pushes 5 events, queries the global row, prints a formatted walkthrough, and writes <code>beava_quickstart.py</code> to the current working directory. Zero setup, zero dependencies, completes in under 10 seconds.</p>
+
+      <h3>Flags</h3>
+      <ul>
+        <li><code>--no-file</code> — don't write <code>beava_quickstart.py</code>. Useful for CI / docker-exec runs where leaving a file behind is noise.</li>
+      </ul>
+
+      <h3>Example</h3>
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">terminal</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+<pre><span class="tk-k">beava</span> quickstart
+<span class="tk-c"># → 4-step demo runs, beava_quickstart.py lands in cwd</span>
+
+<span class="tk-k">beava</span> quickstart --no-file
+<span class="tk-c"># → demo runs, no file written</span></pre>
+      </div>
+
+      <!-- =============== ENV VARS =============== -->
+      <h2 id="env">Environment variables</h2>
+      <p>Every <code>BEAVA_*</code> env var is overridable by a CLI flag of the same scope. Env vars are read once at startup; changes take effect on next boot.</p>
+
+      <h3 id="env-listener">Listener</h3>
+      <div class="env-table">
+        <div class="env-row">
+          <div class="name">BEAVA_LISTEN_ADDR</div>
+          <div class="body">
+            <p>HTTP listener address.</p>
+            <p class="meta">overridden by <code>--http-addr</code> · default <code>127.0.0.1:8080</code></p>
+          </div>
+        </div>
+        <div class="env-row">
+          <div class="name">BEAVA_TCP_HOST</div>
+          <div class="body">
+            <p>TCP fast-path host. Set together with <code>BEAVA_TCP_PORT</code>.</p>
+            <p class="meta">overridden by <code>--tcp-addr</code> · default <code>127.0.0.1</code></p>
+          </div>
+        </div>
+        <div class="env-row">
+          <div class="name">BEAVA_TCP_PORT</div>
+          <div class="body">
+            <p>TCP fast-path port.</p>
+            <p class="meta">overridden by <code>--tcp-addr</code> · default <code>8081</code></p>
+          </div>
+        </div>
+      </div>
+
+      <h3 id="env-storage">Storage</h3>
+      <div class="env-table">
+        <div class="env-row">
+          <div class="name">BEAVA_WAL_DIR</div>
+          <div class="body">
+            <p>Directory for the write-ahead log. Created if missing. Beava refuses to start on a network filesystem (NFS / CIFS) — point at local block storage.</p>
+            <p class="meta">overridden by <code>--data-dir</code> · default <code>./.beava/wal/</code></p>
+          </div>
+        </div>
+        <div class="env-row">
+          <div class="name">BEAVA_SNAPSHOT_DIR</div>
+          <div class="body">
+            <p>Directory for periodic state snapshots. Recovery on boot replays from the most recent snapshot + WAL tail.</p>
+            <p class="meta">overridden by <code>--data-dir</code> · default <code>./.beava/snapshots/</code></p>
+          </div>
+        </div>
+      </div>
+
+      <h3 id="env-wal">WAL tuning</h3>
+      <p>Three knobs shape the WAL's latency / durability / throughput tradeoff. Defaults are tuned for typical fraud-shape workloads; tweak only with measurements.</p>
+
+      <div class="env-table">
+        <div class="env-row">
+          <div class="name">BEAVA_WAL_BUFFERS</div>
+          <div class="body">
+            <p>Number of in-flight WAL buffers (active / sealed / flushing rotation). Higher values smooth out fsync tail latency but pin more memory.</p>
+            <p class="meta">range <code>[2, 32]</code> · default <code>4</code></p>
+          </div>
+        </div>
+        <div class="env-row">
+          <div class="name">BEAVA_WAL_BUFFER_SIZE_MB</div>
+          <div class="body">
+            <p>Size of each WAL buffer in megabytes. Larger buffers seal less often; smaller buffers fsync more often.</p>
+            <p class="meta">range <code>[4, 256]</code> · default <code>32</code></p>
+          </div>
+        </div>
+        <div class="env-row">
+          <div class="name">BEAVA_WAL_TICK_MS</div>
+          <div class="body">
+            <p>Maximum time the writer waits before flushing a partially-filled buffer. Lower values give tighter ack latency at higher fsync overhead.</p>
+            <p class="meta">range <code>[1, 1000]</code> · default <code>20</code></p>
+          </div>
+        </div>
+      </div>
+
+      <h3 id="env-runtime">Runtime</h3>
+      <div class="env-table">
+        <div class="env-row">
+          <div class="name">BEAVA_TEST_MODE</div>
+          <div class="body">
+            <p>Set to <code>1</code> to enable <code>/reset</code> and <code>OP_RESET</code>. Equivalent to <code>--test-mode</code>; the flag wins if both are set.</p>
+            <p class="meta">default <em>unset</em> (false)</p>
+          </div>
+        </div>
+        <div class="env-row">
+          <div class="name">BEAVA_MEMORY_GOV_ENFORCE</div>
+          <div class="body">
+            <p>Whether the per-entity memory governor is enforced. Default <code>1</code> (enforced — over-budget pushes are throttled). Set to <code>0</code> to disable enforcement (governor still observes; you'll see WARN logs instead of throttling).</p>
+            <p class="meta">default <code>1</code></p>
+          </div>
+        </div>
+        <div class="env-row">
+          <div class="name">BEAVA_IO_THREADS</div>
+          <div class="body">
+            <p>Number of admin-sidecar I/O worker threads. The data-plane runs single-threaded by design (Redis-shaped); this only sizes the admin runtime that serves <code>/health</code>, <code>/ready</code>, <code>/metrics</code>, <code>/registry</code>.</p>
+            <p class="meta">default <code>1</code></p>
+          </div>
+        </div>
+        <div class="env-row">
+          <div class="name">BEAVA_LOG_LEVEL</div>
+          <div class="body">
+            <p>One of <code>trace</code>, <code>debug</code>, <code>info</code>, <code>warn</code>, <code>error</code>. Equivalent to YAML <code>log_level</code>.</p>
+            <p class="meta">default <code>info</code></p>
+          </div>
+        </div>
+      </div>
+
+      <h3 id="env-debug">Debug-only</h3>
+      <p>Don't set these in production. They exist for incident response, performance profiling, and crash testing.</p>
+
+      <div class="env-table">
+        <div class="env-row">
+          <div class="name">BEAVA_TRACE_APPLY_TIMING</div>
+          <div class="body">
+            <p>Set to <code>1</code> to emit per-stage timing for every applied event (parse / validate / route / aggregate / WAL). Adds ~5-15% overhead; expect log volume to spike.</p>
+          </div>
+        </div>
+        <div class="env-row">
+          <div class="name">BEAVA_CRASH_AT</div>
+          <div class="body">
+            <p>Crash-injection hook for recovery testing. Set to a known checkpoint name to abort the process at that point. See <code>crates/beava-server/src/lib.rs</code> for the recognized values.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- =============== YAML =============== -->
+      <h2 id="yaml">YAML config</h2>
+      <p>The YAML config covers the long-form settings you'd rather not encode in a shell command. v0 keeps it small — listener address and log level. Everything else is set via flag or env.</p>
+
+      <p>Point at it with <code>--config</code>; there's no implicit lookup.</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">beava.yaml</span>
+        </div>
+<pre><span class="tk-c"># Address and port to bind the HTTP data plane to.</span>
+listen_addr<span class="tk-p">:</span> <span class="tk-s">"127.0.0.1:8080"</span>
+
+<span class="tk-c"># trace | debug | info | warn | error</span>
+log_level<span class="tk-p">:</span> info</pre>
+      </div>
+
+      <p>An example file lives at <code>beava.example.yaml</code> at the repo root. Copy and edit; nothing in the schema is required.</p>
+
+      <!-- =============== PRECEDENCE =============== -->
+      <h2 id="precedence">Precedence</h2>
+      <p>When the same setting is configured at multiple layers, beava resolves in this order — first match wins:</p>
+
+      <ol>
+        <li><strong>CLI flag</strong> (e.g. <code>--http-addr 0.0.0.0:8080</code>)</li>
+        <li><strong>Environment variable</strong> (e.g. <code>BEAVA_LISTEN_ADDR=0.0.0.0:8080</code>)</li>
+        <li><strong>YAML config</strong> (e.g. <code>listen_addr: "0.0.0.0:8080"</code>) — only loaded if <code>--config</code> is set</li>
+        <li><strong>Built-in default</strong> (e.g. <code>127.0.0.1:8080</code>)</li>
+      </ol>
+
+      <p>The resolved config is logged at startup. If beava's bound to a port you didn't expect, check the boot log line that names which layer produced the value.</p>
+
+      <!-- =============== DEFAULTS =============== -->
+      <h2 id="defaults">Default ports and paths</h2>
+      <p>With no flags, no env, no YAML:</p>
+
+      <div class="params">
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">HTTP data plane</span>
+          </div>
+          <div class="param-body"><p><code>127.0.0.1:8080</code></p></div>
+        </div>
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">TCP fast-path</span>
+          </div>
+          <div class="param-body"><p><code>127.0.0.1:8081</code></p></div>
+        </div>
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">Admin sidecar</span>
+          </div>
+          <div class="param-body">
+            <p><code>127.0.0.1:8090</code> — separate port for <code>/health</code>, <code>/ready</code>, <code>/metrics</code>, <code>/registry</code>. Kept off the data-plane port so admin scrapes don't share a runtime with hot-path requests.</p>
+          </div>
+        </div>
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">Working directory</span>
+          </div>
+          <div class="param-body">
+            <p><code>./.beava/</code> — WAL at <code>./.beava/wal/</code>, snapshots at <code>./.beava/snapshots/</code>. The directory is created on first boot if missing.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- =============== FAQ =============== -->
+      <h2 id="faq">Common questions</h2>
+
+      <div class="accordion">
+        <details>
+          <summary>Why doesn't beava look for <code>./beava.yaml</code> automatically?</summary>
+          <div class="acc-body">
+            <p>Because <code>cargo install beava-server &amp;&amp; beava</code> is the canonical first-touch path, and an implicit lookup would force every fresh install to pre-create a YAML file (or hit "config file not found"). The locked behavior: no YAML unless you ask for one with <code>-c</code>. Built-in defaults handle every other case.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Can I run beava without writing to disk at all?</summary>
+          <div class="acc-body">
+            <p>Yes — <code>beava --memory-only</code>. Skips WAL, skips snapshots, skips recovery. State lives in process memory only and is lost on restart. Use it for tests, demos, and CI runs that shouldn't leave bytes behind.</p>
+          </div>
+        </details>
+        <details>
+          <summary>How do I bind to all interfaces in a container?</summary>
+          <div class="acc-body">
+            <p>Pass <code>--http-addr 0.0.0.0:8080</code> (and <code>--tcp-addr 0.0.0.0:8081</code> if you want the TCP fast-path reachable). The defaults bind to <code>127.0.0.1</code> so a fresh native install isn't accidentally exposed to the network.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Why does WAL refuse a network filesystem?</summary>
+          <div class="acc-body">
+            <p>Because the WAL writer relies on <code>O_APPEND</code> + <code>fsync()</code> semantics that NFS / CIFS / FUSE-style mounts don't reliably honor. A successful <code>fsync()</code> on a network filesystem can return before bytes hit the persistence layer, breaking the durability contract. Beava detects the FS type at boot and refuses to start on a remote mount; point <code>--data-dir</code> at local block storage.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Where are the admin endpoints?</summary>
+          <div class="acc-body">
+            <p>On a separate sidecar port (default <code>127.0.0.1:8090</code>). <code>/health</code>, <code>/ready</code>, <code>/metrics</code>, and <code>/registry</code> are served there — kept off the data-plane port so observability scrapes don't share a runtime with the hot-path event apply loop.</p>
+          </div>
+        </details>
+      </div>
+
+      <!-- =============== NEXT =============== -->
+      <h2 id="next">Where to go next</h2>
+      <p>You've got beava running. Two reasonable next stops:</p>
+
+      <div class="card-grid">
+        <a class="card" href="/sdk/python/app/">
+          <div class="ttl">App client</div>
+          <p class="desc">Drive your running server from Python. <code>bv.App(url)</code> + 7 wire-mapped methods.</p>
+          <span class="go">SDK reference <span class="arrow">→</span></span>
+        </a>
+        <a class="card" href="/sdk/http/wire-spec/">
+          <div class="ttl">Wire spec</div>
+          <p class="desc">HTTP routes, TCP frame format, opcode table, content-type bytes — the full wire surface.</p>
+          <span class="go">Drive it raw <span class="arrow">→</span></span>
+        </a>
+      </div>
+
+      <!-- =============== FOOTER =============== -->
+      <div class="footer-area">
+        <div class="feedback">
+          <div class="ask">Was this page useful?</div>
+          <div class="feedback-btns">
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3z"/><line x1="7" y1="22" x2="7" y2="11"/></svg>
+              Yes
+            </button>
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3z"/><line x1="17" y1="2" x2="17" y2="13"/></svg>
+              Not really
+            </button>
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              Suggest an edit
+            </button>
+          </div>
+        </div>
+
+        <div id="bv-sdk-pager"></div>
+      </div>
+    </main>
+
+    <!-- ============ RIGHT TOC ============ -->
+    <aside class="toc">
+      <div id="bv-sdk-toc"></div>
+    </aside>
+
+  </div>
+
+  <div id="bv-site-footer"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script type="text/babel" src="/js/_shared/SiteHeader.jsx"></script>
+  <script type="text/babel" src="/js/_shared/SiteFooter.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkSidebar.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkTOC.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkPager.jsx"></script>
+
+  <script type="text/babel">
+    ReactDOM.createRoot(document.getElementById('bv-site-header'))
+      .render(<SiteHeader active="sdk" search maxWidth={1400}/>);
+    ReactDOM.createRoot(document.getElementById('bv-site-footer'))
+      .render(<SiteFooter maxWidth={1400}/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-sidebar'))
+      .render(<SdkSidebar active="server"/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-toc'))
+      .render(<SdkTOC editPath="sdk/server/index.html"/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-pager'))
+      .render(<SdkPager
+        prev={{ href: '/sdk/python/', label: 'Quickstart' }}
+        next={{ href: '/sdk/python/app/', label: 'App client' }}
+      />);
+  </script>
+
+  <script src="/js/copy-buttons.js" defer></script>
+  <script src="/scripts/docs-headings.js" defer></script>
+</body>
+</html>
