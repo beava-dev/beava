@@ -6,7 +6,10 @@
 <title>Embed Mode — beava docs</title>
 <meta name="description" content="bv.App() with no URL spawns a local beava binary as a subprocess on ephemeral ports. This is **embed mode** — beava-the-server runs in-process under your Python interpreter for the lifetime of the…">
 <link rel="canonical" href="https://beava.dev/docs/concepts/embed-mode/">
-<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="shortcut icon" href="/assets/favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+<link rel="shortcut icon" href="/assets/favicon.ico">
 <link rel="stylesheet" href="/styles/colors_and_type.css">
 <link rel="stylesheet" href="/styles/site.css">
 <link rel="stylesheet" href="/styles/docs.css">
@@ -118,7 +121,7 @@
 ephemeral ports. This is <strong>embed mode</strong> — beava-the-server runs in-process
 under your Python interpreter for the lifetime of the <code>App</code>. There is no
 remote infrastructure, no port allocation, and no setup. You go from
-<code>pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"</code> to a registered, queryable feature server in one line.</p>
+<code>pip install &quot;git+https://github.com/beava-dev/beava.git#subdirectory=python&quot;</code> to a registered, queryable feature server in one line.</p>
 <p>Embed mode exists for notebooks, scripts, pytest fixtures, and the
 <code>bv.demo()</code> quickstart. It is not how you ship to production.</p>
 <h2 id="how-it-works" tabindex="-1"><a class="header-anchor" href="#how-it-works" aria-hidden="true">#</a> How it works</h2>
@@ -161,7 +164,7 @@ repo.</p>
 <p><strong>Raise <code>BinaryNotFoundError</code></strong> with install guidance:</p>
 <pre><code class="language-text">beava binary not found. Install with one of:
   brew install beava
-  pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"
+  pip install &quot;git+https://github.com/beava-dev/beava.git#subdirectory=python&quot;
   docker pull beava/beava
 Or set BEAVA_BINARY=/path/to/beava.
 </code></pre>
@@ -187,7 +190,7 @@ Python process.</li>
 </ul>
 <h2 id="when-to-use-embed-mode" tabindex="-1"><a class="header-anchor" href="#when-to-use-embed-mode" aria-hidden="true">#</a> When to use embed mode</h2>
 <ul>
-<li><strong>Quickstart and <code>bv.demo()</code></strong> — <code>pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"</code> and have a working
+<li><strong>Quickstart and <code>bv.demo()</code></strong> — <code>pip install &quot;git+https://github.com/beava-dev/beava.git#subdirectory=python&quot;</code> and have a working
 feature server in one line. No installer, no <code>docker run</code>, no port
 conflict.</li>
 <li><strong>Pytest fixtures.</strong> <code>bv.test.fixture(reset_each=True)</code> spawns a fresh
@@ -273,6 +276,5 @@ that uses embed mode.</li>
     <a href="https://github.com/beava-dev/beava" target="_blank" rel="noopener">GitHub</a>
   </div>
 </footer>
-  <script src="/js/track-pageview.js" defer></script>
 </body>
 </html>

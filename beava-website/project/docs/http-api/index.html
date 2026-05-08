@@ -4,9 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>beava HTTP API — beava docs</title>
-<meta name="description" content="beava — real-time feature server.">
+<meta name="description" content="Beava — real-time feature server.">
 <link rel="canonical" href="https://beava.dev/docs/http-api/">
-<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="shortcut icon" href="/assets/favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+<link rel="shortcut icon" href="/assets/favicon.ico">
 <link rel="stylesheet" href="/styles/colors_and_type.css">
 <link rel="stylesheet" href="/styles/site.css">
 <link rel="stylesheet" href="/styles/docs.css">
@@ -347,7 +350,7 @@ schema-dependent state.</p>
 </tbody>
 </table>
 <p><strong>Curl example:</strong></p>
-<pre><code class="language-bash">curl -X POST http://localhost:8080/register \
+<pre><code class="language-bash">curl -X POST http://localhost:7380/register \
   -H 'Content-Type: application/json' \
   -d @examples/wire/register-fraud-team.request.json
 </code></pre>
@@ -430,22 +433,17 @@ list with full HTTP status mapping (Plan 13.0-12 — forward reference).</p>
 <a href="/docs/wire-spec/#op_push-0x0010"><code>OP_PUSH</code> request schema</a>. The full JSON Schema
 lives at
 <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/schemas/push.request.schema.json"><code>examples/wire/schemas/push.request.schema.json</code></a>.</p>
-<p><strong>Path-style (recommended in v0):</strong> the engine accepts <code>POST /push/{event_name}</code>
-with body <code>{&quot;user_id&quot;: &quot;alice&quot;, ...}</code> — the body is the bare <code>fields</code> dict
-(the event name lives in the URL path). The fields object MUST match the registered
-event source's declared schema (same field names, compatible types). Type coercion on
-the JSON boundary is allowed in v0 — string <code>&quot;42&quot;</code> for an <code>i64</code> field is
-accepted (the JSON-to-Rust coercer handles common mismatches). Strict-mode rejection
-is v0.1+.</p>
-<p><strong>Verb-style (also accepted):</strong> <code>POST /push</code> with body
-<code>{&quot;event&quot;: &quot;<name>&quot;, &quot;data&quot;: {...}}</code>. Both shapes are equivalent. SDKs
-prefer the verb-style form internally because it composes with batch dispatch on
-the TCP transport (<code>OP_PUSH</code> opcode + JSON body); curl users tend to find the
-path-style URL clearer.</p>
+<p>The body shape is <code>{event_name, fields: {...}}</code> in the post-13.4 verb-style
+form. The <code>event_name</code> field MUST match a registered <code>@bv.event</code> source; the
+<code>fields</code> object MUST match its declared schema (same field names, compatible
+types). Type coercion on the JSON boundary is allowed in v0 — string <code>&quot;42&quot;</code>
+for an <code>i64</code> field is accepted (the JSON-to-Rust coercer handles common
+mismatches). Strict-mode rejection is v0.1+.</p>
 <blockquote>
-<p><strong>Note:</strong> Earlier draft docs and the Phase-13.0 specs referred to a verb-style
-body of <code>{event_name, fields}</code>. The shipped engine accepts <code>{event, data}</code> instead;
-the older shape will return HTTP 400 <code>missing_event_name_in_body</code>.</p>
+<p><strong>Pre-13.4 form:</strong> the current engine accepts <code>POST /push/{event_name}</code> with
+body <code>{fields: {...}}</code> (no <code>event_name</code> key — it is in the URL path). Phase
+13.4 mechanically renames to the verb-style form documented above. SDKs ship
+against the post-13.4 form from day one (Plan 13.5 Python, Plan 13.6 TS + Go).</p>
 </blockquote>
 <p><strong>Response body (success):</strong> see the wire-spec
 <a href="/docs/wire-spec/#op_push-0x0010"><code>OP_PUSH</code> response schema</a>. The full JSON
@@ -480,7 +478,7 @@ v0.1+ via the wire-level opcode <code>OP_PUSH_SYNC = 0x0011</code>.</p>
 </tr>
 <tr>
 <td>404</td>
-<td><code>event_not_found</code> — the event name is not registered.</td>
+<td><code>unknown_event</code> — the <code>event_name</code> is not registered.</td>
 </tr>
 <tr>
 <td>415</td>
@@ -492,20 +490,23 @@ v0.1+ via the wire-level opcode <code>OP_PUSH_SYNC = 0x0011</code>.</p>
 </tr>
 </tbody>
 </table>
-<p><strong>Curl example (path-style — simplest):</strong></p>
-<pre><code class="language-bash">curl -X POST http://localhost:8080/push/Txn \
+<p><strong>Curl example:</strong></p>
+<pre><code class="language-bash">curl -X POST http://localhost:7380/push \
+  -H 'Content-Type: application/json' \
+  -d '{&quot;event_name&quot;: &quot;Txn&quot;, &quot;fields&quot;: '&quot;$(cat examples/wire/push-success.request.json | jq .fields)&quot;'}'
+</code></pre>
+<p>Or, when the <code>event_name</code> is already inlined in the fixture (post-13.4
+fixtures bundle the field):</p>
+<pre><code class="language-bash">curl -X POST http://localhost:7380/push \
   -H 'Content-Type: application/json' \
   -d @examples/wire/push-success.request.json
 </code></pre>
-<p>Or with the verb-style body that the SDKs send internally:</p>
-<pre><code class="language-bash">curl -X POST http://localhost:8080/push \
-  -H 'Content-Type: application/json' \
-  -d '{&quot;event&quot;: &quot;Txn&quot;, &quot;data&quot;: {&quot;user_id&quot;: &quot;u123&quot;, &quot;amount&quot;: 42.5}}'
-</code></pre>
 <blockquote>
-<p>The wire-level fixture <code>examples/wire/push-success.request.json</code> carries
-only the bare fields dict, which is the path-style body. To replay it via verb-style,
-wrap it as <code>{&quot;event&quot;: &quot;Txn&quot;, &quot;data&quot;: <fixture>}</code> with <code>jq</code>.</p>
+<p>Note: <code>examples/wire/push-success.request.json</code> currently carries only the
+<code>fields</code> object (matching the wire-level body which routes <code>event_name</code>
+separately on TCP). The HTTP transport in the post-13.4 target form expects
+<code>event_name</code> inside the body; SDKs synthesise that from their <code>app.push(&quot;Txn&quot;, {...})</code>
+call. The two-line <code>jq</code> example above demonstrates the manual transform.</p>
 </blockquote>
 <p><strong>Errors specific to this endpoint:</strong></p>
 <table>
@@ -624,7 +625,7 @@ the Redis-shaped contract: a cold key is just a key with no data, not a
 </tbody>
 </table>
 <p><strong>Curl example:</strong></p>
-<pre><code class="language-bash">curl -X POST http://localhost:8080/get \
+<pre><code class="language-bash">curl -X POST http://localhost:7380/get \
   -H 'Content-Type: application/json' \
   -d @examples/wire/get-found.request.json
 </code></pre>
@@ -746,7 +747,7 @@ re-issue with the bad request removed. Partial success is reserved for v0.1+.</p
 </tbody>
 </table>
 <p><strong>Curl example:</strong></p>
-<pre><code class="language-bash">curl -X POST http://localhost:8080/batch_get \
+<pre><code class="language-bash">curl -X POST http://localhost:7380/batch_get \
   -H 'Content-Type: application/json' \
   -d @examples/wire/batch_get-heterogeneous.request.json
 </code></pre>
@@ -828,8 +829,8 @@ Schema lives at
 WAL. It is intended for <strong>test fixtures</strong> (<code>bv.test.fixture</code> and the
 <code>beavaTestServer</code> harness use it between tests). Production operators MUST
 NOT call <code>/reset</code> on an instance bound to live data. Operators concerned
-about misuse should boot without test mode (the v0 default) — the route then
-returns <code>403 Forbidden</code> with <code>reset_disabled_in_production</code>.</p>
+about misuse should set <code>enable_reset_op=false</code> in the server config; the
+route then returns <code>403 Forbidden</code> with <code>reset_disabled</code>.</p>
 </blockquote>
 <p><strong>HTTP status codes:</strong></p>
 <table>
@@ -846,7 +847,7 @@ returns <code>403 Forbidden</code> with <code>reset_disabled_in_production</code
 </tr>
 <tr>
 <td>403</td>
-<td><code>reset_disabled_in_production</code> — server is not in test mode (the v0 default).</td>
+<td><code>reset_disabled</code> — server config has <code>enable_reset_op=false</code>.</td>
 </tr>
 <tr>
 <td>415</td>
@@ -859,12 +860,12 @@ returns <code>403 Forbidden</code> with <code>reset_disabled_in_production</code
 </tbody>
 </table>
 <p><strong>Curl example:</strong></p>
-<pre><code class="language-bash">curl -X POST http://localhost:8080/reset \
+<pre><code class="language-bash">curl -X POST http://localhost:7380/reset \
   -H 'Content-Type: application/json' \
   -d @examples/wire/reset-request.json
 </code></pre>
 <p>Or, since the body is empty:</p>
-<pre><code class="language-bash">curl -X POST http://localhost:8080/reset \
+<pre><code class="language-bash">curl -X POST http://localhost:7380/reset \
   -H 'Content-Type: application/json' \
   -d '{}'
 </code></pre>
@@ -879,9 +880,9 @@ returns <code>403 Forbidden</code> with <code>reset_disabled_in_production</code
 </thead>
 <tbody>
 <tr>
-<td><code>reset_disabled_in_production</code></td>
-<td>Server is not in test mode. v0 OP_RESET requires <code>BEAVA_TEST_MODE=1</code> at boot.</td>
-<td>Boot the server with <code>BEAVA_TEST_MODE=1</code> if reset is appropriate; otherwise reset is intentionally forbidden on this instance.</td>
+<td><code>reset_disabled</code></td>
+<td>Server config has <code>enable_reset_op=false</code>.</td>
+<td>Set the config to <code>true</code> if appropriate; otherwise reset is intentionally forbidden on this instance.</td>
 </tr>
 <tr>
 <td><code>wal_truncate_failed</code></td>
@@ -959,7 +960,7 @@ feature schemas.</p>
 </tbody>
 </table>
 <p><strong>Curl example:</strong></p>
-<pre><code class="language-bash">curl -X POST http://localhost:8080/ping \
+<pre><code class="language-bash">curl -X POST http://localhost:7380/ping \
   -H 'Content-Type: application/json' \
   -d @examples/wire/ping-request.json
 </code></pre>
@@ -1214,10 +1215,10 @@ full dedupe semantics.</li>
 </tr>
 </tbody>
 </table>
-<p>The verb-style body shape is <code>{&quot;event&quot;: &quot;<name>&quot;, &quot;data&quot;: {...}}</code>
-(both keys required); the path-style body is the bare fields dict. Other routes
-(<code>/register</code>, <code>/get</code>, <code>/batch_get</code>, <code>/reset</code>, <code>/ping</code>) are verb-style
-in the current code.</p>
+<p>Phase 13.4 ships the rename mechanically. The body shape changes from
+<code>{fields: {...}}</code> to <code>{event_name: &quot;...&quot;, fields: {...}}</code>. Other routes
+(<code>/register</code>, <code>/get</code>, <code>/batch_get</code>, <code>/reset</code>, <code>/ping</code>) are already verb-style
+in the current code; only <code>/push</code> (and its TCP analog) needs the rename.</p>
 <p>The rename rationale aligns with <code>project_v2_devex_first</code> and the broader
 Polars / DuckDB voice (<code>feedback_beava_website_voice</code>):</p>
 <ul>
@@ -1279,6 +1280,5 @@ these routes.</li>
     <a href="https://github.com/beava-dev/beava" target="_blank" rel="noopener">GitHub</a>
   </div>
 </footer>
-  <script src="/js/track-pageview.js" defer></script>
 </body>
 </html>

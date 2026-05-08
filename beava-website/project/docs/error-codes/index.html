@@ -4,9 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Error Codes — beava docs</title>
-<meta name="description" content="beava — real-time feature server.">
+<meta name="description" content="Beava — real-time feature server.">
 <link rel="canonical" href="https://beava.dev/docs/error-codes/">
-<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="shortcut icon" href="/assets/favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+<link rel="shortcut icon" href="/assets/favicon.ico">
 <link rel="stylesheet" href="/styles/colors_and_type.css">
 <link rel="stylesheet" href="/styles/site.css">
 <link rel="stylesheet" href="/styles/docs.css">
@@ -234,110 +237,7 @@ ADR. Source: <code>python/beava/_errors.py::VALIDATION_ERROR_KINDS</code>.</p>
 </tr>
 </tbody>
 </table>
-<h2 id="engine-emitted-codes-not-in-this-page" tabindex="-1"><a class="header-anchor" href="#engine-emitted-codes-not-in-this-page" aria-hidden="true">#</a> Engine-emitted codes (newly documented v0.0.0)</h2>
-<p>The following codes appear in the wire response but were missing from earlier drafts of this page. They were captured by grepping <code>crates/</code> for <code>code: &quot;...&quot;</code> emissions and probing the live engine on every documented HTTP route. Each is fully documented in the alphabetical section below.</p>
-<table>
-<thead>
-<tr>
-<th>Code</th>
-<th>HTTP status</th>
-<th>When (one-liner)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>event_not_found</code></td>
-<td>404</td>
-<td>Event name not registered (rename of <code>unknown_event</code> — old name never emitted).</td>
-</tr>
-<tr>
-<td><code>feature_not_found</code></td>
-<td>500</td>
-<td><code>POST /get</code> requested a feature not in the table's agg map. <strong>Engine-bug:</strong> currently surfaces wrapped inside <code>internal_error</code>; v0.0.x will lift to top-level.</td>
-</tr>
-<tr>
-<td><code>invalid_json_body</code></td>
-<td>400</td>
-<td>Request body is not parseable JSON.</td>
-</tr>
-<tr>
-<td><code>invalid_registration</code></td>
-<td>400</td>
-<td>Register payload structure invalid (missing required field, unknown variant, etc.).</td>
-</tr>
-<tr>
-<td><code>key_not_found</code></td>
-<td>—</td>
-<td>Reserved; cold-start GET returns <code>{}</code> (not an error).</td>
-</tr>
-<tr>
-<td><code>key_parse_failure</code></td>
-<td>400</td>
-<td>GET / batch-get key cannot be deserialised against the table's key schema.</td>
-</tr>
-<tr>
-<td><code>method_not_allowed</code></td>
-<td>405</td>
-<td>HTTP method not supported on this route (e.g., <code>GET /ping</code>; PING is POST-only).</td>
-</tr>
-<tr>
-<td><code>missing_event_name_in_body</code></td>
-<td>400</td>
-<td>Verb-style <code>POST /push</code> body is missing the <code>event</code> field.</td>
-</tr>
-<tr>
-<td><code>not_found</code></td>
-<td>404</td>
-<td>HTTP route does not exist (e.g., the legacy <code>/features/...</code> path).</td>
-</tr>
-<tr>
-<td><code>unknown_table</code></td>
-<td>404</td>
-<td><code>POST /get</code> / <code>/batch_get</code> table is not registered.</td>
-</tr>
-<tr>
-<td><code>unsupported_request_shape</code></td>
-<td>400</td>
-<td>Body parsed but does not match any known request schema for this opcode.</td>
-</tr>
-<tr>
-<td><code>wal_sync_timeout</code> / <code>wal_unavailable</code></td>
-<td>500</td>
-<td>WAL fsync / append failed (disk-stall, hardware fault, network-FS rejection).</td>
-</tr>
-</tbody>
-</table>
-<h2 id="known-divergences" tabindex="-1"><a class="header-anchor" href="#known-divergences" aria-hidden="true">#</a> Known divergences (engine bugs, not docs bugs)</h2>
-<p>A few code paths exist in <code>crates/</code> but do not surface to users as the
-docs claim. These are tracked as v0.0.x backlog items, not docs fixes.</p>
-<table>
-<thead>
-<tr>
-<th>Code</th>
-<th>Documented behavior</th>
-<th>Actual behavior</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>unsupported_content_type</code></td>
-<td>415 when <code>Content-Type</code> is not <code>application/json</code>.</td>
-<td>The body parser runs first; non-JSON bodies fail at <code>missing_event_name_in_body</code> / <code>invalid_json_body</code> before <code>Content-Type</code> is checked. The 415 path exists in code but is unreachable on every documented route.</td>
-</tr>
-<tr>
-<td><code>feature_not_found</code></td>
-<td>Top-level <code>{&quot;error&quot;: {&quot;code&quot;: &quot;feature_not_found&quot;, ...}}</code>.</td>
-<td>Wrapped inside <code>internal_error</code> with the structured details in <code>reason</code> — clients dispatching on <code>code</code> see <code>internal_error</code>.</td>
-</tr>
-<tr>
-<td><code>registration_conflict</code> vs <code>force_required</code></td>
-<td>Both names coexist in source.</td>
-<td>The engine's destructive-change path emits <code>force_required</code> (Phase 13.4 dispatch order). <code>registration_conflict</code> is reserved for the legacy additive-only path.</td>
-</tr>
-</tbody>
-</table>
-
-<h2 id=structured-codes-alphabetical" tabindex="-1"><a class="header-anchor" href="#structured-codes-alphabetical" aria-hidden="true">#</a> Structured codes (alphabetical)</h2>
+<h2 id="structured-codes-alphabetical" tabindex="-1"><a class="header-anchor" href="#structured-codes-alphabetical" aria-hidden="true">#</a> Structured codes (alphabetical)</h2>
 <p>The canonical reference. Each entry lists the HTTP status the server returns,
 when the code fires, the typical <code>path</code> format, the recovery action, and a
 worked-example fixture link if one exists under <code>examples/wire/</code>.</p>
@@ -718,17 +618,12 @@ equivalent is <code>feature_removed_no_unions_v0</code>.
 <strong>Path:</strong> <code>&lt;descriptor_name&gt;</code>.
 <strong>Recovery:</strong> Multiplex client-side for v0; first-class union returns alongside
 joins in a future minor.</p>
-<h3 id="code-eventnotfound" tabindex="-1"><a class="header-anchor" href="#code-eventnotfound" aria-hidden="true">#</a> code = &quot;event_not_found&quot;</h3>
+<h3 id="code-unknownevent" tabindex="-1"><a class="header-anchor" href="#code-unknownevent" aria-hidden="true">#</a> code = &quot;unknown_event&quot;</h3>
 <p><strong>HTTP status:</strong> 404
-<strong>When:</strong> The event name (URL path on HTTP, routing prefix on TCP, or the
-<code>event</code> field in a verb-style POST /push body) is not registered.
-<strong>Path:</strong> <em>(no path; the offending name is in the URL, the routing prefix, or the request body)</em>
+<strong>When:</strong> The <code>event_name</code> (URL path on HTTP, routing prefix on TCP) is not
+registered.
+<strong>Path:</strong> <em>(no path; the offending name is in the URL or routing prefix)</em>
 <strong>Recovery:</strong> Register the event source first via <code>OP_REGISTER</code>; check spelling.</p>
-<blockquote>
-<p>Earlier draft docs called this code <code>unknown_event</code>; the engine has
-always emitted <code>event_not_found</code>. The old code name does not appear
-anywhere in <code>crates/</code>.</p>
-</blockquote>
 <h3 id="code-unknownfieldeventtimev0" tabindex="-1"><a class="header-anchor" href="#code-unknownfieldeventtimev0" aria-hidden="true">#</a> code = &quot;unknown_field_event_time_v0&quot;</h3>
 <p><strong>HTTP status:</strong> 400
 <strong>When:</strong> Register payload contains an <code>event_time_field</code> decorator key. Per
@@ -844,7 +739,7 @@ double the memory cost without sufficient benefit in v0.
 <tr>
 <td><code>404</code></td>
 <td>Not found</td>
-<td><code>event_not_found</code>, <code>unknown_table</code>.</td>
+<td><code>unknown_event</code>, <code>unknown_table</code>.</td>
 </tr>
 <tr>
 <td><code>409</code></td>
@@ -943,6 +838,5 @@ op-rename narrative; old names emit <code>DeprecationWarning</code> in Python v0
     <a href="https://github.com/beava-dev/beava" target="_blank" rel="noopener">GitHub</a>
   </div>
 </footer>
-  <script src="/js/track-pageview.js" defer></script>
 </body>
 </html>

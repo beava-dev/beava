@@ -6,7 +6,10 @@
 <title>Single-Threaded Apply — beava docs</title>
 <meta name="description" content="beava processes every event on a single OS thread — the apply loop. There is no in-process apply sharding, no work-stealing scheduler, no per-core fan-out. Auxiliary threads exist (the WAL writer,…">
 <link rel="canonical" href="https://beava.dev/docs/architecture/single-thread-apply/">
-<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="shortcut icon" href="/assets/favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+<link rel="shortcut icon" href="/assets/favicon.ico">
 <link rel="stylesheet" href="/styles/colors_and_type.css">
 <link rel="stylesheet" href="/styles/site.css">
 <link rel="stylesheet" href="/styles/docs.css">
@@ -271,6 +274,7 @@ its slice of state until WAL replay completes. Recovery (RTO target &lt;
 <ul>
 <li><a href="../../CLAUDE.md"><code>CLAUDE.md</code> § mio-only Hot-Path Invariant</a> — locked
 Phase 12.6 commitment; the architectural test that enforces it at CI.</li>
+<li><code>~/.claude/projects/-Users-petrpan26-work-tally/memory/project_no_sharded_apply.md</code>
 — the locked single-thread commitment + the rejected Phase 13.3
 proposal.</li>
 <li><a href="/docs/architecture/mio-data-plane/">mio-data-plane.md</a> — mio runtime details +
@@ -308,6 +312,5 @@ counters: pushes, latency histograms, WAL fsync latency.</li>
     <a href="https://github.com/beava-dev/beava" target="_blank" rel="noopener">GitHub</a>
   </div>
 </footer>
-  <script src="/js/track-pageview.js" defer></script>
 </body>
 </html>

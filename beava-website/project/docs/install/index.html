@@ -4,9 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Install — beava docs</title>
-<meta name="description" content="beava — real-time feature server.">
+<meta name="description" content="Beava — real-time feature server.">
 <link rel="canonical" href="https://beava.dev/docs/install/">
-<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="shortcut icon" href="/assets/favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+<link rel="shortcut icon" href="/assets/favicon.ico">
 <link rel="stylesheet" href="/styles/colors_and_type.css">
 <link rel="stylesheet" href="/styles/site.css">
 <link rel="stylesheet" href="/styles/docs.css">
@@ -117,28 +120,31 @@
 <blockquote>
 <p>Pick one. They're the same binary.</p>
 </blockquote>
-<blockquote><p>Pre-release: install paths go through GitHub. <code>pip install beava</code>,
+<blockquote>
+<p>Pre-release: install paths go through GitHub. <code>pip install beava</code>,
 <code>brew install beava-dev/tap/beava</code>, and the prebuilt Docker image will
-light up at the v0.0.0 cut.</p></blockquote>
+light up at the v0.0.0 cut.</p>
+</blockquote>
 <h2 id="pip-from-github" tabindex="-1"><a class="header-anchor" href="#pip-from-github" aria-hidden="true">#</a> pip (from GitHub)</h2>
-<pre><code class="language-bash">pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"
+<pre><code class="language-bash">pip install &quot;git+https://github.com/beava-dev/beava.git#subdirectory=python&quot;
 </code></pre>
-<p>The Python SDK ships with the server binary embedded. <code>bv.App()</code> discovers and runs it on an ephemeral port.</p>
-<h2 id="docker" tabindex="-1"><a class="header-anchor" href="#docker" aria-hidden="true">#</a> Docker (build from source)</h2>
+<p>The Python SDK ships with the server binary embedded. <code>bv.App()</code> discovers and runs it on an ephemeral port. This is what you want for development, tests, and most production deployments.</p>
+<h2 id="docker-build-from-source" tabindex="-1"><a class="header-anchor" href="#docker-build-from-source" aria-hidden="true">#</a> Docker (build from source)</h2>
 <pre><code class="language-bash">git clone https://github.com/beava-dev/beava
 cd beava
 docker build -f deploy/Dockerfile.beava -t beava:dev .
 docker run -p 8080:8080 -v $PWD/beava.example.yaml:/app/beava.yaml beava:dev
 </code></pre>
-<p>Push and query against <code>:8080</code>.</p>
-<h2 id="cargo-from-source" tabindex="-1"><a class="header-anchor" href="#cargo-from-source" aria-hidden="true">#</a> Cargo (build from source)</h2>
+<p>Push and query against <code>:8080</code>. Mount a volume at <code>/data</code> to persist the WAL and snapshots.</p>
+<h2 id="cargo-build-from-source" tabindex="-1"><a class="header-anchor" href="#cargo-build-from-source" aria-hidden="true">#</a> Cargo (build from source)</h2>
 <pre><code class="language-bash">git clone https://github.com/beava-dev/beava
 cd beava
 cargo build --release -p beava-server
 ./target/release/beava -c beava.example.yaml
 </code></pre>
 <p>The binary takes a single YAML config (default <code>./beava.yaml</code>); ports come
-from <code>listen_addr</code> / <code>admin_addr</code> keys.</p>
+from <code>listen_addr</code> / <code>admin_addr</code> keys, or env vars
+<code>BEAVA_LISTEN_ADDR</code> / <code>BEAVA_ADMIN_ADDR</code>. There is no <code>serve</code> subcommand.</p>
 <h2 id="verify" tabindex="-1"><a class="header-anchor" href="#verify" aria-hidden="true">#</a> Verify</h2>
 <pre><code class="language-bash">$ beava --version
 beava 0.0.0
@@ -155,9 +161,9 @@ print(bv.__version__)
 <aside class="docs-toc" aria-label="On this page">
   <div class="toc-title">On this page</div>
   <ul class="toc-list">
-      <li><a href="#pip-recommended">pip (recommended)</a></li>
-      <li><a href="#docker">Docker</a></li>
-      <li><a href="#homebrew-macos-linux">Homebrew (macOS, Linux)</a></li>
+      <li><a href="#pip-from-github">pip (from GitHub)</a></li>
+      <li><a href="#docker-build-from-source">Docker (build from source)</a></li>
+      <li><a href="#cargo-build-from-source">Cargo (build from source)</a></li>
       <li><a href="#verify">Verify</a></li>
       <li><a href="#whats-next">What's next</a></li>
   </ul>
@@ -169,6 +175,5 @@ print(bv.__version__)
     <a href="https://github.com/beava-dev/beava" target="_blank" rel="noopener">GitHub</a>
   </div>
 </footer>
-  <script src="/js/track-pageview.js" defer></script>
 </body>
 </html>

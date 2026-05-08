@@ -4,9 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>beava TypeScript SDK — beava docs</title>
-<meta name="description" content="beava — real-time feature server.">
+<meta name="description" content="Beava — real-time feature server.">
 <link rel="canonical" href="https://beava.dev/docs/sdk-api/typescript/">
-<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="shortcut icon" href="/assets/favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+<link rel="shortcut icon" href="/assets/favicon.ico">
 <link rel="stylesheet" href="/styles/colors_and_type.css">
 <link rel="stylesheet" href="/styles/site.css">
 <link rel="stylesheet" href="/styles/docs.css">
@@ -115,799 +118,169 @@
 <article class="docs-prose">
 <h1>beava TypeScript SDK</h1>
 <blockquote>
-<p><strong>Status:</strong> Authoritative for v0. Documents the <strong>post-13.6 target</strong> TS SDK
-shape — Phase 13.6 implements the port. Cross-language semantics live in
-<a href="/docs/sdk-api/shared/">shared.md</a>; wire-level body shapes live in
-<a href="/docs/wire-spec/">docs/wire-spec.md</a>. Python is the canonical reference —
-see <a href="/docs/sdk-api/python/">python.md</a>.
-<strong>Last reviewed:</strong> 2026-05-03 (Phase 13.0).</p>
+<p><strong>Communicate-only SDK.</strong> This SDK pushes events, registers pre-compiled JSON descriptors, and reads features. Pipeline authoring (event sources, expression DSL, op helpers) lives in the <strong>Python SDK only</strong> — see <a href="/docs/sdk-api/python/">python.md</a>. Use Python's <code>bv.App.register_json(...)</code> (or hand-write the JSON per <a href="/docs/wire-spec/#op_register-0x0001">docs/wire-spec.md OP_REGISTER</a>) to produce descriptors, then ship that JSON to your TypeScript app.</p>
+</blockquote>
+<blockquote>
+<p><strong>Status:</strong> Authoritative for v0. Documents the post-13.6 TS SDK shape (rescoped 2026-05-03 to communicate-only). Cross-language semantics live in <a href="/docs/sdk-api/shared/">shared.md</a>; wire-level body shapes live in <a href="/docs/wire-spec/">docs/wire-spec.md</a>. Python is the canonical authoring reference.</p>
+<p><strong>Last reviewed:</strong> 2026-05-03 (Phase 13.6).</p>
 </blockquote>
 <h2 id="overview" tabindex="-1"><a class="header-anchor" href="#overview" aria-hidden="true">#</a> Overview</h2>
-<p>The beava TypeScript SDK ships as the npm package <code>@beava/sdk</code>. It mirrors
-the <a href="/docs/sdk-api/python/">Python SDK</a> surface 1:1 at the wire-contract level (per
-<a href="/docs/sdk-api/shared/">shared.md</a>) but uses idiomatic JavaScript / TypeScript
-conventions where the language demands them:</p>
+<p><code>@beava/sdk</code> is a wire-thin TypeScript client for the beava real-time feature server. It targets Node.js 18+ (LTS) and is <strong>ESM-only</strong> (<code>&quot;type&quot;: &quot;module&quot;</code>).</p>
 <ul>
-<li><strong>camelCase</strong> for multi-word identifiers (e.g., <code>app.batchGet(...)</code>,
-<code>eventName: string</code>, <code>withColumns({...})</code>). The transport layer
-translates wire JSON <code>snake_case</code> keys to camelCase on response and
-back to <code>snake_case</code> on requests.</li>
-<li><strong>Promise-based</strong> API — every wire-bound method returns a <code>Promise&lt;T&gt;</code>.
-Synchronous SDK is reserved for v0.1+.</li>
-<li><strong>Builder-pattern feature declaration</strong> — TypeScript stage-3 decorators
-(TS 5.0+) ship in v0.1+ per
-<a href="https://github.com/beava-dev/beava/blob/main/.planning/ideas/v0.1-deferrals.md"><code>.planning/ideas/v0.1-deferrals.md</code></a>.
-v0 uses explicit builder calls (<code>bv.event({...})</code>, <code>bv.table({...})</code>).</li>
-<li><strong>53 op functions</strong> matching the Python catalogue, named per
-<a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-002-polars-op-rename.md">ADR-002</a> Polars
-conventions — <code>bv.mean</code>, <code>bv.var</code>, <code>bv.std</code>, <code>bv.nUnique</code>, <code>bv.quantile</code>.
-No deprecation aliases on the TS side; v0 is unreleased and TS users
-start with the new names directly.</li>
+<li><strong>Promise-based</strong> — every wire-bound method returns a <code>Promise&lt;T&gt;</code>.</li>
+<li><strong>No DSL</strong> — <code>Descriptor</code> is an opaque <code>Record&lt;string, unknown&gt;</code> JSON blob; the SDK never parses or compiles authoring expressions.</li>
+<li><strong>JSON wire bodies pass through verbatim</strong> — no camelCase ↔ snake_case translation; what the wire spec says, the SDK sends.</li>
 </ul>
 <blockquote>
-<p><strong>npm package:</strong> <code>@beava/sdk</code> — <strong>not yet published; coming v0.0.1.</strong>
-The TypeScript SDK source ships in this repo (<code>sdk/typescript/</code>) and its
-test suite runs in CI on every commit, but the npm release is part of the
-v0.0.1 cut. v0.0.0 is Python-only on the public package surface. To use the
-TS SDK before v0.0.1, build from source. Once published, install via
-<code>npm install @beava/sdk</code> / <code>yarn add @beava/sdk</code> / <code>pnpm add @beava/sdk</code>.
-The SDK targets Node.js 20+ (LTS) and modern browsers via the
-<code>&quot;browser&quot;</code> package export condition.</p>
+<p><strong>npm:</strong> <code>npm install @beava/sdk</code> (or <code>pnpm add @beava/sdk</code> / <code>yarn add @beava/sdk</code>). Apache-2.0 license. Source lives at <code>github.com/beava-dev/beava/sdk/typescript/</code>.</p>
 </blockquote>
 <h2 id="module-structure" tabindex="-1"><a class="header-anchor" href="#module-structure" aria-hidden="true">#</a> Module structure</h2>
-<pre><code>@beava/sdk/
-├── index.ts             # public exports: beavaApp, event, table, col, lit, count, sum, mean, ...
-├── app.ts               # beavaApp class
-├── events.ts            # event() builder + EventDescriptor
-├── table.ts             # table() builder + TableDescriptor (per ADR-001)
-├── agg.ts               # 53 op functions (count, sum, mean, ..., nUnique, quantile)
-├── col.ts               # col(...), lit(...), expression overloading
-├── errors.ts            # RegistrationError, BinaryNotFoundError
-├── types.ts             # Optional, Field, type vocab
-├── wire.ts              # frame codec, opcodes (CT_JSON only in v0)
-├── transport.ts         # HTTP transport (TCP fast-path is v0.1+ on TS — node-only initially)
-└── test/                # test fixtures (sub-export: @beava/sdk/test)
-    ├── fixture.ts       # spawn embed-mode app
-    ├── replay.ts        # replay events for deterministic tests
-    └── assertFeaturesEq.ts
+<pre><code>sdk/typescript/
+├── src/
+│   ├── index.ts             # public exports: beavaApp, errors, types, wire, transports
+│   ├── app.ts               # beavaApp class with all 8 wire methods
+│   ├── wire.ts              # frame codec + opcode constants (CT_JSON only in v0)
+│   ├── transport.ts         # HttpTransport (uses global fetch)
+│   ├── transport-tcp.ts     # TcpTransport (node:net, Redis-style FIFO)
+│   ├── embed.ts             # spawnEmbeddedServer, teardownServer, discoverBinary
+│   ├── errors.ts            # RegistrationError, BinaryNotFoundError
+│   └── types.ts             # Descriptor (opaque), result interfaces
+└── test/                    # vitest specs
 </code></pre>
+<p>There are deliberately <strong>no</strong> <code>events.ts</code> / <code>col.ts</code> / <code>agg.ts</code> / <code>table.ts</code> files — the TS SDK has no authoring layer. See <a href="/docs/sdk-api/shared/#authoring-vs-communicate">shared.md § Authoring vs communicate</a>.</p>
 <h2 id="beavaapp-class" tabindex="-1"><a class="header-anchor" href="#beavaapp-class" aria-hidden="true">#</a> beavaApp class</h2>
 <pre><code class="language-typescript">import { beavaApp } from &quot;@beava/sdk&quot;;
-import * as bv from &quot;@beava/sdk&quot;;
 
 class beavaApp {
-  constructor(url?: string, options?: { timeout?: number });
+  constructor(url?: string, options?: { timeout?: number; test_mode?: boolean; binary_path?: string });
 
-  // Wire-mapped methods (each returns a Promise&lt;T&gt;)
-  register(...descriptors: Descriptor[]): Promise&lt;RegisterResult&gt;;
-  register(
-    descriptors: Descriptor[],
-    opts: { force?: boolean; dryRun?: boolean }
-  ): Promise&lt;RegisterResult&gt;;
+  // Wire methods (each returns a Promise&lt;T&gt;)
+  register(descriptors: Descriptor[], opts?: { force?: boolean; dry_run?: boolean }): Promise&lt;RegisterResult&gt;;
   push(eventName: string, fields: Record&lt;string, unknown&gt;): Promise&lt;PushResult&gt;;
-  get(table: string, key: string | (string | number | boolean)[]): Promise&lt;Record&lt;string, unknown&gt;&gt;;
-  batchGet(
-    requests: Array&lt;{ table: string; key: string | (string | number | boolean)[]; features?: string[] }&gt;
-  ): Promise&lt;Record&lt;string, unknown&gt;[]&gt;;
-  reset(): Promise&lt;void&gt;;
-  ping(): Promise&lt;{ serverVersion: string; registryVersion: number }&gt;;
-  close(): Promise&lt;void&gt;;
-
-  // Async-disposable for `using` / `await using` ergonomics (Node 22+ / TS 5.2+)
-  [Symbol.asyncDispose](): Promise&lt;void&gt;;
+  pushSync(eventName: string, fields: Record&lt;string, unknown&gt;): Promise&lt;PushResult&gt;;
+  get(table: string): Promise&lt;FeatureRow&gt;;                                          // 1-arg = global table per ADR-003
+  get(table: string, key: string | (string | number | boolean)[]): Promise&lt;FeatureRow&gt;; // 2-arg = per-entity
+  batchGet(requests: GetRequest[]): Promise&lt;FeatureRow[]&gt;;
+  reset(): Promise&lt;void&gt;;                                                            // server gates on test_mode
+  ping(): Promise&lt;PingResult&gt;;
+  close(): Promise&lt;void&gt;;                                                            // idempotent
 }
 </code></pre>
-<p>Each public method maps 1:1 to a wire opcode:</p>
+<h3 id="constructor-url-scheme-dispatch" tabindex="-1"><a class="header-anchor" href="#constructor-url-scheme-dispatch" aria-hidden="true">#</a> Constructor + URL-scheme dispatch</h3>
+<p>The first constructor argument selects the transport:</p>
 <table>
 <thead>
 <tr>
-<th>Method</th>
-<th>Wire opcode</th>
-<th>Wire spec section</th>
+<th>URL form</th>
+<th>Transport</th>
+<th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>app.register(...)</code></td>
-<td><code>OP_REGISTER</code> (<code>0x0001</code>)</td>
-<td><a href="/docs/wire-spec/#op_register-0x0001">wire-spec § OP_REGISTER</a></td>
+<td><code>http://host:port</code> / <code>https://host:port</code></td>
+<td>HTTP/JSON via <code>fetch</code></td>
+<td>Default for production.</td>
 </tr>
 <tr>
-<td><code>app.push(...)</code></td>
-<td><code>OP_PUSH</code> (<code>0x0010</code>)</td>
-<td><a href="/docs/wire-spec/#op_push-0x0010">wire-spec § OP_PUSH</a></td>
+<td><code>tcp://host:port</code></td>
+<td>Custom-framed TCP (<code>[u32 length][u16 op][u8 ct][payload]</code>)</td>
+<td>Lowest-latency; Redis-style strict-FIFO correlation.</td>
 </tr>
 <tr>
-<td><code>app.get(...)</code></td>
-<td><code>OP_GET</code> (<code>0x0020</code>)</td>
-<td><a href="/docs/wire-spec/#op_get-0x0020">wire-spec § OP_GET</a></td>
-</tr>
-<tr>
-<td><code>app.batchGet(...)</code></td>
-<td><code>OP_BATCH_GET</code> (<code>0x0024</code>)</td>
-<td><a href="/docs/wire-spec/#op_batch_get-0x0024">wire-spec § OP_BATCH_GET</a></td>
-</tr>
-<tr>
-<td><code>app.reset()</code></td>
-<td><code>OP_RESET</code> (<code>0x0040</code>)</td>
-<td><a href="/docs/wire-spec/#op_reset-0x0040">wire-spec § OP_RESET</a></td>
-</tr>
-<tr>
-<td><code>app.ping()</code></td>
-<td><code>OP_PING</code> (<code>0x0000</code>)</td>
-<td><a href="/docs/wire-spec/#op_ping-0x0000">wire-spec § OP_PING</a></td>
-</tr>
-<tr>
-<td><code>app.close()</code></td>
-<td>(lifecycle)</td>
-<td>n/a — closes transport + terminates embed subprocess.</td>
+<td><code>undefined</code> (no URL)</td>
+<td>Embed mode</td>
+<td>Spawns local <code>beava</code> binary on first call; auto-reaped on <code>close()</code>.</td>
 </tr>
 </tbody>
 </table>
-<h3 id="constructor" tabindex="-1"><a class="header-anchor" href="#constructor" aria-hidden="true">#</a> Constructor</h3>
-<p><code>new beavaApp(url?, options?)</code> — URL controls transport selection per
-<a href="/docs/sdk-api/shared/#wire-transports">shared.md § Wire transports</a>:</p>
+<p><code>options</code>:</p>
 <ul>
-<li><code>&quot;http://...&quot;</code> / <code>&quot;https://...&quot;</code> → HTTP/JSON transport.</li>
-<li><code>&quot;tcp://...&quot;</code> → custom-framed TCP transport (Node.js only in v0; browser
-builds reject the <code>tcp://</code> scheme).</li>
-<li><code>undefined</code> (default) → embed mode; spawns local <code>beava</code> binary on
-ephemeral ports. Node.js only — browsers cannot spawn subprocesses.</li>
+<li><code>timeout</code> — per-request I/O timeout in ms (default <code>30000</code>).</li>
+<li><code>test_mode</code> — passes <code>BEAVA_TEST_MODE=1</code> to the embed-mode subprocess (mirrors Python <code>bv.App(test_mode=True)</code> per Phase 13.5 D-05). Ignored in network mode.</li>
+<li><code>binary_path</code> — overrides the embed-mode binary discovery path.</li>
 </ul>
-<p><code>options.timeout</code> is a transport-level I/O timeout in milliseconds (default
-<code>30_000</code>).</p>
-<p><strong>Embed mode + the explicit-disposal pattern:</strong></p>
-<pre><code class="language-typescript">import { beavaApp } from &quot;@beava/sdk&quot;;
-import * as bv from &quot;@beava/sdk&quot;;
-
-await using app = new beavaApp();   // Node 22+ / TS 5.2+ auto-cleanup
-await app.register(Txn, UserFeatures);
-await app.push(&quot;Txn&quot;, { user_id: &quot;alice&quot;, amount: 42.50 });
-console.log(await app.get(&quot;UserFeatures&quot;, &quot;alice&quot;));
-// `app[Symbol.asyncDispose]()` runs at scope exit
+<h3 id="registerdescriptors-opts" tabindex="-1"><a class="header-anchor" href="#registerdescriptors-opts" aria-hidden="true">#</a> <code>register(descriptors, opts?)</code></h3>
+<p>Submit a list of pre-compiled register node JSON blobs to <code>POST /register</code>. Wire body:</p>
+<pre><code class="language-json">{ &quot;nodes&quot;: [&lt;descriptor&gt;, ...], &quot;force&quot;: false, &quot;dry_run&quot;: false }
 </code></pre>
-<p>For older runtimes:</p>
-<pre><code class="language-typescript">const app = new beavaApp();
-try {
-  await app.register(Txn, UserFeatures);
-  // ...
-} finally {
-  await app.close();
+<p><code>Descriptor</code> is <code>Record&lt;string, unknown&gt;</code> — the SDK does not validate or compile descriptors. Authoring (event sources, expressions, op helpers) lives in the Python SDK; users either:</p>
+<ol>
+<li>Author in Python, compile to JSON via <code>bv.App.register_json(...)</code>, ship the JSON to a TypeScript runtime.</li>
+<li>Hand-write the JSON per <code>docs/wire-spec.md OP_REGISTER</code>.</li>
+</ol>
+<p>Returns <code>RegisterResult</code>:</p>
+<pre><code class="language-typescript">interface RegisterResult {
+  status: string;          // &quot;ok&quot; on success
+  registry_version: number;
+  added?: string[];
+  removed?: string[];
+  changed?: string[];
 }
 </code></pre>
-<h3 id="appregisterdescriptors-opts" tabindex="-1"><a class="header-anchor" href="#appregisterdescriptors-opts" aria-hidden="true">#</a> <code>app.register(...descriptors, opts?)</code></h3>
-<p><strong>Wire opcode:</strong> <code>OP_REGISTER</code> (<code>0x0001</code>).</p>
-<p>Validates the descriptor list locally (DAG / schema checks; zero network
-I/O), topo-sorts upstreams before dependents, compiles the JSON payload,
-and dispatches.</p>
-<p><strong>Args:</strong></p>
+<p><code>opts.force</code>: pass-through to wire <code>force</code> flag (allows destructive schema changes per Phase 13.4 D-01).
+<code>opts.dry_run</code>: pass-through to wire <code>dry_run</code> flag (validate without applying).</p>
+<h3 id="pusheventname-fields-and-pushsynceventname-fields" tabindex="-1"><a class="header-anchor" href="#pusheventname-fields-and-pushsynceventname-fields" aria-hidden="true">#</a> <code>push(eventName, fields)</code> and <code>pushSync(eventName, fields)</code></h3>
+<p><code>push</code> posts to <code>POST /push/&lt;eventName&gt;</code> with <code>{fields: {...}}</code>. Default semantics: <code>acks=1</code> (durable on this server).</p>
+<p><code>pushSync</code> is reserved for <code>acks=all</code> (multi-replica) durable push in v0.1+ per <a href="/docs/wire-spec/">docs/wire-spec.md OP_PUSH_SYNC</a>. v0 implementations delegate to <code>push</code> so users can write <code>acks=all</code>-shaped code today and switch wire opcodes when the server lands the multi-replica path.</p>
+<h3 id="gettable-and-gettable-key" tabindex="-1"><a class="header-anchor" href="#gettable-and-gettable-key" aria-hidden="true">#</a> <code>get(table)</code> and <code>get(table, key)</code></h3>
+<p>Two overloaded signatures:</p>
 <ul>
-<li><code>...descriptors</code>: variadic descriptor objects (returned by <code>bv.event(...)</code>,
-<code>bv.table(...)</code>, or chain expressions).</li>
-<li><code>opts.force</code> (camelCase): if <code>true</code>, accept destructive schema changes.
-Default <code>false</code> — destructive changes throw <code>RegistrationError</code> with
-<code>code === &quot;registration_conflict&quot;</code>.</li>
-<li><code>opts.dryRun</code> (camelCase): if <code>true</code>, return the diff without applying.
-<code>registryVersion</code> is unchanged.</li>
+<li><code>get(table, key)</code> — per-entity lookup. <code>key</code> is either a <code>string</code> or a tuple <code>(string | number | boolean)[]</code> for composite keys.</li>
+<li><code>get(table)</code> — global aggregation (no entity dimension) per <a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-003-global-aggregation-and-bv-lit.md">ADR-003</a>. Wire body uses <code>key: &quot;&quot;</code> (empty-string sentinel).</li>
 </ul>
-<p><strong>Returns:</strong> <code>Promise&lt;RegisterResult&gt;</code> carrying
-<code>{ status, registryVersion, added, removed?, changed?, diff? }</code>. Note the
-camelCase <code>registryVersion</code> (wire JSON <code>registry_version</code> is translated by
-the transport).</p>
-<p><strong>Throws (rejects):</strong> <code>RegistrationError</code> carrying <code>code</code>, <code>path</code>,
-<code>message</code>, and <code>errors: ValidationError[]</code> for the full list when the
-server returns multiple problems.</p>
-<p><strong>Variadic vs array form:</strong> the variadic form (<code>app.register(d1, d2)</code>) is
-the syntactic sugar; the array form (<code>app.register([d1, d2], { force: true })</code>)
-is required when passing options. The signature accepts both via TS
-function overloads.</p>
-<h3 id="apppusheventname-fields" tabindex="-1"><a class="header-anchor" href="#apppusheventname-fields" aria-hidden="true">#</a> <code>app.push(eventName, fields)</code></h3>
-<p><strong>Wire opcode:</strong> <code>OP_PUSH</code> (<code>0x0010</code>).</p>
-<p>Push a single event into a registered event source.</p>
-<p><strong>Args:</strong></p>
-<ul>
-<li><code>eventName</code>: string matching a registered <code>bv.event(...)</code> source's name.</li>
-<li><code>fields</code>: object matching the schema (field names use snake_case to
-match the registered schema; the SDK passes them through as-is).</li>
-</ul>
-<p><strong>Returns:</strong> <code>Promise&lt;PushResult&gt;</code> carrying <code>{ ackLsn, registryVersion }</code>.</p>
-<p><strong>Throws:</strong> <code>RegistrationError</code> with <code>code</code> of <code>schema_mismatch</code>,
-<code>missing_field</code>, or <code>unknown_event</code>.</p>
-<h3 id="appgettable-key" tabindex="-1"><a class="header-anchor" href="#appgettable-key" aria-hidden="true">#</a> <code>app.get(table, key)</code></h3>
-<p><strong>Wire opcode:</strong> <code>OP_GET</code> (<code>0x0020</code>).</p>
-<p>Single-row feature read.</p>
-<p><strong>Args:</strong></p>
-<ul>
-<li><code>table</code>: name of a registered table.</li>
-<li><code>key</code>: <code>string</code> (single-key) or <code>(string | number | boolean)[]</code>
-(composite-key, in declaration order).</li>
-</ul>
-<p><strong>Returns:</strong> <code>Promise&lt;Record&lt;string, unknown&gt;&gt;</code> — row-shape feature dict.
-<strong>Cold-start</strong> returns <code>{}</code> — not an error.</p>
-<p><strong>Throws:</strong> <code>RegistrationError</code> with <code>code</code> of <code>unknown_table</code>,
-<code>feature_not_in_table</code>, or <code>key_shape_mismatch</code>.</p>
-<h4 id="generic-typed-result" tabindex="-1"><a class="header-anchor" href="#generic-typed-result" aria-hidden="true">#</a> Generic typed result</h4>
-<pre><code class="language-typescript">type UserTxnRow = {
-  tx_count_1h: number;
-  tx_sum_1h: number;
-  tx_p99_1h: number;
-};
-
-const row = await app.get&lt;UserTxnRow&gt;(&quot;UserTxnFeatures&quot;, &quot;alice&quot;);
-// row is typed as Partial&lt;UserTxnRow&gt; (cold-start is {})
+<p>Wire body:</p>
+<pre><code class="language-json">{ &quot;table&quot;: &quot;&lt;name&gt;&quot;, &quot;key&quot;: &quot;&lt;entity_id&gt;&quot; | [&quot;a&quot;, 42, true] | &quot;&quot; }
 </code></pre>
-<p>The <code>&lt;T&gt;</code> overload is purely a TS-level affordance; runtime behavior is
-identical. <code>Partial&lt;T&gt;</code> is used because cold-start returns <code>{}</code> and a
-specific <code>features</code> filter omits unrequested fields.</p>
-<h3 id="appbatchgetrequests" tabindex="-1"><a class="header-anchor" href="#appbatchgetrequests" aria-hidden="true">#</a> <code>app.batchGet(requests)</code></h3>
-<p><strong>Wire opcode:</strong> <code>OP_BATCH_GET</code> (<code>0x0024</code>).</p>
-<p>Heterogeneous batch lookup.</p>
-<p><strong>Args:</strong></p>
-<ul>
-<li><code>requests</code>: array of <code>{ table, key, features? }</code> objects. Different
-<code>table</code> values may appear in the same batch.</li>
-</ul>
-<p><strong>Returns:</strong> <code>Promise&lt;Record&lt;string, unknown&gt;[]&gt;</code> — array of row-shape
-dicts in request order. Per-entry cold-start is <code>{}</code>.</p>
-<p><strong>Throws:</strong> same set as <code>app.get(...)</code>. v0 has <strong>no partial success</strong> —
-any single bad entry rejects the entire batch.</p>
-<h3 id="appreset" tabindex="-1"><a class="header-anchor" href="#appreset" aria-hidden="true">#</a> <code>app.reset()</code></h3>
-<p><strong>Wire opcode:</strong> <code>OP_RESET</code> (<code>0x0040</code>).</p>
-<p>Wipe state + WAL. <strong>Destructive — only call on a beava instance bound to
-test data.</strong></p>
-<p><strong>Returns:</strong> <code>Promise&lt;void&gt;</code>.</p>
-<h3 id="appping" tabindex="-1"><a class="header-anchor" href="#appping" aria-hidden="true">#</a> <code>app.ping()</code></h3>
-<p><strong>Wire opcode:</strong> <code>OP_PING</code> (<code>0x0000</code>).</p>
-<p>Health probe + version discovery.</p>
-<p><strong>Returns:</strong> <code>Promise&lt;{ serverVersion: string; registryVersion: number }&gt;</code>.</p>
-<h3 id="appclose" tabindex="-1"><a class="header-anchor" href="#appclose" aria-hidden="true">#</a> <code>app.close()</code></h3>
-<p>Close the underlying transport (idempotent). For embed-mode apps, also
-terminates the subprocess.</p>
-<p><code>Symbol.asyncDispose</code> calls <code>close()</code> automatically when used with the
-<code>using</code> / <code>await using</code> syntax (TS 5.2+ / Node 22+).</p>
-<h2 id="builder-api-event-table" tabindex="-1"><a class="header-anchor" href="#builder-api-event-table" aria-hidden="true">#</a> Builder API (event + table)</h2>
-<p>TypeScript v0 uses explicit builder calls — decorators are deferred to
-v0.1+ per
-<a href="https://github.com/beava-dev/beava/blob/main/.planning/ideas/v0.1-deferrals.md"><code>.planning/ideas/v0.1-deferrals.md</code></a>.
-The builder pattern is the canonical surface for TS users.</p>
-<blockquote>
-<p><strong>No decorators in v0.</strong> TS stage-3 decorators (TS 5.0+) are deferred to
-v0.1+. The builder-pattern API documented here is the canonical surface.</p>
-</blockquote>
-<h3 id="event-source" tabindex="-1"><a class="header-anchor" href="#event-source" aria-hidden="true">#</a> Event source</h3>
-<pre><code class="language-typescript">import * as bv from &quot;@beava/sdk&quot;;
-
-const Txn = bv.event(&quot;Txn&quot;, {
-  user_id: &quot;str&quot;,
-  amount: &quot;f64&quot;,
-  merchant: &quot;str&quot;,
-  ip: bv.optional(&quot;str&quot;),     // nullable per shared.md § Field types
-})
-  .keepEventsFor(&quot;30d&quot;)
-  .coldAfter(&quot;1d&quot;)
-  .dedupeKey(&quot;trace_id&quot;, &quot;5m&quot;);
+<p>Returns <code>FeatureRow = Record&lt;string, unknown&gt;</code>. Cold-start (entity unknown) returns <code>{}</code> — never <code>null</code>, never an error.</p>
+<h3 id="batchgetrequests" tabindex="-1"><a class="header-anchor" href="#batchgetrequests" aria-hidden="true">#</a> <code>batchGet(requests)</code></h3>
+<p>Posts to <code>POST /batch-get</code> with <code>{requests: [...]}</code>. Returns <code>FeatureRow[]</code> in request order. v0 has no partial success: any per-entry error rejects the whole batch and surfaces as a single <code>RegistrationError</code>.</p>
+<h3 id="reset" tabindex="-1"><a class="header-anchor" href="#reset" aria-hidden="true">#</a> <code>reset()</code></h3>
+<p>Posts to <code>POST /reset</code>. The server returns <code>403</code> with <code>{error: {code: &quot;reset_forbidden&quot;, ...}}</code> unless <code>test_mode</code> is enabled per Phase 13.4 D-03. The error surfaces verbatim as a <code>RegistrationError</code>.</p>
+<h3 id="ping" tabindex="-1"><a class="header-anchor" href="#ping" aria-hidden="true">#</a> <code>ping()</code></h3>
+<p>Calls <code>GET /health</code>. Returns <code>PingResult</code>:</p>
+<pre><code class="language-typescript">interface PingResult { server_version: string; registry_version: number; }
 </code></pre>
-<p><code>bv.event(name, schema)</code> returns an <code>EventDescriptor</code> with chainable
-configuration methods:</p>
-<table>
-<thead>
-<tr>
-<th>Method</th>
-<th>Args</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>.keepEventsFor(window)</code></td>
-<td>duration string</td>
-<td>Event-retention TTL.</td>
-</tr>
-<tr>
-<td><code>.coldAfter(window)</code></td>
-<td>duration string</td>
-<td>Per-source cold-entity TTL per V0-MEM-GOV-01.</td>
-</tr>
-<tr>
-<td><code>.dedupeKey(field, window)</code></td>
-<td>field name + duration</td>
-<td>Idempotent-replay configuration.</td>
-</tr>
-</tbody>
-</table>
-<p><code>bv.optional(&quot;type&quot;)</code> produces a nullable field type marker.</p>
-<h3 id="event-derivation-function-form" tabindex="-1"><a class="header-anchor" href="#event-derivation-function-form" aria-hidden="true">#</a> Event derivation (function form)</h3>
-<pre><code class="language-typescript">const BigTxn = bv.event(&quot;BigTxn&quot;, { upstream: Txn })
-  .filter(bv.col(&quot;amount&quot;).gt(100));
-</code></pre>
-<p>When the schema argument is <code>{ upstream: &lt;EventDescriptor&gt; }</code>, the
-builder creates a derivation node carrying the upstream's schema. Chain
-ops compose against the upstream shape.</p>
-<h3 id="table-aggregation-output-per-adr-001" tabindex="-1"><a class="header-anchor" href="#table-aggregation-output-per-adr-001" aria-hidden="true">#</a> Table (aggregation-output, per ADR-001)</h3>
-<pre><code class="language-typescript">const UserTxnFeatures = bv.table({
-  name: &quot;UserTxnFeatures&quot;,
-  key: &quot;user_id&quot;,
-  source: Txn,
-  agg: {
-    tx_count_1h: bv.count({ window: &quot;1h&quot; }),
-    tx_sum_1h: bv.sum(&quot;amount&quot;, { window: &quot;1h&quot; }),
-    tx_p99_1h: bv.quantile(&quot;amount&quot;, { q: 0.99, window: &quot;1h&quot; }),
-    tx_unique_merchants_1h: bv.nUnique(&quot;merchant&quot;, { window: &quot;1h&quot; }),
-  },
-});
-
-await app.register(Txn, UserTxnFeatures);
-</code></pre>
-<p>The <code>bv.table({...})</code> builder declares an aggregation-output table per
-<a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-001-bv-table-partial-overturn.md">ADR-001</a>.
-Mutation paths (<code>upsert</code> / <code>delete</code> / <code>retract</code>) are NOT exposed in v0;
-tables are populated only by upstream aggregation pipelines.</p>
-<p><strong>Args:</strong></p>
-<ul>
-<li><code>name</code>: table name (string).</li>
-<li><code>key</code>: string (single-key) or <code>string[]</code> (composite-key).</li>
-<li><code>source</code>: upstream <code>EventDescriptor</code> or <code>EventDerivation</code>.</li>
-<li><code>agg</code>: object mapping feature names to op descriptors (returned by
-<code>bv.count(...)</code>, <code>bv.sum(...)</code>, etc.).</li>
-</ul>
-<p>The builder compiles to the same wire-level derivation node with
-<code>output_kind: &quot;table&quot;</code> that the Python <code>@bv.table(key=...)</code> decorator
-produces. Wire parity is the contract; the API surface is per-language.</p>
-<h2 id="pipeline-dsl-chained-methods" tabindex="-1"><a class="header-anchor" href="#pipeline-dsl-chained-methods" aria-hidden="true">#</a> Pipeline DSL (chained methods)</h2>
-<pre><code class="language-typescript">const BigTxn = Txn
-  .filter(bv.col(&quot;amount&quot;).gt(100))
-  .select(&quot;user_id&quot;, &quot;amount&quot;, &quot;merchant&quot;);
-
-const UserBigTxn = bv.table({
-  name: &quot;UserBigTxn&quot;,
-  key: &quot;user_id&quot;,
-  source: BigTxn,
-  agg: {
-    count_big: bv.count({ window: &quot;1h&quot; }),
-  },
-});
-</code></pre>
-<p>camelCase chain methods on event descriptors and event derivations:</p>
-<table>
-<thead>
-<tr>
-<th>Method</th>
-<th>Returns</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>events.filter(expr)</code></td>
-<td><code>EventDerivation</code></td>
-<td>Keep rows where <code>expr</code> is True.</td>
-</tr>
-<tr>
-<td><code>events.select(...cols)</code></td>
-<td><code>EventDerivation</code></td>
-<td>Keep only the named fields.</td>
-</tr>
-<tr>
-<td><code>events.drop(...cols)</code></td>
-<td><code>EventDerivation</code></td>
-<td>Remove the named fields.</td>
-</tr>
-<tr>
-<td><code>events.rename(mapping)</code></td>
-<td><code>EventDerivation</code></td>
-<td>Rename fields per object mapping.</td>
-</tr>
-<tr>
-<td><code>events.withColumns(mapping)</code></td>
-<td><code>EventDerivation</code></td>
-<td>Add or overwrite derived fields.</td>
-</tr>
-<tr>
-<td><code>events.map(mapping)</code></td>
-<td><code>EventDerivation</code></td>
-<td>Alias for <code>withColumns</code>.</td>
-</tr>
-<tr>
-<td><code>events.cast(typeMap)</code></td>
-<td><code>EventDerivation</code></td>
-<td>Change field types.</td>
-</tr>
-<tr>
-<td><code>events.fillna(defaults)</code></td>
-<td><code>EventDerivation</code></td>
-<td>Replace null values.</td>
-</tr>
-<tr>
-<td><code>events.groupBy(...keys)</code></td>
-<td><code>GroupBy</code></td>
-<td>Start an aggregation pipeline.</td>
-</tr>
-<tr>
-<td><code>groupBy.agg(features)</code></td>
-<td>derivation</td>
-<td>Emit named aggregation features.</td>
-</tr>
-</tbody>
-</table>
-<p>Note the camelCase: <code>withColumns</code>, <code>groupBy</code>, <code>batchGet</code> (NOT
-<code>with_columns</code> / <code>group_by</code> / <code>batch_get</code>).</p>
-<h2 id="expression-dsl-bvcol" tabindex="-1"><a class="header-anchor" href="#expression-dsl-bvcol" aria-hidden="true">#</a> Expression DSL (bv.col)</h2>
-<p>TypeScript does NOT support operator overloading, so the expression DSL
-uses <strong>method chaining</strong>:</p>
-<pre><code class="language-typescript">bv.col(&quot;amount&quot;).gt(100)                                 // amount &gt; 100
-bv.col(&quot;amount&quot;).lt(50)                                  // amount &lt; 50
-bv.col(&quot;user_id&quot;).eq(&quot;alice&quot;)                            // user_id == 'alice'
-bv.col(&quot;amount&quot;).gt(100).and(bv.col(&quot;status&quot;).eq(&quot;ok&quot;))  // (amount &gt; 100) and (status == 'ok')
-bv.col(&quot;amount&quot;).gt(100).or(bv.col(&quot;vip&quot;))               // ... or vip
-bv.col(&quot;flag&quot;).not()                                     // (not flag)
-bv.col(&quot;amount&quot;).isnull()                                // (amount == null)
-bv.col(&quot;status&quot;).cast(&quot;int&quot;)                             // cast(status, int)
-bv.col(&quot;a&quot;).add(bv.col(&quot;b&quot;)).mul(2)                      // (a + b) * 2
-bv.lit(42)                                               // literal value
-</code></pre>
-<p>Method-name reference:</p>
-<table>
-<thead>
-<tr>
-<th>Method</th>
-<th>Wire op</th>
-<th>Equivalent Python</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>.gt(other)</code></td>
-<td><code>&gt;</code></td>
-<td><code>&gt; other</code></td>
-</tr>
-<tr>
-<td><code>.ge(other)</code></td>
-<td><code>&gt;=</code></td>
-<td><code>&gt;= other</code></td>
-</tr>
-<tr>
-<td><code>.lt(other)</code></td>
-<td><code>&lt;</code></td>
-<td><code>&lt; other</code></td>
-</tr>
-<tr>
-<td><code>.le(other)</code></td>
-<td><code>&lt;=</code></td>
-<td><code>&lt;= other</code></td>
-</tr>
-<tr>
-<td><code>.eq(other)</code></td>
-<td><code>==</code></td>
-<td><code>== other</code></td>
-</tr>
-<tr>
-<td><code>.ne(other)</code></td>
-<td><code>!=</code></td>
-<td><code>!= other</code></td>
-</tr>
-<tr>
-<td><code>.add(other)</code></td>
-<td><code>+</code></td>
-<td><code>+ other</code></td>
-</tr>
-<tr>
-<td><code>.sub(other)</code></td>
-<td><code>-</code></td>
-<td><code>- other</code></td>
-</tr>
-<tr>
-<td><code>.mul(other)</code></td>
-<td><code>*</code></td>
-<td><code>* other</code></td>
-</tr>
-<tr>
-<td><code>.div(other)</code></td>
-<td><code>/</code></td>
-<td><code>/ other</code></td>
-</tr>
-<tr>
-<td><code>.and(other)</code></td>
-<td><code>and</code></td>
-<td><code>&amp; other</code></td>
-</tr>
-<tr>
-<td><code>.or(other)</code></td>
-<td><code>or</code></td>
-<td><code>| other</code></td>
-</tr>
-<tr>
-<td><code>.not()</code></td>
-<td><code>not</code></td>
-<td><code>~</code></td>
-</tr>
-<tr>
-<td><code>.isnull()</code></td>
-<td><code>(x == null)</code></td>
-<td><code>.isnull()</code></td>
-</tr>
-<tr>
-<td><code>.cast(type)</code></td>
-<td><code>cast(x, type)</code></td>
-<td><code>.cast(type)</code></td>
-</tr>
-<tr>
-<td><code>.alias(name)</code></td>
-<td>column-rename</td>
-<td><code>.alias(name)</code></td>
-</tr>
-</tbody>
-</table>
-<p><code>bv.col(name)</code> → expression node. <code>bv.lit(value)</code> → literal node.</p>
-<p>The TS spelling differs from Python (operator overloading) but produces
-the <strong>same wire-level expression string</strong> per
-<a href="/docs/pipeline-dsl/expressions/"><code>docs/pipeline-dsl/expressions.md</code></a> (Plan
-13.0-12 — forward reference).</p>
-<h2 id="bvsum-signature-q1-path-b-locked" tabindex="-1"><a class="header-anchor" href="#bvsum-signature-q1-path-b-locked" aria-hidden="true">#</a> bv.sum signature (Q1 Path B locked)</h2>
-<pre><code class="language-typescript">function sum(
-  field: string,
-  opts?: { window?: string; where?: Expr }
-): AggDescriptor;
-</code></pre>
-<blockquote>
-<p><strong>Locked per Q1 Path B</strong> (<a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/13.0-design-contract-spec-docs/13.0-CONTEXT.md">13.0-CONTEXT.md</a>).
-The TS <code>bv.sum(field: string, ...)</code> signature accepts a string column
-name <strong>only</strong>. Inline expressions are <strong>FORBIDDEN</strong>.</p>
-</blockquote>
-<pre><code class="language-typescript">// FORBIDDEN — inline expression as the field arg.
-bv.sum(bv.col(&quot;flag&quot;).cast(&quot;int&quot;), { window: &quot;1h&quot; });    // ✗ TypeScript compile error (string expected)
-
-// RECOMMENDED — two-stage withColumns + sum:
-const UserFraudCounts = bv.table({
-  name: &quot;UserFraudCounts&quot;,
-  key: &quot;user_id&quot;,
-  source: Txn.withColumns({ flag_int: bv.col(&quot;is_fraud&quot;).cast(&quot;int&quot;) }),
-  agg: { c: bv.sum(&quot;flag_int&quot;, { window: &quot;1h&quot; }) },
-});
-</code></pre>
-<p>This narrowing applies symmetrically across the
-<a href="/docs/sdk-api/python/#bvsum-signature-q1-path-b-locked">Python SDK</a> and the
-<a href="/docs/sdk-api/go/">Go SDK</a>. All three SDKs use string-only field args for <code>bv.sum</code>.</p>
-<blockquote>
-<p><strong>See:</strong> <a href="/docs/pipeline-dsl/compilation-rules/"><code>docs/pipeline-dsl/compilation-rules.md</code></a>
-§ Boolean-sum recipe (Plan 13.0-12 — forward reference).</p>
-</blockquote>
-<h2 id="public-expression-literals-bvlit-per-adr-003" tabindex="-1"><a class="header-anchor" href="#public-expression-literals-bvlit-per-adr-003" aria-hidden="true">#</a> Public expression literals (<code>bv.lit</code>) — per ADR-003</h2>
-<p>Per <a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-003-global-aggregation-and-bv-lit.md">ADR-003</a>, <code>bv.lit(value)</code> is exposed as a public factory function in the <code>bv</code> namespace:</p>
-<pre><code class="language-typescript">function lit(value: number | string | boolean | null): Expr;
-</code></pre>
-<p>Use cases (mirror Python):</p>
-<pre><code class="language-typescript">// Constant column
-events.withColumns({ source: bv.lit(&quot;web&quot;) });
-
-// Force float division
-events.withColumns({ rate: bv.col(&quot;count&quot;).div(bv.lit(60.0)) });
-
-// Explicit literal in filter
-events.filter(bv.col(&quot;amount&quot;).gt(bv.lit(100)));
-</code></pre>
-<p>Implementation lands in Phase 13.6. Wire-level: literals are serialized via the existing expression-string path; no wire change.</p>
-<h2 id="global-aggregation-per-adr-003" tabindex="-1"><a class="header-anchor" href="#global-aggregation-per-adr-003" aria-hidden="true">#</a> Global aggregation — per ADR-003</h2>
-<p>Per <a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-003-global-aggregation-and-bv-lit.md">ADR-003</a>, TypeScript ships first-class <strong>global aggregation</strong> mirroring the Python surface. Declare a global table by calling <code>bv.table</code> without a <code>key</code> field, or use the <code>events.agg(...)</code> shorthand directly:</p>
-<pre><code class="language-typescript">const Click = bv.event({
-  name: &quot;Click&quot;,
-  schema: { user_id: &quot;string&quot;, page: &quot;string&quot; }
-});
-
-const TotalClicks = bv.table({
-  name: &quot;TotalClicks&quot;,
-  // no `key` field → global table
-  source: Click,
-  agg: { total: bv.count({ window: &quot;forever&quot; }) }
-});
-
-const app = new beavaApp();
-await app.register(Click, TotalClicks);
-await app.push(&quot;Click&quot;, { user_id: &quot;alice&quot;, page: &quot;/home&quot; });
-await app.push(&quot;Click&quot;, { user_id: &quot;bob&quot;,   page: &quot;/home&quot; });
-
-await app.get(&quot;TotalClicks&quot;);  // → { total: 2 }, no entity arg
-</code></pre>
-<p><strong>Three equivalent forms</strong> (all compile to wire-level <code>key: []</code>):</p>
-<pre><code class="language-typescript">clicks.agg({ total: bv.count(...) })                      // shortest
-clicks.groupBy().agg({ total: bv.count(...) })            // explicit empty groupBy
-bv.table({ name: &quot;Foo&quot;, source: c, agg: { ... } })        // no `key` field
-</code></pre>
-<p><strong><code>app.get</code> arity contract:</strong></p>
-<table>
-<thead>
-<tr>
-<th>Table type</th>
-<th>Call shape</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Per-entity</td>
-<td><code>await app.get(tableName, key)</code> (2 args required)</td>
-</tr>
-<tr>
-<td>Global</td>
-<td><code>await app.get(tableName)</code> (1 arg required)</td>
-</tr>
-</tbody>
-</table>
-<p>TypeScript enforces the arity at the type level via overloaded signatures — the wrong-arity call is a compile-time error, not a runtime exception. (See <code>app.get</code> signature overload in <a href="#app-get-table-key">beavaApp class</a> — Phase 13.6 lands the overload.)</p>
-<p>Implementation deferred to Phase 13.6 (~75 LOC: <code>bv.lit</code> factory + <code>events.groupBy()</code> empty allowance + <code>events.agg(...)</code> direct + table-builder no-<code>key</code> form + <code>app.get</code> overload).</p>
-<h2 id="operator-catalog" tabindex="-1"><a class="header-anchor" href="#operator-catalog" aria-hidden="true">#</a> Operator catalog</h2>
-<p>The 53 op functions match the Python catalogue (per
-<a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-002-polars-op-rename.md">ADR-002</a> Polars
-naming). One-line family table:</p>
-<table>
-<thead>
-<tr>
-<th>Family</th>
-<th>Ops (camelCase TS spelling)</th>
-<th>Doc</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Core (8)</td>
-<td>count, sum, mean, min, max, var, std, ratio</td>
-<td><a href="../operators/core/">docs/operators/core/</a></td>
-</tr>
-<tr>
-<td>Sketch (5)</td>
-<td>nUnique, quantile, topK, bloomMember, entropy</td>
-<td><a href="../operators/sketch/">docs/operators/sketch/</a></td>
-</tr>
-<tr>
-<td>Point/ordinal (5)</td>
-<td>first, last, firstN, lastN, lag</td>
-<td><a href="../operators/point-ordinal/">docs/operators/point-ordinal/</a></td>
-</tr>
-<tr>
-<td>Recency (10)</td>
-<td>firstSeen, lastSeen, age, hasSeen, timeSince, timeSinceLastN, streak, maxStreak, negativeStreak, firstSeenInWindow</td>
-<td><a href="../operators/recency/">docs/operators/recency/</a></td>
-</tr>
-<tr>
-<td>Decay (6)</td>
-<td>ewma (alias ema), ewvar, ewZscore, decayedSum, decayedCount, twa</td>
-<td><a href="../operators/decay/">docs/operators/decay/</a></td>
-</tr>
-<tr>
-<td>Velocity (9)</td>
-<td>rateOfChange, interArrivalStats, burstCount, deltaFromPrev, trend, trendResidual, outlierCount, valueChangeCount, zScore</td>
-<td><a href="../operators/velocity/">docs/operators/velocity/</a></td>
-</tr>
-<tr>
-<td>Bounded-buffer (7)</td>
-<td>histogram, hourOfDayHistogram, dowHourHistogram, seasonalDeviation, eventTypeMix, mostRecentN, reservoirSample</td>
-<td><a href="../operators/buffer-geo/">docs/operators/buffer-geo/</a></td>
-</tr>
-<tr>
-<td>Geo (4)</td>
-<td>geoVelocity, geoDistance, geoSpread, distanceFromHome</td>
-<td><a href="../operators/buffer-geo/">docs/operators/buffer-geo/</a></td>
-</tr>
-</tbody>
-</table>
-<p>Total: 8+5+5+10+6+9+7+4 = <strong>54</strong> entries (53 unique + <code>ema</code> alias).</p>
-<p>Each op accepts an options object — <code>bv.count({ window: &quot;1h&quot; })</code>,
-<code>bv.quantile(&quot;amount&quot;, { q: 0.99, window: &quot;1h&quot; })</code>,
-<code>bv.ewma(&quot;amount&quot;, { halfLife: &quot;5m&quot; })</code>. Required positional args
-(typically <code>field</code> for non-count ops) come first; everything else is
-camelCase keys in the options object.</p>
-<blockquote>
-<p><strong>No deprecation aliases in TS.</strong> v0 is unreleased and TS users start
-with the new Polars names directly. (Python keeps <code>bv.avg</code> etc. as
-deprecation aliases for the v0.0.x line per ADR-002.)</p>
-</blockquote>
+<h3 id="close" tabindex="-1"><a class="header-anchor" href="#close" aria-hidden="true">#</a> <code>close()</code></h3>
+<p>Idempotent. Closes the underlying transport. In embed mode, sends <code>SIGTERM</code> to the spawned subprocess and <code>SIGKILL</code>s after 5s if it didn't exit; cleans up the per-instance temp CWD.</p>
 <h2 id="errors" tabindex="-1"><a class="header-anchor" href="#errors" aria-hidden="true">#</a> Errors</h2>
 <pre><code class="language-typescript">class RegistrationError extends Error {
-  code: string;                          // structured error code
-  path: string;                          // JSON-pointer path
-  errors: ValidationError[];             // all validation errors
-  constructor(opts: { code: string; path?: string; message: string; errors?: ValidationError[] });
+  code: string;        // structured error code, e.g. &quot;unsupported_node_kind&quot;, &quot;invalid_registration&quot;
+  path?: string;       // JSON pointer-ish path, e.g. &quot;nodes[0].kind&quot;
+  errors?: unknown[];  // sub-errors (multi-error responses)
 }
 
 class BinaryNotFoundError extends Error {
-  searched: string[];                    // paths attempted by binary discovery
-}
-
-interface ValidationError {
-  kind: string;                          // one of 9 ValidationError kinds
-  path: string;
-  message: string;
+  searched: string[];  // paths that were probed during 4-step discovery
 }
 </code></pre>
-<p>The 9 valid <code>ValidationError.kind</code> values are documented in
-<a href="/docs/sdk-api/shared/#validationerror-envelope">shared.md § ValidationError envelope</a>.</p>
-<h2 id="test-fixtures-beavasdktest" tabindex="-1"><a class="header-anchor" href="#test-fixtures-beavasdktest" aria-hidden="true">#</a> Test fixtures (<code>@beava/sdk/test</code>)</h2>
-<pre><code class="language-typescript">import { describe, it, beforeEach, afterEach } from &quot;vitest&quot;;
-import { fixture, assertFeaturesEq } from &quot;@beava/sdk/test&quot;;
-import * as bv from &quot;@beava/sdk&quot;;
-
-describe(&quot;counts per user&quot;, () =&gt; {
-  let app: beavaApp;
-
-  beforeEach(async () =&gt; {
-    app = await fixture({ resetEach: true });
-  });
-
-  afterEach(async () =&gt; {
-    await app.close();
-  });
-
-  it(&quot;counts events per user&quot;, async () =&gt; {
-    const Txn = bv.event(&quot;Txn&quot;, { user_id: &quot;str&quot; });
-    const Counts = bv.table({
-      name: &quot;Counts&quot;,
-      key: &quot;user_id&quot;,
-      source: Txn,
-      agg: { c: bv.count({ window: &quot;1h&quot; }) },
-    });
-    await app.register(Txn, Counts);
-
-    await app.push(&quot;Txn&quot;, { user_id: &quot;alice&quot; });
-    await app.push(&quot;Txn&quot;, { user_id: &quot;alice&quot; });
-
-    assertFeaturesEq(await app.get(&quot;Counts&quot;, &quot;alice&quot;), { c: 2 });
-  });
-});
-</code></pre>
-<p><code>fixture({ resetEach })</code>:</p>
-<ul>
-<li>Returns a <code>Promise&lt;beavaApp&gt;</code> configured for embed mode.</li>
-<li>If <code>resetEach=true</code> (default), calls <code>app.reset()</code> between tests via
-<code>OP_RESET</code> to clear in-memory state.</li>
-<li>The caller is responsible for <code>await app.close()</code> in <code>afterEach</code>.</li>
-</ul>
-<p><code>assertFeaturesEq(got, want)</code> — assertion helper using vitest / jest
-expectations. Tolerant of float near-equality (relative tolerance <code>1e-9</code>)
-for sketch-based ops like <code>quantile</code> and <code>nUnique</code>.</p>
+<p><code>RegistrationError</code> is thrown by every wire method on non-2xx responses (HTTP transport) or on <code>OP_ERROR_RESPONSE</code> frames (TCP transport). The <code>code</code> field maps to <a href="/docs/error-codes/">docs/error-codes.md</a>.</p>
+<p><code>BinaryNotFoundError</code> is thrown by <code>discoverBinary()</code> when the 4-step search fails (see <a href="/docs/sdk-api/shared/">shared.md § Embed mode</a>).</p>
 <h2 id="typescript-int64-caveat" tabindex="-1"><a class="header-anchor" href="#typescript-int64-caveat" aria-hidden="true">#</a> TypeScript int64 caveat</h2>
-<p>JavaScript has no native 64-bit integer. Per
-<a href="/docs/sdk-api/shared/#field-types">shared.md § Field types</a>:</p>
-<table>
-<thead>
-<tr>
-<th>Wire</th>
-<th>TS native</th>
-<th>Safe range</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>i64</code></td>
-<td><code>number</code></td>
-<td><code>Number.MAX_SAFE_INTEGER</code> (<code>2^53 - 1</code>)</td>
-</tr>
-</tbody>
-</table>
-<p>For values exceeding <code>Number.MAX_SAFE_INTEGER</code>, a future minor release
-may switch the surface to <code>bigint</code>. v0 ships with <code>number</code> and a
-runtime warning when an <code>i64</code> field deserialises to a value at the
-edge of the safe range. Most fraud / ad-tech / behavioral workloads
-fit comfortably within <code>2^53 - 1</code> (counters, amounts, IDs); operators
-who need full <code>int64</code> should send IDs as strings.</p>
+<p>JSON has no native int64. The SDK does not coerce numeric fields — <code>i64</code> features deserialize as <code>number</code> (which loses precision above <code>2^53</code>) by default. If you push <code>i64</code> values exceeding <code>Number.MAX_SAFE_INTEGER</code> and need exact round-tripping, treat the affected fields as strings on the wire.</p>
+<h2 id="test-fixtures" tabindex="-1"><a class="header-anchor" href="#test-fixtures" aria-hidden="true">#</a> Test fixtures</h2>
+<p>The SDK exports test helpers under <code>@beava/sdk</code> (no separate sub-export needed):</p>
+<ul>
+<li><code>spawnEmbeddedServer({startupTimeoutMs?, testMode?})</code> — spawn a local beava server on ephemeral ports; returns <code>{proc, httpUrl, tcpUrl, tmpDir}</code>.</li>
+<li><code>teardownServer(handle)</code> / <code>teardownProcess(proc)</code> — graceful shutdown.</li>
+<li><code>discoverBinary()</code> — 4-step binary discovery (mirrors <code>python/beava/_embed.py</code>).</li>
+</ul>
+<p>Use <code>beavaApp(undefined, { test_mode: true })</code> to spawn an embed-mode server in tests — it auto-spawns on the first wire call and auto-reaps on <code>close()</code>.</p>
 <h2 id="versioning-compatibility" tabindex="-1"><a class="header-anchor" href="#versioning-compatibility" aria-hidden="true">#</a> Versioning + compatibility</h2>
 <ul>
-<li><strong>TypeScript versions:</strong> TS 5.2+ (for <code>using</code> / <code>await using</code> and the
-<code>Symbol.asyncDispose</code> spec).</li>
-<li><strong>Node.js versions:</strong> Node 20+ LTS. Embed mode requires <code>child_process</code>
-spawn capability (Node-only).</li>
-<li><strong>Browser support:</strong> HTTP transport only; embed mode and <code>tcp://</code>
-scheme are Node-only.</li>
-<li><strong>API stability:</strong> the public surface is <strong>frozen for v0</strong>. Adding new
-optional fields is non-breaking.</li>
+<li>v0 surface is <strong>frozen</strong> as documented above.</li>
+<li>Node.js 18+ LTS baseline (uses native <code>fetch</code> / <code>AbortController</code> / <code>child_process</code> / <code>node:net</code>).</li>
+<li>ESM-only output. No CJS dual publish in v0.</li>
+<li>Apache-2.0 license.</li>
 </ul>
-<h2 id="plan-level-traceability" tabindex="-1"><a class="header-anchor" href="#plan-level-traceability" aria-hidden="true">#</a> Plan-level traceability</h2>
-<p>This document is authored by Plan 13.0-04 (Wave 1). Downstream consumers:</p>
+<h2 id="cross-references" tabindex="-1"><a class="header-anchor" href="#cross-references" aria-hidden="true">#</a> Cross-references</h2>
 <ul>
-<li><strong>Phase 13.6</strong> — TS SDK port reads this doc as the canonical surface;
-lands the v0-target shape (<code>@beava/sdk</code> published to npm).</li>
-<li><a href="/docs/sdk-api/shared/">shared.md</a> + <a href="/docs/sdk-api/python/">python.md</a> — cross-language parity
-references.</li>
+<li><strong>Wire contract:</strong> <a href="/docs/wire-spec/">docs/wire-spec.md</a></li>
+<li><strong>Cross-language semantics:</strong> <a href="/docs/sdk-api/shared/">shared.md</a></li>
+<li><strong>Authoring SDK (Python):</strong> <a href="/docs/sdk-api/python/">python.md</a></li>
+<li><strong>Go SDK (sister communicate-only client):</strong> <a href="/docs/sdk-api/go/">go.md</a></li>
+<li><strong>Phase 13.6 plan + summary:</strong> <code>.planning/phases/13.6-typescript-go-sdks/</code></li>
 </ul>
-<p>For the full Phase 13.0 plan tree, see
-<a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/13.0-design-contract-spec-docs/13.0-PLAN.md"><code>.planning/phases/13.0-design-contract-spec-docs/13.0-PLAN.md</code></a>.</p>
 
 </article>
 </main>
@@ -917,18 +290,11 @@ references.</li>
       <li><a href="#overview">Overview</a></li>
       <li><a href="#module-structure">Module structure</a></li>
       <li><a href="#beavaapp-class">beavaApp class</a></li>
-      <li><a href="#builder-api-event-table">Builder API (event + table)</a></li>
-      <li><a href="#pipeline-dsl-chained-methods">Pipeline DSL (chained methods)</a></li>
-      <li><a href="#expression-dsl-bvcol">Expression DSL (bv.col)</a></li>
-      <li><a href="#bvsum-signature-q1-path-b-locked">bv.sum signature (Q1 Path B locked)</a></li>
-      <li><a href="#public-expression-literals-bvlit-per-adr-003">Public expression literals (bv.lit) — per ADR-003</a></li>
-      <li><a href="#global-aggregation-per-adr-003">Global aggregation — per ADR-003</a></li>
-      <li><a href="#operator-catalog">Operator catalog</a></li>
       <li><a href="#errors">Errors</a></li>
-      <li><a href="#test-fixtures-beavasdktest">Test fixtures (@beava/sdk/test)</a></li>
       <li><a href="#typescript-int64-caveat">TypeScript int64 caveat</a></li>
+      <li><a href="#test-fixtures">Test fixtures</a></li>
       <li><a href="#versioning-compatibility">Versioning + compatibility</a></li>
-      <li><a href="#plan-level-traceability">Plan-level traceability</a></li>
+      <li><a href="#cross-references">Cross-references</a></li>
   </ul>
 </aside>
 </div>
@@ -938,6 +304,5 @@ references.</li>
     <a href="https://github.com/beava-dev/beava" target="_blank" rel="noopener">GitHub</a>
   </div>
 </footer>
-  <script src="/js/track-pageview.js" defer></script>
 </body>
 </html>

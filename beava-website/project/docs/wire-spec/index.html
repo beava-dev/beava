@@ -4,9 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>beava Wire Spec — beava docs</title>
-<meta name="description" content="beava — real-time feature server.">
+<meta name="description" content="Beava — real-time feature server.">
 <link rel="canonical" href="https://beava.dev/docs/wire-spec/">
-<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="shortcut icon" href="/assets/favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+<link rel="shortcut icon" href="/assets/favicon.ico">
 <link rel="stylesheet" href="/styles/colors_and_type.css">
 <link rel="stylesheet" href="/styles/site.css">
 <link rel="stylesheet" href="/styles/docs.css">
@@ -279,54 +282,33 @@
 <p>Worked example: <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/ping-request.json"><code>examples/wire/ping-request.json</code></a></p>
 <p><strong>Response body shape (success):</strong></p>
 <pre><code class="language-json">{
-  &quot;status&quot;: &quot;ok&quot;
+  &quot;server_version&quot;: &quot;&lt;semver&gt;&quot;,
+  &quot;registry_version&quot;: &lt;integer&gt;
 }
 </code></pre>
 <p>JSON Schema: <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/schemas/ping.response.schema.json"><code>examples/wire/schemas/ping.response.schema.json</code></a></p>
 <p>Worked example: <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/ping-response.json"><code>examples/wire/ping-response.json</code></a></p>
-<p>v0 ping is a minimal liveness probe — it returns <code>{&quot;status&quot;: &quot;ok&quot;}</code> if the
-server is reachable and processing requests. Version + registry-version
-discovery (<code>server_version</code>, <code>registry_version</code>) is reserved for v0.1+;
-for now, derive <code>registry_version</code> from any <code>POST /register</code> response or
-the <code>GET /registry</code> admin endpoint.</p>
+<p><code>server_version</code> is the beava server's semantic version (e.g., <code>&quot;0.0.0&quot;</code> for the v0 launch). <code>registry_version</code> is a monotonic counter that increments on every successful <code>OP_REGISTER</code>; clients use it as a cache key when caching feature schemas.</p>
 <p><strong>Errors:</strong> <code>OP_PING</code> does not validate any input, so it has no per-opcode error codes. Connection-level errors (e.g., framing) still apply.</p>
 <h3 id="opregister-0x0001" tabindex="-1"><a class="header-anchor" href="#opregister-0x0001" aria-hidden="true">#</a> OP_REGISTER (0x0001)</h3>
 <p>Register one or more <strong>descriptors</strong> with the beava server. A descriptor is one of three kinds, disambiguated by the JSON <code>kind</code> field:</p>
 <ul>
 <li><strong><code>kind: &quot;event&quot;</code></strong> — declares a <code>@bv.event</code> source (an event type with a typed schema; events of this name push fields matching the schema).</li>
-<li><strong><code>kind: &quot;derivation&quot;</code> with <code>output_kind: &quot;table&quot;</code></strong> — declares an aggregation-output table. Per <a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-001-bv-table-partial-overturn.md">ADR-001</a>, the shorter <code>kind: &quot;table&quot;</code> form is the post-13.4 target; v0 emits the <code>derivation</code> form. The table receives rows materialised by the chained <code>group_by</code> + <code>agg</code> ops; it has <strong>no</strong> <code>app.upsert</code> / <code>app.delete</code> / <code>app.retract</code> paths in v0 (those stay killed by <code>project_v0_events_only_scope</code>).</li>
-<li><strong><code>kind: &quot;derivation&quot;</code> with <code>output_kind: &quot;event&quot;</code></strong> — declares a pure event-to-event transform (filter / select / with_columns chains). The <code>output_kind</code> field disambiguates whether the derivation emits events (push-shaped) or a table (key-shaped row materialisation, see above).</li>
+<li><strong><code>kind: &quot;table&quot;</code></strong> — declares a <code>@bv.table(key=...)</code> aggregation-output node, per <a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-001-bv-table-partial-overturn.md">ADR-001</a>. The table receives rows materialised by upstream aggregation derivations; it has <strong>no</strong> <code>app.upsert</code> / <code>app.delete</code> / <code>app.retract</code> paths in v0 (those stay killed by <code>project_v0_events_only_scope</code>).</li>
+<li><strong><code>kind: &quot;derivation&quot;</code></strong> — declares a derived event or table node (filter / select / with_columns / group_by / agg chains). The <code>output_kind</code> field disambiguates whether the derivation emits events (push-shaped) or a table (key-shaped row materialisation).</li>
 </ul>
 <p>Per ADR-002, op names inside aggregation specs use the <strong>new Polars conventions</strong> (<code>mean</code>, <code>var</code>, <code>std</code>, <code>n_unique</code>, <code>quantile</code>) — not the old SQL-prose names (<code>avg</code>, <code>variance</code>, <code>stddev</code>, <code>count_distinct</code>, <code>percentile</code>).</p>
 <p><strong>Request body shape:</strong></p>
 <pre><code class="language-json">{
-  &quot;nodes&quot;: [
-    {&quot;kind&quot;: &quot;event&quot;, &quot;name&quot;: &quot;Txn&quot;, &quot;schema&quot;: {&quot;fields&quot;: {...}, &quot;optional_fields&quot;: []}},
-    {&quot;kind&quot;: &quot;derivation&quot;, &quot;name&quot;: &quot;UserFeatures&quot;,
-     &quot;output_kind&quot;: &quot;table&quot;,
-     &quot;upstreams&quot;: [&quot;Txn&quot;],
-     &quot;ops&quot;: [{&quot;op&quot;: &quot;group_by&quot;, &quot;keys&quot;: [&quot;user_id&quot;], &quot;agg&quot;: {...}}],
-     &quot;schema&quot;: {&quot;fields&quot;: {...}, &quot;optional_fields&quot;: []},
-     &quot;table_primary_key&quot;: [&quot;user_id&quot;]}
+  &quot;descriptors&quot;: [
+    {&quot;kind&quot;: &quot;event&quot;, &quot;name&quot;: &quot;Txn&quot;, &quot;schema&quot;: {...}, ...},
+    {&quot;kind&quot;: &quot;table&quot;, &quot;name&quot;: &quot;UserFeatures&quot;, &quot;key&quot;: [&quot;user_id&quot;], &quot;upstreams&quot;: [&quot;Txn&quot;], &quot;agg&quot;: {...}},
+    {&quot;kind&quot;: &quot;derivation&quot;, &quot;name&quot;: &quot;...&quot;, &quot;upstreams&quot;: [...], &quot;ops&quot;: [...], &quot;output_kind&quot;: &quot;event|table&quot;}
   ],
   &quot;force&quot;: false,
   &quot;dry_run&quot;: false
 }
 </code></pre>
-<blockquote>
-<p><strong>Top-level field name is <code>nodes</code></strong> (not <code>descriptors</code>). The engine's
-JSON-prelude validator rejects payloads keyed under <code>descriptors</code>.
-The Python SDK and the TS / Go SDKs all emit <code>{&quot;nodes&quot;: [...]}</code>.</p>
-</blockquote>
-<blockquote>
-<p><strong>Per-entity table shape (v0 — what the engine accepts today):</strong> aggregation
-outputs are emitted as <code>kind: &quot;derivation&quot;</code> with <code>output_kind: &quot;table&quot;</code>, not
-<code>kind: &quot;table&quot;</code>. The <code>group_by</code> + <code>agg</code> live inside the <code>ops</code> chain;
-the primary key lives at the node's top level as <code>table_primary_key</code>.
-ADR-001 partial-overturn revives <code>kind: &quot;table&quot;</code> for aggregation-output in
-v0.1+ (the JSON-prelude shim amendment lands in a future phase); v0 ships the
-<code>kind: &quot;derivation&quot;</code> shape that the SDK already emits.</p>
-</blockquote>
 <ul>
 <li><code>force=true</code> allows destructive schema changes (e.g., changing a field's type); the server accepts the change and zeroes affected aggregations. Default is <code>false</code> — destructive changes are rejected with <code>registration_conflict</code>.</li>
 <li><code>dry_run=true</code> runs the validator and computes the diff without applying anything. The response carries the diff (<code>added</code>, <code>removed</code>, <code>changed</code>) but no state is mutated; <code>registry_version</code> is unchanged.</li>
@@ -343,27 +325,10 @@ v0.1+ (the JSON-prelude shim amendment lands in a future phase); v0 ships the
   &quot;status&quot;: &quot;ok&quot;,
   &quot;registry_version&quot;: 1,
   &quot;added&quot;: [&quot;Txn&quot;, &quot;UserTxnFeatures&quot;],
-  &quot;already_present&quot;: [],
-  &quot;registered_descriptors&quot;: [&quot;Txn&quot;, &quot;UserTxnFeatures&quot;]
+  &quot;removed&quot;: [],
+  &quot;changed&quot;: []
 }
 </code></pre>
-<p>On idempotent re-register (same payload), <code>added</code> is empty and the
-existing nodes appear in <code>already_present</code>. <code>registered_descriptors</code>
-always lists every node currently in the registry (the union of <code>added</code>
-and <code>already_present</code> for the just-applied payload).</p>
-<p><strong>Response body shape (dry-run):</strong></p>
-<pre><code class="language-json">{
-  &quot;diff&quot;: {
-    &quot;additive&quot;: [],
-    &quot;destructive&quot;: []
-  },
-  &quot;would_apply&quot;: false
-}
-</code></pre>
-<p><code>diff.additive</code> lists nodes that would be appended (no destructive impact);
-<code>diff.destructive</code> lists nodes whose application would require <code>force=true</code>
-(field-type changes, key changes, removals). <code>would_apply</code> is <code>true</code> iff
-the diff is empty <em>or</em> entirely additive.</p>
 <p>JSON Schema: <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/schemas/register.response.schema.json"><code>examples/wire/schemas/register.response.schema.json</code></a></p>
 <p>Worked example: <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/register-fraud-team.response.json"><code>examples/wire/register-fraud-team.response.json</code></a></p>
 <p><strong>Errors:</strong></p>
@@ -402,26 +367,17 @@ the diff is empty <em>or</em> entirely additive.</p>
 <h4 id="global-tables-key-per-adr-003" tabindex="-1"><a class="header-anchor" href="#global-tables-key-per-adr-003" aria-hidden="true">#</a> Global tables (<code>key = []</code>) — per ADR-003</h4>
 <p>A register payload with <code>key: []</code> (empty array) declares a <strong>global table</strong> — a single output row, no per-entity dimension. The sentinel <code>key = &quot;&quot;</code> (empty string) routes global state on the GET wire. Per <a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-003-global-aggregation-and-bv-lit.md">ADR-003</a>, every operator works in both per-entity and global modes — semantics are identical, only the state-keying dimension differs.</p>
 <p>Use cases: monitoring dashboards (total throughput, current entity count, global p95), anomaly detection on global rates (&quot;is the GLOBAL signup rate spiking?&quot;), top-K-globally features (&quot;top 10 hottest pages on the platform&quot;), cross-entity aggregations (&quot;total spend across all users&quot;).</p>
-<p><strong>Wire-level register payload (v0 derivation form — what the engine accepts today):</strong></p>
+<p><strong>Wire-level register payload (table descriptor):</strong></p>
 <pre><code class="language-json">{
-  &quot;kind&quot;: &quot;derivation&quot;,
+  &quot;kind&quot;: &quot;table&quot;,
   &quot;name&quot;: &quot;GlobalCounter&quot;,
-  &quot;output_kind&quot;: &quot;table&quot;,
+  &quot;key&quot;: [],
   &quot;upstreams&quot;: [&quot;Click&quot;],
-  &quot;ops&quot;: [{
-    &quot;op&quot;: &quot;group_by&quot;,
-    &quot;keys&quot;: [],
-    &quot;agg&quot;: {&quot;click_count&quot;: {&quot;op&quot;: &quot;count&quot;, &quot;params&quot;: {&quot;window&quot;: &quot;forever&quot;}}}
-  }],
-  &quot;schema&quot;: {&quot;fields&quot;: {&quot;click_count&quot;: &quot;i64&quot;}, &quot;optional_fields&quot;: []},
-  &quot;table_primary_key&quot;: []
+  &quot;agg&quot;: {
+    &quot;click_count&quot;: {&quot;op&quot;: &quot;count&quot;, &quot;params&quot;: {&quot;window&quot;: &quot;forever&quot;}}
+  }
 }
 </code></pre>
-<blockquote>
-<p>The shorter <code>kind: &quot;table&quot;</code> form (top-level <code>key</code>, top-level <code>agg</code>) is
-the post-ADR-001 target shape; the JSON-prelude shim that accepts it lands in
-a later phase. v0 SDKs emit the <code>kind: &quot;derivation&quot;</code> form shown above.</p>
-</blockquote>
 <p><strong>Wire-level GET request for a global table:</strong></p>
 <pre><code class="language-json">{ &quot;table&quot;: &quot;GlobalCounter&quot;, &quot;key&quot;: &quot;&quot; }
 </code></pre>
@@ -456,11 +412,10 @@ a later phase. v0 SDKs emit the <code>kind: &quot;derivation&quot;</code> form s
 <p><strong>Response body shape (success):</strong></p>
 <pre><code class="language-json">{
   &quot;ack_lsn&quot;: 12345,
-  &quot;idempotent_replay&quot;: false,
   &quot;registry_version&quot;: 1
 }
 </code></pre>
-<p><code>ack_lsn</code> is the server-assigned monotonic Log Sequence Number for this event; clients can persist it as an idempotency anchor. <code>idempotent_replay</code> is <code>true</code> iff the push matched a prior <code>dedupe_key</code> within the registered <code>dedupe_window</code> — in that case the server returns the original push's <code>ack_lsn</code> instead of writing a new entry. <code>registry_version</code> is the server's monotonic register counter, useful as a staleness sentinel for SDK schema caches.</p>
+<p><code>ack_lsn</code> is the server-assigned monotonic Log Sequence Number for this event; clients can persist it as an idempotency anchor (re-pushing an event with the same fields and an idempotent dedupe key returns the same <code>ack_lsn</code> plus <code>idempotent_replay: true</code>).</p>
 <p>JSON Schema: <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/schemas/push.response.schema.json"><code>examples/wire/schemas/push.response.schema.json</code></a></p>
 <p>Worked example: <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/push-success.response.json"><code>examples/wire/push-success.response.json</code></a></p>
 <p><strong>Errors:</strong></p>
@@ -484,8 +439,8 @@ a later phase. v0 SDKs emit the <code>kind: &quot;derivation&quot;</code> form s
 <td>400</td>
 </tr>
 <tr>
-<td><code>event_not_found</code></td>
-<td>The event name (URL path or TCP routing prefix) is not registered. (Earlier docs called this code <code>unknown_event</code>; the engine emits <code>event_not_found</code>.)</td>
+<td><code>unknown_event</code></td>
+<td>The event name (URL path or TCP routing prefix) is not registered.</td>
 <td>404</td>
 </tr>
 <tr>
@@ -592,12 +547,9 @@ a later phase. v0 SDKs emit the <code>kind: &quot;derivation&quot;</code> form s
 <p>JSON Schema: <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/schemas/reset.request.schema.json"><code>examples/wire/schemas/reset.request.schema.json</code></a></p>
 <p>Worked example: <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/reset-request.json"><code>examples/wire/reset-request.json</code></a></p>
 <p><strong>Response body shape (success):</strong></p>
-<pre><code class="language-json">{
-  &quot;registry_version&quot;: 0,
-  &quot;reset&quot;: true
-}
+<pre><code class="language-json">{ &quot;status&quot;: &quot;ok&quot; }
 </code></pre>
-<p>The server replies after the WAL truncation completes — the call is <strong>synchronous</strong>. The next event push to the same connection observes the cleared state. <code>reset: true</code> confirms the operation succeeded; <code>registry_version</code> reflects the post-reset registry counter (zeroed unless the registry persists across resets, which it does NOT in v0).</p>
+<p>The server replies after the WAL truncation completes — the call is <strong>synchronous</strong>. The next event push to the same connection observes the cleared state.</p>
 <p>JSON Schema: <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/schemas/reset.response.schema.json"><code>examples/wire/schemas/reset.response.schema.json</code></a></p>
 <p>Worked example: <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/reset-response.json"><code>examples/wire/reset-response.json</code></a></p>
 <p><strong>Errors:</strong></p>
@@ -611,8 +563,8 @@ a later phase. v0 SDKs emit the <code>kind: &quot;derivation&quot;</code> form s
 </thead>
 <tbody>
 <tr>
-<td><code>reset_disabled_in_production</code></td>
-<td>Server is not in test mode. v0 OP_RESET requires the server to be booted with <code>BEAVA_TEST_MODE=1</code> (or <code>Config { test_mode: true }</code>). Production operators leave this off; the call returns 403 with the structured code <code>reset_disabled_in_production</code>.</td>
+<td><code>reset_disabled</code></td>
+<td>Server config has <code>enable_reset_op=false</code> (production operators set this to forbid resets).</td>
 <td>403</td>
 </tr>
 <tr>
@@ -632,7 +584,7 @@ a later phase. v0 SDKs emit the <code>kind: &quot;derivation&quot;</code> form s
 </code></pre>
 <ul>
 <li><strong><code>code</code></strong> is a structured machine-readable identifier. Stable across releases. The canonical alphabetised list lives at <a href="/docs/error-codes/"><code>docs/error-codes.md</code></a> (Plan 13.0-12).</li>
-<li><strong><code>path</code></strong> is an optional JSON path or DAG path locating the offending element. Examples: <code>&quot;nodes[1].schema.amount&quot;</code> (during register validation), <code>&quot;fields.amount&quot;</code> (during push), <code>&quot;requests[2].table&quot;</code> (during batch_get). Optional.</li>
+<li><strong><code>path</code></strong> is an optional JSON path or DAG path locating the offending element. Examples: <code>&quot;descriptors[1].schema.amount&quot;</code> (during register validation), <code>&quot;fields.amount&quot;</code> (during push), <code>&quot;requests[2].table&quot;</code> (during batch_get). Optional.</li>
 <li><strong><code>message</code></strong> is a human-readable explanation. <strong>Forward-looking framing per Phase 12.7 D-02</strong> — messages say &quot;X is not supported in v0&quot;, <strong>not</strong> &quot;X has been removed&quot; or &quot;X was deprecated&quot;. The framing avoids implying a previous-version reference for users who never saw older revisions.</li>
 </ul>
 <p>The error envelope is the SAME on both transports — TCP wraps it in a frame with <code>op = 0x000A...</code> no actually <code>op = 0xFFFF</code> (<code>OP_ERROR_RESPONSE</code>) and <code>content_type = 0x01</code>; HTTP returns it as the response body with the appropriate status code.</p>
@@ -641,7 +593,7 @@ a later phase. v0 SDKs emit the <code>kind: &quot;derivation&quot;</code> form s
 <p>This wire spec is shaped by the following Architecture Decision Records:</p>
 <ul>
 <li>
-<p><strong><a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-001-bv-table-partial-overturn.md">ADR-001</a></strong> — <code>@bv.table</code> aggregation-output revival (partial overturn of v0 events-only scope). The post-13.4 wire form uses <code>kind=table</code> in register payloads per ADR-001; v0 today uses <code>kind=derivation</code> with <code>output_kind=table</code>, which the SDK already emits. Mutation paths (<code>upsert</code> / <code>delete</code> / <code>retract</code>) and MVCC remain killed.</p>
+<p><strong><a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-001-bv-table-partial-overturn.md">ADR-001</a></strong> — <code>@bv.table</code> aggregation-output revival (partial overturn of v0 events-only scope). The wire-spec uses <code>kind=table</code> in register payloads per ADR-001. Mutation paths (<code>upsert</code> / <code>delete</code> / <code>retract</code>) and MVCC remain killed.</p>
 </li>
 <li>
 <p><strong><a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-002-polars-op-rename.md">ADR-002</a></strong> — Polars op renames. Register payloads use the <strong>new</strong> op-string names (<code>mean</code>, <code>var</code>, <code>std</code>, <code>n_unique</code>, <code>quantile</code>). The Rust engine's internal <code>AggKind</code> enum variant names (<code>AggKind::Avg</code>, <code>AggKind::Variance</code>, etc.) are unchanged — only the public string mapping changes. SDKs in 13.5 (Python deprecation aliases) and 13.6 (TS + Go, no aliases) implement the full rename.</p>
@@ -714,6 +666,5 @@ a later phase. v0 SDKs emit the <code>kind: &quot;derivation&quot;</code> form s
     <a href="https://github.com/beava-dev/beava" target="_blank" rel="noopener">GitHub</a>
   </div>
 </footer>
-  <script src="/js/track-pageview.js" defer></script>
 </body>
 </html>

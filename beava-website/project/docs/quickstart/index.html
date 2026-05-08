@@ -4,9 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>beava Quickstart — beava docs</title>
-<meta name="description" content="beava is a real-time feature server. You declare aggregations in plain Python, push events over HTTP, and query computed features by entity key -- sub-millisecond -- with curl alone or any HTTP…">
+<meta name="description" content="beava is a real-time feature server. You declare aggregations, push events over HTTP, and query computed features by entity key — sub-millisecond — with curl alone or any HTTP client.">
 <link rel="canonical" href="https://beava.dev/docs/quickstart/">
-<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="shortcut icon" href="/assets/favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+<link rel="shortcut icon" href="/assets/favicon.ico">
 <link rel="stylesheet" href="/styles/colors_and_type.css">
 <link rel="stylesheet" href="/styles/site.css">
 <link rel="stylesheet" href="/styles/docs.css">
@@ -115,31 +118,47 @@
 <article class="docs-prose">
 <h1>beava Quickstart</h1>
 <blockquote>
-<p><code>pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"</code> -&gt; first feature in 60 seconds.</p>
+<p>Run the server. Install the SDK. Push your first event and query a feature — in five minutes.</p>
 </blockquote>
-<p>beava is a real-time feature server. You declare aggregations in plain Python,
-push events over HTTP, and query computed features by entity key --
-sub-millisecond -- with <code>curl</code> alone or any HTTP client.</p>
-<p><img src="/assets/quickstart-demo.svg" alt="beava quickstart: pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python", push events, query fresh per-campaign features" loading="lazy" class="doc-img"></p>
-<h2 id="install" tabindex="-1"><a class="header-anchor" href="#install" aria-hidden="true">#</a> Install</h2>
-<pre><code class="language-bash">pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"
+<p>beava is a real-time feature server. You declare aggregations, push events
+over HTTP, and query computed features by entity key — sub-millisecond —
+with <code>curl</code> alone or any HTTP client.</p>
+<p><img src="/assets/quickstart-demo.svg" alt="beava quickstart" loading="lazy" class="doc-img"></p>
+<h2 id="1-run-the-server" tabindex="-1"><a class="header-anchor" href="#1-run-the-server" aria-hidden="true">#</a> 1. Run the server</h2>
+<p><strong>Docker (most reliable):</strong></p>
+<pre><code class="language-bash">docker run --rm -p 8080:8080 -p 8090:8090 beavadev/beava:edge
 </code></pre>
-<blockquote>
-<p><strong>Pre-release.</strong> Install from main until v0.0.0 GA, when <code>beava</code> publishes to PyPI. Import name is <code>beava</code> in both cases.</p>
-</blockquote>
-<p>The pip package ships the Python SDK. The <code>beava</code> server binary is bundled and
-discovered automatically by <code>bv.App()</code> (no separate install). For production
-deployment use the Docker image (Phase 13.8 release).</p>
-<h2 id="first-feature-in-60-seconds" tabindex="-1"><a class="header-anchor" href="#first-feature-in-60-seconds" aria-hidden="true">#</a> First feature in 60 seconds</h2>
+<p>That's it — beava boots on built-in defaults: HTTP <code>:8080</code> (data plane), admin
+sidecar <code>:8090</code> (<code>/health</code>, <code>/ready</code>, <code>/metrics</code>, <code>/registry</code>), in-memory state
+with WAL + snapshot under <code>/data</code> inside the container. The <code>:edge</code> tag is
+rebuilt from <code>main</code> on every push.</p>
+<p><strong>Cargo (Rust toolchain):</strong></p>
+<pre><code class="language-bash">cargo install --git https://github.com/beava-dev/beava beava-server
+beava
+</code></pre>
+<p>Same ports, same defaults. No config file required (a missing
+<code>./beava.yaml</code> falls through to built-in defaults + <code>BEAVA_*</code> env-var
+overrides). Drop a <code>beava.yaml</code> next to the binary later if you want to
+pin durability paths or change ports.</p>
+<p><strong>Verify either path:</strong></p>
+<pre><code class="language-bash">curl http://localhost:8090/health
+# {&quot;status&quot;:&quot;ok&quot;}
+</code></pre>
+<h2 id="2-install-the-python-sdk" tabindex="-1"><a class="header-anchor" href="#2-install-the-python-sdk" aria-hidden="true">#</a> 2. Install the Python SDK</h2>
+<pre><code class="language-bash">pip install beava
+</code></pre>
+<p>The pip wheel ships the SDK + a <code>beava</code> console-script shim that locates the
+server binary on PATH and execs into it (handy for <code>pip install beava</code> →
+<code>beava</code> in CI). The wheel does <strong>not</strong> bundle the Rust binary — install via
+Docker or Cargo above.</p>
+<h2 id="3-declare-a-feature" tabindex="-1"><a class="header-anchor" href="#3-declare-a-feature" aria-hidden="true">#</a> 3. Declare a feature</h2>
 <pre><code class="language-python">import beava as bv
 
-# Define an event source.
 @bv.event
 class Impression:
     campaign_id: str
     bid: float
 
-# Define an aggregation table.
 @bv.table(key=&quot;campaign_id&quot;)
 def CampaignStats(imp: Impression):
     return imp.group_by(&quot;campaign_id&quot;).agg(
@@ -147,96 +166,100 @@ def CampaignStats(imp: Impression):
         bid_sum_1h=bv.sum(&quot;bid&quot;, window=&quot;1h&quot;),
         bid_mean_1h=bv.mean(&quot;bid&quot;, window=&quot;1h&quot;),
     )
-
-# Run an embedded local server (no separate install needed).
-with bv.App() as app:
+</code></pre>
+<h2 id="4-push-events-and-query" tabindex="-1"><a class="header-anchor" href="#4-push-events-and-query" aria-hidden="true">#</a> 4. Push events and query</h2>
+<p>Point the SDK at the server you started in step 1:</p>
+<pre><code class="language-python">with bv.App(&quot;http://localhost:8080&quot;) as app:
     app.register(Impression, CampaignStats)
 
-    # Push events.
     for camp_id, bid in [(&quot;c1&quot;, 0.50), (&quot;c1&quot;, 0.75), (&quot;c2&quot;, 0.40)]:
         app.push(&quot;Impression&quot;, {&quot;campaign_id&quot;: camp_id, &quot;bid&quot;: bid})
 
-    # Query computed features.
     print(app.get(&quot;CampaignStats&quot;, &quot;c1&quot;))
     # -&gt; {&quot;impressions_1h&quot;: 2, &quot;bid_sum_1h&quot;: 1.25, &quot;bid_mean_1h&quot;: 0.625}
 </code></pre>
-<p>That's it. No external storage, no separate server install, no SDK ceremony.
-beava's <a href="/docs/concepts/embed-mode/">embed mode</a> spawns a local <code>beava</code> binary
-on ephemeral ports -- the same binary you'd run in production for HTTP/TCP
-feature serving.</p>
-<h2 id="global-counter-per-adr-003" tabindex="-1"><a class="header-anchor" href="#global-counter-per-adr-003" aria-hidden="true">#</a> Global counter (per ADR-003)</h2>
-<p>Need a feature that aggregates across <strong>all</strong> entities -- e.g., total platform
-throughput, current entity count, top-K-globally? Declare a global table by
-omitting the <code>key=</code> kwarg on <code>@bv.table</code>:</p>
-<pre><code class="language-python"># Same Impression event from above.
+<p>Or with <code>curl</code>:</p>
+<pre><code class="language-bash">curl -X POST http://localhost:8080/push \
+  -H 'content-type: application/json' \
+  -d '{&quot;event&quot;:&quot;Impression&quot;,&quot;body&quot;:{&quot;campaign_id&quot;:&quot;c1&quot;,&quot;bid&quot;:0.50}}'
 
-@bv.table   # no key= -&gt; global table (per ADR-003)
+curl 'http://localhost:8080/get?table=CampaignStats&amp;key=c1'
+# {&quot;impressions_1h&quot;:2,&quot;bid_sum_1h&quot;:1.25,&quot;bid_mean_1h&quot;:0.625}
+</code></pre>
+<h2 id="embed-mode-no-separate-server" tabindex="-1"><a class="header-anchor" href="#embed-mode-no-separate-server" aria-hidden="true">#</a> Embed mode (no separate server)</h2>
+<p>If you'd rather not run a server at all — for tests, notebooks, or a quick
+sanity check — <code>bv.App()</code> with no URL spawns a local beava on ephemeral
+ports automatically:</p>
+<pre><code class="language-python">with bv.App() as app:
+    app.register(Impression, CampaignStats)
+    app.push(&quot;Impression&quot;, {&quot;campaign_id&quot;: &quot;c1&quot;, &quot;bid&quot;: 0.5})
+    print(app.get(&quot;CampaignStats&quot;, &quot;c1&quot;))
+</code></pre>
+<p>Same wire protocol; everything you build in embed mode runs unchanged
+against the real server in step 1. See
+<a href="/docs/concepts/embed-mode/">concepts/embed-mode</a>.</p>
+<h2 id="global-aggregation" tabindex="-1"><a class="header-anchor" href="#global-aggregation" aria-hidden="true">#</a> Global aggregation</h2>
+<p>Need a feature that spans every entity — total throughput, top-K globally?
+Drop the <code>key=</code> kwarg:</p>
+<pre><code class="language-python">@bv.table
 def TotalImpressions(imp: Impression):
-    return imp.agg(total=bv.count(window=&quot;forever&quot;))   # no group_by
+    return imp.agg(total=bv.count(window=&quot;forever&quot;))
 
-with bv.App() as app:
-    app.register(Impression, CampaignStats, TotalImpressions)
-
-    for camp_id, bid in [(&quot;c1&quot;, 0.50), (&quot;c1&quot;, 0.75), (&quot;c2&quot;, 0.40)]:
-        app.push(&quot;Impression&quot;, {&quot;campaign_id&quot;: camp_id, &quot;bid&quot;: bid})
-
-    # Per-entity query (existing) -- 2 args:
-    print(app.get(&quot;CampaignStats&quot;, &quot;c1&quot;))   # -&gt; {&quot;impressions_1h&quot;: 2, ...}
-
-    # Global query (new) -- 1 arg, no entity:
-    print(app.get(&quot;TotalImpressions&quot;))      # -&gt; {&quot;total&quot;: 3}
+# Per-entity query (2 args):
+print(app.get(&quot;CampaignStats&quot;, &quot;c1&quot;))     # -&gt; {&quot;impressions_1h&quot;: 2, ...}
+# Global query (1 arg):
+print(app.get(&quot;TotalImpressions&quot;))        # -&gt; {&quot;total&quot;: 3}
 </code></pre>
 <p>Per <a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-003-global-aggregation-and-bv-lit.md">ADR-003</a>,
-all 53 operators work with both per-entity and global aggregation. See
-<a href="/docs/concepts/global-aggregation/">docs/concepts/global-aggregation.md</a> for the
-full conceptual treatment (when to use global vs per-entity, performance
-characteristics, composition with <code>cold_after=</code>).</p>
+all 54 operators work with both per-entity and global aggregation. See
+<a href="/docs/concepts/global-aggregation/">concepts/global-aggregation</a> for when to
+pick which.</p>
 <h2 id="bvdemo" tabindex="-1"><a class="header-anchor" href="#bvdemo" aria-hidden="true">#</a> bv.demo()</h2>
-<p>For a self-contained tour with realistic-shape data:</p>
+<p>A self-contained tour with realistic-shape data:</p>
 <pre><code class="language-python">import beava as bv
 
 bv.demo(&quot;adtech&quot;)     # ad-impression / click-rate aggregations
 bv.demo(&quot;fraud&quot;)      # high-cardinality velocity + sketch
 bv.demo(&quot;ecommerce&quot;)  # purchase / basket aggregations
 </code></pre>
-<p>Each demo registers descriptors, pushes ~10 events, and queries the resulting
-features. See
+<p>Each demo registers descriptors, pushes ~10 events, and queries the
+resulting features. Source:
 <a href="https://github.com/beava-dev/beava/blob/main/examples/python/adtech.py">examples/python/adtech.py</a>,
-<a href="https://github.com/beava-dev/beava/blob/main/examples/python/fraud.py">examples/python/fraud.py</a>, and
-<a href="https://github.com/beava-dev/beava/blob/main/examples/python/ecommerce.py">examples/python/ecommerce.py</a>
-for the full source.</p>
+<a href="https://github.com/beava-dev/beava/blob/main/examples/python/fraud.py">examples/python/fraud.py</a>,
+<a href="https://github.com/beava-dev/beava/blob/main/examples/python/ecommerce.py">examples/python/ecommerce.py</a>.</p>
 <blockquote>
 <p><strong>Cross-language note:</strong> Pipeline authoring is <strong>Python-only</strong> in v0. The
-<a href="/docs/sdk-api/typescript/">TypeScript</a> and <a href="/docs/sdk-api/go/">Go</a> SDKs are
-communicate-only — they push events, register pre-compiled JSON descriptors
-(authored from Python), and read features. Use Python to design and compile
-your pipeline; TS/Go services then push events + read features against the
-same registered pipeline.</p>
+<a href="/docs/sdk-api/typescript/">TypeScript</a> and <a href="/docs/sdk-api/go/">Go</a> SDKs push
+events, register pre-compiled JSON descriptors (authored from Python),
+and read features. Use Python to design the pipeline; TS/Go services
+push events + read features against the same registered pipeline.</p>
 </blockquote>
 <h2 id="next-steps" tabindex="-1"><a class="header-anchor" href="#next-steps" aria-hidden="true">#</a> Next steps</h2>
 <ul>
-<li><strong>API reference:</strong> <a href="/docs/sdk-api/python/">docs/sdk-api/python.md</a> -- full
+<li><strong>API reference:</strong> <a href="/docs/sdk-api/python/">docs/sdk-api/python.md</a> — full
 Python SDK surface (App, decorators, expressions, op helpers)</li>
-<li><strong>Operator catalog:</strong> <a href="/docs/operators/">docs/operators/index.md</a> --
+<li><strong>Operator catalog:</strong> <a href="/docs/operators/">docs/operators/index.md</a> —
 all 54 op pages (<code>count</code>, <code>sum</code>, <code>mean</code>, <code>n_unique</code>, <code>quantile</code>, <code>ewma</code>,
-...)</li>
-<li><strong>Wire contract:</strong> <a href="/docs/wire-spec/">docs/wire-spec.md</a> -- frame format +
+…)</li>
+<li><strong>Wire contract:</strong> <a href="/docs/wire-spec/">docs/wire-spec.md</a> — frame format +
 JSON Schema 2020-12 contracts (for porting to other languages)</li>
-<li><strong>Pipeline DSL:</strong> <a href="/docs/pipeline-dsl/overview/">docs/pipeline-dsl/overview.md</a>
--- <code>@bv.event</code>, <code>@bv.table</code>, chain methods, expressions</li>
-<li><strong>Architecture:</strong> <a href="./architecture/">docs/architecture/</a> -- single-thread
+<li><strong>Pipeline DSL:</strong> <a href="/docs/pipeline-dsl/overview/">docs/pipeline-dsl/overview.md</a> —
+<code>@bv.event</code>, <code>@bv.table</code>, chain methods, expressions</li>
+<li><strong>Architecture:</strong> <a href="./architecture/">docs/architecture/</a> — single-thread
 apply + mio data plane + WAL/snapshot durability + memory budget</li>
 </ul>
-<p>For production deployment + scaling guidance see the docs site (Phase 13.7).</p>
 
 </article>
 </main>
 <aside class="docs-toc" aria-label="On this page">
   <div class="toc-title">On this page</div>
   <ul class="toc-list">
-      <li><a href="#install">Install</a></li>
-      <li><a href="#first-feature-in-60-seconds">First feature in 60 seconds</a></li>
-      <li><a href="#global-counter-per-adr-003">Global counter (per ADR-003)</a></li>
+      <li><a href="#1-run-the-server">1. Run the server</a></li>
+      <li><a href="#2-install-the-python-sdk">2. Install the Python SDK</a></li>
+      <li><a href="#3-declare-a-feature">3. Declare a feature</a></li>
+      <li><a href="#4-push-events-and-query">4. Push events and query</a></li>
+      <li><a href="#embed-mode-no-separate-server">Embed mode (no separate server)</a></li>
+      <li><a href="#global-aggregation">Global aggregation</a></li>
       <li><a href="#bvdemo">bv.demo()</a></li>
       <li><a href="#next-steps">Next steps</a></li>
   </ul>
@@ -248,6 +271,5 @@ apply + mio data plane + WAL/snapshot durability + memory budget</li>
     <a href="https://github.com/beava-dev/beava" target="_blank" rel="noopener">GitHub</a>
   </div>
 </footer>
-  <script src="/js/track-pageview.js" defer></script>
 </body>
 </html>

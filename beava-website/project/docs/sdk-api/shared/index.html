@@ -4,9 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Shared SDK Semantics — beava docs</title>
-<meta name="description" content="beava — real-time feature server.">
+<meta name="description" content="Beava — real-time feature server.">
 <link rel="canonical" href="https://beava.dev/docs/sdk-api/shared/">
-<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="shortcut icon" href="/assets/favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+<link rel="shortcut icon" href="/assets/favicon.ico">
 <link rel="stylesheet" href="/styles/colors_and_type.css">
 <link rel="stylesheet" href="/styles/site.css">
 <link rel="stylesheet" href="/styles/docs.css">
@@ -115,8 +118,8 @@
 <article class="docs-prose">
 <h1>Shared SDK Semantics</h1>
 <blockquote>
-<p><strong>Status:</strong> Authoritative for v0. The 3 v0 SDKs (Python, TypeScript, Go) MUST implement the surfaces in this doc with semantic parity.
-<strong>Last reviewed:</strong> 2026-05-03 (Phase 13.0).</p>
+<p><strong>Status:</strong> Authoritative for v0. The 3 v0 SDKs (Python, TypeScript, Go) MUST implement the <strong>communicate</strong> surfaces in this doc with semantic parity. The <strong>authoring</strong> layer (decorators, expression DSL, op helpers) is <strong>Python-only</strong> in v0 — see &quot;Authoring vs communicate&quot; below.
+<strong>Last reviewed:</strong> 2026-05-03 (Phase 13.6).</p>
 </blockquote>
 <h2 id="overview" tabindex="-1"><a class="header-anchor" href="#overview" aria-hidden="true">#</a> Overview</h2>
 <p>beava's <a href="/docs/wire-spec/">JSON wire format</a> is the <strong>canonical contract</strong>.
@@ -130,12 +133,43 @@ idioms (naming style, sync vs async, error patterns, decorator vs builder
 syntax) are documented in the per-language docs:</p>
 <ul>
 <li><a href="/docs/sdk-api/python/">Python SDK</a> — canonical authoring UX (<code>@bv.event</code>, <code>bv.col</code>, <code>bv.count(...)</code>).</li>
-<li><a href="/docs/sdk-api/typescript/">TypeScript SDK</a> — npm package <code>@beava/sdk</code>; camelCase + builder pattern.</li>
-<li><a href="/docs/sdk-api/go/">Go SDK</a> — module <code>github.com/beava-io/beava-go</code>; context-aware methods + functional options.</li>
+<li><a href="/docs/sdk-api/typescript/">TypeScript SDK</a> — npm package <code>@beava/sdk</code>; communicate-only (no DSL).</li>
+<li><a href="/docs/sdk-api/go/">Go SDK</a> — module <code>github.com/beava-dev/beava/sdk/go</code>; context-aware methods + functional options; communicate-only (no DSL).</li>
 </ul>
 <p>When Python prose and the cross-language semantics in this doc disagree, this
 doc wins — Python is the <strong>canonical implementation</strong> but this is the
 <strong>canonical contract</strong>.</p>
+<h2 id="authoring-vs-communicate" tabindex="-1"><a class="header-anchor" href="#authoring-vs-communicate" aria-hidden="true">#</a> Authoring vs communicate</h2>
+<p>beava v0 splits its public SDK surface into two layers:</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Available in</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Authoring</strong></td>
+<td>Python only</td>
+<td>Decorators (<code>@bv.event</code>), expression DSL (<code>bv.col</code>, <code>bv.lit</code>), op helpers (<code>bv.count</code>, <code>bv.sum</code>, ...), pipeline chains (<code>events.filter().group_by().agg()</code>), demo loaders (<code>bv.demo(&quot;fraud&quot;)</code>). Compiles to JSON descriptors.</td>
+</tr>
+<tr>
+<td><strong>Communicate</strong></td>
+<td>All three SDKs (Python, TypeScript, Go)</td>
+<td><code>App</code> constructor + URL-scheme dispatch, <code>register(pre-compiled JSON)</code>, <code>push</code>, <code>pushSync</code>, <code>get</code>, <code>batchGet</code>, <code>reset</code>, <code>ping</code>, <code>close</code>.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Cross-language workflow:</strong></p>
+<ol>
+<li>Author the pipeline in Python via the DSL.</li>
+<li>Compile to JSON via <code>bv.App.register_json(...)</code> or by serializing descriptors.</li>
+<li>Ship that JSON to a TypeScript / Go application — they pass it through verbatim to <code>app.register(...)</code> and never inspect it.</li>
+</ol>
+<p>This split was locked 2026-05-03 (Phase 13.6 scope amendment) per the user directive: &quot;pipeline sdk in python only; only communicate sdk are in all languages.&quot; The TS+Go SDKs deliberately ship NO DSL files (no <code>events.ts</code>/<code>col.ts</code>/<code>agg.ts</code>/<code>table.ts</code>; same for Go). Their <code>Descriptor</code> type is opaque pass-through (<code>Record&lt;string, unknown&gt;</code> in TS, <code>map[string]any</code> in Go).</p>
+<p>This is not a permanent constraint — TS/Go authoring may land in v0.1+ if demand justifies it. The key insight is that <strong>the wire spec is the cross-language contract</strong>, not the authoring DSL: a TS app pushing events against a Python-authored pipeline is observably identical to a Python app doing the same.</p>
 <h2 id="wire-transports" tabindex="-1"><a class="header-anchor" href="#wire-transports" aria-hidden="true">#</a> Wire transports</h2>
 <p>Three transports map to one URL scheme each. URL-scheme dispatch is part of
 every SDK's contract — the user passes the URL, and the SDK selects the
@@ -261,32 +295,12 @@ Other types in the slice raise an error before the wire call.</li>
 <li><strong>Go</strong> uses a separate method — Go's static typing makes arity overloading awkward; explicit method names are idiomatic.</li>
 </ul>
 <p>The wire shape is identical — only the per-language client surface differs. Global-table state is bounded by the per-table state size (single slot), independent of entity count. See <a href="/docs/concepts/global-aggregation/"><code>docs/concepts/global-aggregation.md</code></a> for the full conceptual treatment.</p>
-<h2 id="public-expression-literal-bvlit-per-adr-003" tabindex="-1"><a class="header-anchor" href="#public-expression-literal-bvlit-per-adr-003" aria-hidden="true">#</a> Public expression literal (<code>bv.lit</code>) — per ADR-003</h2>
-<p>Per <a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-003-global-aggregation-and-bv-lit.md">ADR-003</a>, all three SDKs expose a public literal factory:</p>
-<table>
-<thead>
-<tr>
-<th>Language</th>
-<th>Signature</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Python</td>
-<td>`bv.lit(value: int</td>
-</tr>
-<tr>
-<td>TypeScript</td>
-<td>`bv.lit(value: number</td>
-</tr>
-<tr>
-<td>Go</td>
-<td><code>beava.Lit(value any) Expr</code></td>
-</tr>
-</tbody>
-</table>
-<p>The literal AST node already exists internally in all three SDKs (used by the implicit operator-overloading coercion path); ADR-003 promotes it to the public namespace. Wire-level: literals are serialized via the existing expression-string path; <strong>no wire change</strong>.</p>
-<p>Implementation deferred: Phase 13.5 (Python ~5 LOC) + Phase 13.6 (TS + Go ~30 LOC each).</p>
+<h2 id="public-expression-literal-bvlit-python-only-in-v0" tabindex="-1"><a class="header-anchor" href="#public-expression-literal-bvlit-python-only-in-v0" aria-hidden="true">#</a> Public expression literal (<code>bv.lit</code>) — Python-only in v0</h2>
+<p>Per <a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-003-global-aggregation-and-bv-lit.md">ADR-003</a>, Python exposes a public literal factory:</p>
+<pre><code class="language-python">bv.lit(value: int | float | str | bool | None) -&gt; Expr
+</code></pre>
+<p><strong>TS / Go do NOT expose <code>bv.lit</code></strong> — both SDKs are communicate-only in v0 (no expression layer). Cross-language workflow: Python authors expressions including literals → compiles to JSON → TS/Go ship the pre-compiled JSON.</p>
+<p>If TS/Go authoring lands in v0.1+, they would expose mirror factories (<code>bv.lit(...)</code> / <code>beava.Lit(...)</code>); that's deferred per the Phase 13.6 communicate-only rescope.</p>
 <h2 id="field-types" tabindex="-1"><a class="header-anchor" href="#field-types" aria-hidden="true">#</a> Field types</h2>
 <p>The 6-element field-type vocabulary is shared across all languages. Wire
 representation (the string used in the registered schema) is the <strong>wire
@@ -568,8 +582,7 @@ vs unbounded ops in lifetime mode lives at
 (forward-ref Plan 13.0-13). v0 enforces this on the server regardless
 of SDK behavior.</p>
 <h2 id="cross-language-api-surface-map" tabindex="-1"><a class="header-anchor" href="#cross-language-api-surface-map" aria-hidden="true">#</a> Cross-language API surface map</h2>
-<p>For quick reference, here is the canonical surface that every SDK MUST
-implement:</p>
+<p>For quick reference, here is the canonical <strong>communicate</strong> surface that every SDK MUST implement:</p>
 <table>
 <thead>
 <tr>
@@ -583,7 +596,7 @@ implement:</p>
 <tr>
 <td><code>OP_REGISTER</code></td>
 <td><code>app.register(*descriptors, force=False, dry_run=False)</code></td>
-<td><code>app.register(descriptors, { force, dryRun })</code></td>
+<td><code>app.register(descriptors, { force, dry_run })</code></td>
 <td><code>app.Register(ctx, descriptors, beava.WithForce(), beava.WithDryRun())</code></td>
 </tr>
 <tr>
@@ -593,10 +606,22 @@ implement:</p>
 <td><code>app.Push(ctx, eventName, fields)</code></td>
 </tr>
 <tr>
-<td><code>OP_GET</code></td>
+<td><code>OP_PUSH_SYNC</code> (reserved)</td>
+<td><code>app.push_sync(event_name, fields)</code></td>
+<td><code>app.pushSync(eventName, fields)</code></td>
+<td><code>app.PushSync(ctx, eventName, fields)</code></td>
+</tr>
+<tr>
+<td><code>OP_GET</code> (per-entity)</td>
 <td><code>app.get(table, key)</code></td>
 <td><code>app.get(table, key)</code></td>
 <td><code>app.Get(ctx, table, key)</code></td>
+</tr>
+<tr>
+<td><code>OP_GET</code> (global, ADR-003)</td>
+<td><code>app.get(table)</code> (1-arg)</td>
+<td><code>app.get(table)</code> (1-arg overload)</td>
+<td><code>app.GetGlobal(ctx, table)</code> (separate method)</td>
 </tr>
 <tr>
 <td><code>OP_BATCH_GET</code></td>
@@ -619,13 +644,13 @@ implement:</p>
 <tr>
 <td>(close lifecycle)</td>
 <td><code>app.close()</code> / context manager</td>
-<td><code>app.close()</code> / <code>Symbol.asyncDispose</code></td>
+<td><code>app.close()</code></td>
 <td><code>app.Close(ctx)</code> / <code>defer</code></td>
 </tr>
 </tbody>
 </table>
-<p>Each language doc fills in the per-language signature details with full
-type annotations, error semantics, and lifecycle expectations.</p>
+<p>The <strong>authoring</strong> surface (<code>@bv.event</code>, <code>@bv.table</code>, expressions, op helpers, <code>bv.demo</code>) lives in Python only — see &quot;Authoring vs communicate&quot; above.</p>
+<p>Each language doc fills in the per-language signature details with full type annotations, error semantics, and lifecycle expectations.</p>
 <h2 id="plan-level-traceability" tabindex="-1"><a class="header-anchor" href="#plan-level-traceability" aria-hidden="true">#</a> Plan-level traceability</h2>
 <p>This document is authored by Plan 13.0-04 (Wave 1). Downstream consumers:</p>
 <ul>
@@ -643,10 +668,11 @@ type annotations, error semantics, and lifecycle expectations.</p>
   <div class="toc-title">On this page</div>
   <ul class="toc-list">
       <li><a href="#overview">Overview</a></li>
+      <li><a href="#authoring-vs-communicate">Authoring vs communicate</a></li>
       <li><a href="#wire-transports">Wire transports</a></li>
       <li><a href="#window-grammar">Window grammar</a></li>
       <li><a href="#key-shape">Key shape</a></li>
-      <li><a href="#public-expression-literal-bvlit-per-adr-003">Public expression literal (bv.lit) — per ADR-003</a></li>
+      <li><a href="#public-expression-literal-bvlit-python-only-in-v0">Public expression literal (bv.lit) — Python-only in v0</a></li>
       <li><a href="#field-types">Field types</a></li>
       <li><a href="#featureresult-shape">FeatureResult shape</a></li>
       <li><a href="#validationerror-envelope">ValidationError envelope</a></li>
@@ -665,6 +691,5 @@ type annotations, error semantics, and lifecycle expectations.</p>
     <a href="https://github.com/beava-dev/beava" target="_blank" rel="noopener">GitHub</a>
   </div>
 </footer>
-  <script src="/js/track-pageview.js" defer></script>
 </body>
 </html>
