@@ -647,11 +647,18 @@ impl ApplyShard {
             WireRequest::HttpHealth => GlueResponse::HealthOk,
 
             // `POST /ping` — verb-style liveness mirror of TCP
-            // `OP_PING (0x0000)`. Returns `200 {"status":"ok"}` (same
-            // shape as `/health`) so verb-style fixtures can poll either
-            // endpoint. No AppState consult, no apply-thread round-trip
-            // — same reason `/health` is inline-shimmed.
-            WireRequest::HttpPing => GlueResponse::HealthOk,
+            // `OP_PING (0x0000)`. Returns `200 {"pong": true,
+            // "registry_version": <n>}` so SDK clients can use it as a
+            // cheap registry-version probe (cache invalidation,
+            // schema-evolution detection on long-lived connections).
+            // We're already on the apply thread here, so reading
+            // `registry.version()` is free — no extra round-trip.
+            // For dumb-liveness fixtures that don't care about the
+            // registry counter, `/health` keeps the original
+            // `{"status":"ok"}` shape.
+            WireRequest::HttpPing => GlueResponse::Pong {
+                registry_version: self.state.dev_agg.registry.version() as u32,
+            },
 
             // Data-plane `/ready` and `/registry` shims for `TestServer`
             // back-compat. `/ready` mirrors the admin sidecar's body;

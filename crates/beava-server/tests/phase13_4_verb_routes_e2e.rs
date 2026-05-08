@@ -1,7 +1,7 @@
 //! Phase 13.4 Plan 04 — verb-style HTTP routes (end-to-end gate).
 //!
 //! Boots a real `TestServer` and posts to the new verb-style routes:
-//! - `POST /ping` — HTTP mirror of TCP `OP_PING (0x0000)`; returns 200 `{"status":"ok"}`.
+//! - `POST /ping` — HTTP mirror of TCP `OP_PING (0x0000)`; returns 200 `{"pong": true, "registry_version": <n>}`.
 //! - `POST /push` — event name lives in the JSON body (`{"event":"Tx","data":{...}}`)
 //!   instead of the URL path.
 //!
