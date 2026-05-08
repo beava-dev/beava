@@ -79,7 +79,7 @@ class BidEvent:
             <p>Use <code>@bv.table</code> to define the state you want to maintain:</p>
             <Code lang="python">
 {`@bv.table(key=("user_id", "campaign_id"))
-def UserCampaignFeatures(ev: BidEvent) -> bv.Table:
+def UserCampaignFeatures(ev: BidEvent):
     return ev.group_by("user_id", "campaign_id").agg(
         imps_1h=bv.count(window="1h", where=bv.col("event_type") == "impression"),
         imps_24h=bv.count(window="24h", where=bv.col("event_type") == "impression"),

@@ -87,7 +87,7 @@ class UserEvent:
             <p>A table describes the state beava should maintain from those events.</p>
             <Code lang="python">
 {`@bv.table(key="user_id")
-def UserActivityFeatures(ev: UserEvent) -> bv.Table:
+def UserActivityFeatures(ev: UserEvent):
     return ev.group_by("user_id").agg(
         views_1h=bv.count(window="1h", where=bv.col("event_type") == "view"),
         clicks_1h=bv.count(window="1h", where=bv.col("event_type") == "click"),

@@ -92,7 +92,7 @@
             <p>Some features are keyed by more than one field.</p>
             <Code lang="python">
 {`@bv.table(key=("user_id", "campaign_id"))
-def UserCampaignFeatures(ev: BidEvent) -> bv.Table:
+def UserCampaignFeatures(ev: BidEvent):
     ...`}
             </Code>
             <p>A composite key lets beava maintain state for relationships like:</p>

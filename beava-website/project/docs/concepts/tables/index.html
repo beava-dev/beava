@@ -58,7 +58,7 @@
             <h2 id="what">What is a table?</h2>
             <Code lang="python">
 {`@bv.table(key="user_id")
-def UserActivityFeatures(ev: UserEvent) -> bv.Table:
+def UserActivityFeatures(ev: UserEvent):
     return ev.group_by("user_id").agg(
         clicks_1h=bv.count(window="1h", where=bv.col("event_type") == "click"),
         views_1h=bv.count(window="1h", where=bv.col("event_type") == "view"),

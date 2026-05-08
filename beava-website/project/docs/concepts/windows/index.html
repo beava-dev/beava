@@ -66,7 +66,7 @@
             </ul>
             <Code lang="python">
 {`@bv.table(key="campaign_id")
-def CampaignFeatures(ev: BidEvent) -> bv.Table:
+def CampaignFeatures(ev: BidEvent):
     return ev.group_by("campaign_id").agg(
         spend_1h=bv.sum("price", window="1h", where=bv.col("event_type") == "win"),
         wins_24h=bv.count(window="24h", where=bv.col("event_type") == "win"),

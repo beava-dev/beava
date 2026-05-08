@@ -46,7 +46,7 @@ class Click:
     page: str
 
 @bv.table(key="user_id")
-def UserActivity(e: Click) -> bv.Table:
+def UserActivity(e: Click):
     return e.group_by("user_id").agg(
         clicks_1h=bv.count(window="1h"),
         unique_pages_1h=bv.n_unique("page", window="1h"),
