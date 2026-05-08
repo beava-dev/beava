@@ -193,12 +193,20 @@
   }
   .content strong { color: var(--fg1); font-weight: 700; }
 
-  /* ===== CARDS ===== */
+  /* ===== CARDS =====
+   * .content a sets text-decoration: underline for all anchors (the
+   * default for prose links). Cards are <a> elements but should NOT
+   * underline — both the title and the description text inherit
+   * text-decoration from the anchor. Using `.content a.card` instead
+   * of `.card` bumps specificity from (0,1,0) -> (0,1,2), beating
+   * (0,1,1) of the prose-link rule.
+   */
   .card-grid {
     display: grid; gap: 12px;
     grid-template-columns: 1fr 1fr;
     margin: 12px 0 28px;
   }
+  .content a.card,
   .card {
     display: flex; flex-direction: column;
     background: #fff;
@@ -238,8 +246,20 @@
   .card .go .arrow { transition: transform 200ms var(--ease-out); }
   .card:hover .go .arrow { transform: translateX(3px); }
 
-  /* ===== CALLOUTS ===== */
+  /* ===== CALLOUTS =====
+   * site.css ships a generic .callout rule that uses CSS grid:
+   *   display: grid; grid-template-columns: 28px 1fr; gap: 14px;
+   * The SDK page wants the icon ABSOLUTE-positioned in a 50px-padded
+   * left rail instead. site.css's `display: grid` doesn't get
+   * overridden by the SDK's rule below (it doesn't set `display`),
+   * so without the explicit `display: block` the .ic span ends up
+   * out of grid flow (because of `position: absolute`) and the <p>
+   * auto-places into the 28px column — every word wraps onto a new
+   * line. The user caught this in the screenshot 2026-05-08; fix is
+   * a one-liner.
+   */
   .callout {
+    display: block;
     border-radius: 12px;
     padding: 14px 18px 14px 50px;
     margin: 0 0 24px;
@@ -547,7 +567,7 @@
 
       <h4>HTTP API</h4>
       <ul>
-        <li class="planned"><a href="#">POST /push/:event</a></li>
+        <li class="planned"><a href="#">POST /push</a></li>
         <li class="planned"><a href="#">POST /get</a></li>
         <li class="planned"><a href="#">POST /register</a></li>
         <li class="planned"><a href="#">Wire spec</a></li>
@@ -616,15 +636,15 @@
             </div>
 <pre><span class="tk-c"># persistent volume keeps your features across restarts</span>
 <span class="tk-k">docker</span> run -d --name beava \
-  -p <span class="tk-n">8080</span>:<span class="tk-n">8080</span> -p <span class="tk-n">8090</span>:<span class="tk-n">8090</span> \
+  -p <span class="tk-n">8080</span>:<span class="tk-n">8080</span> -p <span class="tk-n">8081</span>:<span class="tk-n">8081</span> \
   -v beava-data:/data \
   beavadev/beava:edge
 
 <span class="tk-c"># verify</span>
-<span class="tk-k">curl</span> http://localhost:8090/health
-<span class="tk-c"># → {"status":"ok"}</span></pre>
+<span class="tk-k">curl</span> -X POST http://localhost:8080/ping
+<span class="tk-c"># → {"pong":true,"registry_version":0}</span></pre>
           </div>
-          <p>Port <code>8080</code> is the data plane (push, get). Port <code>8090</code> is the admin sidecar (<code>/health</code>, <code>/ready</code>, <code>/metrics</code>, <code>/registry</code>).</p>
+          <p>Port <code>8080</code> is the HTTP data plane (push, get, batch_get, register, ping). Port <code>8081</code> is the framed-TCP fast-path (sub-millisecond, JSON or msgpack content). Admin endpoints (<code>/health</code>, <code>/ready</code>, <code>/metrics</code>, <code>/registry</code>) live on a separate sidecar port that you opt into via the <code>--http-addr</code> / <code>--config</code> flags.</p>
         </div>
 
         <div class="tabs-panel" id="t-cargo">
@@ -633,12 +653,12 @@
               <span class="filename">terminal</span>
               <button class="copy-btn">Copy</button>
             </div>
-<pre><span class="tk-k">cargo</span> install beava-server
-<span class="tk-k">beava</span>
-<span class="tk-c"># → server.http_bound 0.0.0.0:8080</span>
-<span class="tk-c"># → admin.bound       0.0.0.0:8090</span></pre>
+<pre><span class="tk-k">cargo</span> install --git https://github.com/beava-dev/beava beava-server
+<span class="tk-k">beava</span> --memory-only
+<span class="tk-c"># → HTTP listen   : 127.0.0.1:8080</span>
+<span class="tk-c"># → TCP listen    : 127.0.0.1:8081 (enabled=true)</span></pre>
           </div>
-          <p>Requires Rust 1.74+. The repo also ships a <code>make run</code> target for a debug build.</p>
+          <p>Requires Rust 1.74+. <code>--memory-only</code> skips the WAL — useful for kicking the tyres. Drop it for production (state lands under <code>./.beava/</code> by default).</p>
         </div>
 
         <div class="tabs-panel" id="t-source">
@@ -660,22 +680,21 @@
           <span class="filename">terminal</span>
           <button class="copy-btn">Copy</button>
         </div>
-<pre><span class="tk-k">pip</span> install tally
-<span class="tk-c"># or: uv pip install tally · poetry add tally</span></pre>
+<pre><span class="tk-k">pip</span> install <span class="tk-s">"git+https://github.com/beava-dev/beava.git#subdirectory=python"</span></pre>
       </div>
 
       <div class="callout note">
         <span class="ic">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
         </span>
-        <p>The PyPI package is currently published as <code>tally</code> (the codename); the import name is <code>beava</code>. The PyPI rename to <code>beava</code> lands at v0.0.0 GA — <code>pip install beava</code> will work then.</p>
+        <p>PyPI publish lands at v0.0.x — <code>pip install beava</code> will work then. For the v0.0.0 cut the SDK installs from the GitHub source above. Both URLs keep working after the PyPI cut.</p>
       </div>
 
       <div class="callout tip">
         <span class="ic">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
         </span>
-        <p><strong>Tip.</strong> beava ships static. There's no JVM to size, no broker to configure, no schema registry to register against. If <code>curl :8090/health</code> returns <code>{"status":"ok"}</code>, you're done.</p>
+        <p><strong>Tip.</strong> beava ships static. There's no JVM to size, no broker to configure, no schema registry to register against. If <code>curl -X POST :8080/ping</code> returns <code>{"pong":true,"registry_version":0}</code>, you're done.</p>
       </div>
 
       <!-- =============== DECLARE =============== -->
@@ -724,11 +743,14 @@
             <button class="copy-btn">Copy</button>
           </div>
 <pre><span class="tk-k">curl</span> -X POST \
-  http://localhost:8080/push/PageView \
+  http://localhost:8080/push \
   -H <span class="tk-s">"content-type: application/json"</span> \
   -d <span class="tk-s">'{
-    "user_id": "alice",
-    "path":    "/home"
+    "event": "PageView",
+    "data": {
+      "user_id": "alice",
+      "path":    "/home"
+    }
   }'</span></pre>
         </div>
         <div class="codeblock">
