@@ -43,6 +43,12 @@ Issues = "https://github.com/petrpan26/beava/issues"
 # python-source = "." means pyproject.toml's directory (python/) is the
 # Python package root; maturin auto-discovers `beava/` underneath it.
 python-source = "."
+# Override maturin's default module-name derivation. Without this maturin
+# infers the module name from the Cargo crate (`beava-server` → `beava_server`)
+# and looks for `python/beava_server/`, which doesn't exist — our Python
+# package directory is `python/beava/` (project name = "beava", crate name
+# = "beava-server" — they intentionally differ).
+module-name = "beava"
 # Workspace-aware path to the binary crate. Cargo.lock is resolved at
 # the workspace root (../Cargo.toml), which maturin walks up to find.
 manifest-path = "../crates/beava-server/Cargo.toml"
