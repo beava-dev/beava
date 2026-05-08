@@ -1,21 +1,26 @@
-"""``beava`` console script — exec the Rust server binary.
+"""``beava`` Python-side fallback — exec the Rust server binary.
 
-Wired via ``[project.scripts] beava = "beava._cli:main"`` in
-``pyproject.toml``. Locates the server binary using the same 4-step
-discovery order as embed mode (see ``_embed.discover_binary``) and
-``os.execv``s into it, forwarding ``sys.argv[1:]``.
+From v0.4.0 onward, the maturin-built wheel ships the Rust ``beava``
+binary directly into ``<sysconfig.get_path("scripts")>/beava`` — that
+binary IS the ``beava`` shell command after ``pip install beava``. This
+module is no longer wired via ``[project.scripts]``.
+
+The shim is retained as a manual fallback runnable as
+``python -m beava._cli``: it locates the server binary using the
+same 5-step discovery order as embed mode (see
+``_embed.discover_binary``) and ``os.execv``s into it, forwarding
+``sys.argv[1:]``. Useful when:
+
+- A user's PATH ordering shadows the wheel's ``beava`` and they want
+  embed-mode discovery semantics from the command line.
+- An editable install (``maturin develop`` or ``pip install -e .``)
+  hasn't placed the binary in scripts/ yet but a ``cargo build``
+  binary lives under the workspace ``target/`` tree.
 
 If the binary isn't found, exits with a structured stderr message
 listing install paths — never a traceback. Shell scripts that chain
-``beava -c ... && next-step`` halt cleanly when the prerequisite is
-missing.
-
-The Python pip wheel does NOT bundle the Rust binary. Users who want
-``beava -c beava.yaml`` to work must install the binary via Docker
-(``docker run beavadev/beava:edge``), Cargo (``cargo install --git
-https://github.com/beava-dev/beava beava-server``), or by building
-from source. The shim keeps ``pip install beava`` from looking like
-a server install when it isn't.
+``python -m beava._cli -c ... && next-step`` halt cleanly when the
+prerequisite is missing.
 """
 from __future__ import annotations
 

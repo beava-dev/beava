@@ -1,10 +1,14 @@
-"""Tests for the `beava` console script (`pip install beava` → shell command).
+"""Tests for the Python-side `beava._cli` fallback (`python -m beava._cli`).
 
-The pip-installed `beava` shim must locate the server binary via the same
-discovery order as embed mode (`$BEAVA_BINARY` → `$PATH` → workspace
-`target/debug/beava`) and exec into it, forwarding argv. Failure to find
-a binary must produce a structured stderr message + non-zero exit, NOT
-a stack trace.
+From v0.4.0, the pip-installed `beava` shell command is the maturin-bundled
+Rust server binary itself — `[project.scripts]` no longer wires a Python
+shim. `beava._cli` survives as a manual fallback runnable via
+`python -m beava._cli`; it must locate the server binary via the same
+discovery order as embed mode (`$BEAVA_BINARY` → wheel-bundled binary in
+`<sysconfig.get_path("scripts")>` → `$PATH` → workspace
+`target/{release,debug}/beava`) and exec into it, forwarding argv.
+Failure to find a binary must produce a structured stderr message +
+non-zero exit, NOT a stack trace.
 """
 from __future__ import annotations
 
@@ -102,21 +106,56 @@ def test_main_binary_not_found_clean_exit(capsys: pytest.CaptureFixture[str]) ->
     assert "beava binary not found" not in captured.out
 
 
-def test_pyproject_declares_console_script() -> None:
-    """`pip install beava` must put a `beava` shell command on the
-    user's PATH. The console_script entry in pyproject.toml is the
-    contract; if it's missing, `pip install` ships only the library
-    and the user has to install the Rust binary separately to run
-    the server."""
+def test_pyproject_declares_maturin_bundled_binary() -> None:
+    """`pip install beava` must ship the Rust server binary directly.
+    The build backend is maturin in `bindings = "bin"` mode pointed at
+    the workspace `crates/beava-server/Cargo.toml`, with `bins =
+    ["beava"]` filtering out dev-only second binaries (log_probe).
+    These three together are the contract that produces a `beava`
+    shell command at `<sysconfig.get_path("scripts")>/beava` after
+    install — without them, `pip install beava` ships only the SDK
+    and the bundled-server promise on the homepage breaks."""
+    # tomllib is stdlib on Python 3.11+; on 3.10 we fall back to the
+    # text-mode regex contract below (the package supports 3.10).
+    try:
+        import tomllib
+    except ImportError:
+        pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
+        text = pyproject.read_text()
+        assert 'build-backend = "maturin"' in text
+        assert 'bindings = "bin"' in text
+        assert '"beava"' in text and "bins = " in text
+        # `[project.scripts]` may exist for other entries; what matters
+        # is that no line wires `beava = ...` under it.
+        assert "[project.scripts]" not in text or "beava = " not in text
+        return
+
     pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
-    text = pyproject.read_text()
-    # Hand-rolled grep instead of pulling tomllib — the contract is one
-    # line and we want to fail fast if it gets removed.
-    assert "[project.scripts]" in text, (
-        "python/pyproject.toml is missing the [project.scripts] table; "
-        "pip install beava will not install a `beava` shell command."
+    cfg = tomllib.loads(pyproject.read_text())
+
+    assert cfg["build-system"]["build-backend"] == "maturin", (
+        "python/pyproject.toml build-backend must be 'maturin' — the "
+        "Rust server binary ships in the wheel via maturin's bin mode."
     )
-    assert 'beava = "beava._cli:main"' in text, (
-        "python/pyproject.toml [project.scripts] does not declare "
-        '`beava = "beava._cli:main"` — the shim won\'t wire up.'
+
+    maturin = cfg.get("tool", {}).get("maturin", {})
+    assert maturin.get("bindings") == "bin", (
+        "[tool.maturin] bindings must be 'bin' — without it the wheel "
+        "would build a C-extension shim instead of the server binary."
+    )
+    assert "beava" in maturin.get("bins", []), (
+        "[tool.maturin].bins must include 'beava' — the production "
+        "server binary that becomes the `beava` shell command after "
+        "pip install."
+    )
+
+    # `[project.scripts]` must NOT wire a Python `beava` console script:
+    # the maturin-bundled native binary IS the `beava` shell command. A
+    # console_script shim of the same name would shadow the binary in
+    # the wheel's scripts/ directory and reintroduce the exec-loop risk
+    # that `_embed._is_shebang_script` defends against.
+    project_scripts = cfg.get("project", {}).get("scripts", {})
+    assert "beava" not in project_scripts, (
+        "[project.scripts] must not declare a `beava` entry — the "
+        "maturin bundled binary IS the shell command."
     )

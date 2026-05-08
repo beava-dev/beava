@@ -5,14 +5,19 @@ Binary discovery order (locked):
      executable; otherwise :class:`BinaryNotFoundError` is raised
      immediately (no fallthrough — silent fallback would mask user
      misconfiguration).
-  2. ``beava`` on PATH via ``shutil.which``, BUT shebang scripts
-     (``#!``) are skipped — the ``[project.scripts] beava`` entry
-     installs a Python shim of that name, and execing into it would
-     re-enter ``discover_binary``, find itself, and loop. Only native
-     binaries (ELF / Mach-O / etc.) qualify.
-  3. Walk CWD upward looking for ``target/debug/beava`` (dev-loop
-     convenience).
-  4. Raise :class:`BinaryNotFoundError` with install guidance.
+  2. ``<sysconfig.get_path("scripts")>/beava`` — the maturin-bundled
+     binary that ships in the wheel from v0.4.0 onward. Checked before
+     PATH so embed mode always uses the binary that matches the active
+     Python's installed beava SDK version (no version-skew between
+     pip-installed SDK and a stale ``beava`` somewhere on PATH).
+  3. ``beava`` on PATH via ``shutil.which``, BUT shebang scripts
+     (``#!``) are skipped. Older 0.3.x wheels installed a Python
+     console-script shim named ``beava``; execing into it would re-enter
+     ``discover_binary``, find itself, and loop. Only native binaries
+     (ELF / Mach-O / etc.) qualify.
+  4. Walk CWD upward looking for ``target/release/beava`` then
+     ``target/debug/beava`` (dev-loop convenience for in-tree work).
+  5. Raise :class:`BinaryNotFoundError` with install guidance.
 
 Security: only paths produced by the discovery order above are executed;
 no shell interpolation; no arbitrary-command execution.
@@ -26,6 +31,7 @@ import logging
 import os
 import shutil
 import subprocess
+import sysconfig
 import tempfile
 import threading
 import time
@@ -39,17 +45,19 @@ _log = logging.getLogger("beava.embed")
 def _is_shebang_script(path: str) -> bool:
     """True if ``path`` is a text file starting with ``#!`` (interpreter).
 
-    The Python ``[project.scripts]`` entry installs a ``beava`` console
-    script as a shebang-headed Python file (e.g. ``#!/usr/bin/env
-    python3``). Treating it as the server binary causes an exec loop:
-    spawn shim → shim's main runs ``discover_binary`` → finds itself
-    → execs into itself → ...
+    Older 0.3.x beava wheels installed a ``beava`` console script as a
+    shebang-headed Python file (e.g. ``#!/usr/bin/env python3``).
+    Treating it as the server binary causes an exec loop: spawn shim →
+    shim's main runs ``discover_binary`` → finds itself → execs into
+    itself → ...
 
-    Native server binaries are ELF / Mach-O / PE — none start with
-    ``#!``. A read failure (permission denied, broken symlink) is
-    treated as "not a shebang" so we don't reject candidates we
-    couldn't classify; the subsequent ``Popen`` will surface any
-    real exec error.
+    From 0.4.0 onward the wheel bundles the native server binary, but
+    we still skip shebang scripts during PATH lookup as defense-in-depth
+    against mixed-version environments. Native server binaries are
+    ELF / Mach-O / PE — none start with ``#!``. A read failure
+    (permission denied, broken symlink) is treated as "not a shebang"
+    so we don't reject candidates we couldn't classify; the subsequent
+    ``Popen`` will surface any real exec error.
     """
     try:
         with open(path, "rb") as f:
@@ -80,10 +88,23 @@ def discover_binary() -> Path:
             f"Unset BEAVA_BINARY or fix the path."
         )
 
+    # The maturin-bundled binary from `pip install beava` (v0.4.0+) lives
+    # in the active Python's scripts directory. Check it before PATH so
+    # embed mode always picks the binary that matches this Python's
+    # installed SDK — even when an older `beava` lingers earlier on PATH.
+    scripts_dir = sysconfig.get_path("scripts")
+    if scripts_dir:
+        bundled = Path(scripts_dir) / "beava"
+        if bundled.is_file() and os.access(bundled, os.X_OK) and not _is_shebang_script(
+            str(bundled)
+        ):
+            return bundled
+
     # Scan every PATH directory rather than just the first match. A user
-    # with both `pip install beava` (shim in e.g. ~/.local/bin) and
-    # `cargo install beava-server` (binary in ~/.cargo/bin) on PATH must
-    # find the native binary regardless of which directory comes first.
+    # with both `pip install beava==0.3.x` (Python shim in e.g.
+    # ~/.local/bin from the legacy `[project.scripts]` entry) and
+    # `cargo install beava-server` (native binary in ~/.cargo/bin) on
+    # PATH must find the native binary regardless of order.
     # `shutil.which(name, path=dir)` enforces both file-existence + the
     # executable bit and handles platform quirks (PATHEXT on Windows).
     for path_dir in os.environ.get("PATH", "").split(os.pathsep):
@@ -93,21 +114,21 @@ def discover_binary() -> Path:
         if resolved is None:
             continue
         if _is_shebang_script(resolved):
-            # Python console_script shim from `[project.scripts]` —
-            # execing into it would loop. Try the next PATH entry.
+            # Legacy 0.3.x console-script shim — execing into it would
+            # loop. Try the next PATH entry.
             continue
         return Path(resolved)
 
     for parent in [Path.cwd(), *Path.cwd().parents]:
-        candidate = parent / "target" / "debug" / "beava"
-        if candidate.is_file() and os.access(candidate, os.X_OK):
-            return candidate
+        for build_dir in ("release", "debug"):
+            candidate = parent / "target" / build_dir / "beava"
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                return candidate
 
     raise BinaryNotFoundError(
         "beava binary not found. Install with one of:\n"
-        "  brew install beava\n"
-        "  pip install beava[server]\n"
-        "  docker pull beava/beava\n"
+        "  pip install beava\n"
+        "  docker pull beavadev/beava\n"
         "Or set BEAVA_BINARY=/path/to/beava."
     )
 
