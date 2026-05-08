@@ -34,6 +34,12 @@
   overflow-y: auto;
   padding: 32px 28px 40px 0;
 }
+/* Static section badge at the top of the SDK sidebar. Identifies the
+ * area + carries the v0 version pill. NOT a dropdown — v0 has only
+ * one SDK (Python) and one wire surface (HTTP API), no products to
+ * switch between. The chevron / cursor:pointer / hover-border were
+ * removed in round-4 of A3 polish. The class name is kept for
+ * compatibility with downstream styles. */
 .sidebar .product-switcher {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 12px;
@@ -42,10 +48,7 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   font-size: 13px; color: var(--fg1);
-  cursor: pointer;
-  transition: border-color 150ms var(--ease-out);
 }
-.sidebar .product-switcher:hover { border-color: var(--border-strong); }
 .sidebar .product-switcher .swatch {
   width: 22px; height: 22px; border-radius: 6px;
   background: var(--beava-orange-wash);
@@ -55,7 +58,6 @@
 }
 .sidebar .product-switcher .label { flex: 1; font-weight: 600; }
 .sidebar .product-switcher .sub { color: var(--fg3); font-size: 11.5px; }
-.sidebar .product-switcher .chev { color: var(--fg3); }
 
 .sidebar h4 {
   font-family: var(--font-sans); font-weight: 600;

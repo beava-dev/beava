@@ -48,9 +48,6 @@ const SdkSidebar = ({ active = null }) => (
     <div className="product-switcher">
       <div className="swatch">b</div>
       <div className="label">SDK reference <span className="sub">· v0</span></div>
-      <svg className="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="6 9 12 15 18 9"/>
-      </svg>
     </div>
     {SDK_NAV.map(section => (
       <React.Fragment key={section.heading}>
