@@ -1007,14 +1007,11 @@
         });
       });
     });
-    // copy buttons
-    document.querySelectorAll('.copy-btn').forEach(b => {
-      b.addEventListener('click', () => {
-        const orig = b.textContent;
-        b.textContent = '✓ Copied';
-        setTimeout(() => { b.textContent = orig; }, 1100);
-      });
-    });
+    // Copy-button click handling lives in /js/copy-buttons.js below —
+    // shared with the rendered docs pages so behaviour stays in one place.
+    // The previous inline implementation animated the label without
+    // actually putting anything on the clipboard.
   </script>
+  <script src="/js/copy-buttons.js" defer></script>
 </body>
 </html>

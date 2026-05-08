@@ -390,6 +390,7 @@ ${body}
 ${tocHtml}
 </div>
 ${foot}
+<script src="/js/copy-buttons.js" defer></script>
 </body>
 </html>
 `;
