@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bv.col / bv.lit · beava SDK reference</title>
+<meta name="description" content="bv.col and bv.lit — the column-reference and literal-value primitives that build predicates and operator field expressions in the beava chain DSL.">
+<link rel="stylesheet" href="/styles/colors_and_type.css">
+<link rel="stylesheet" href="/styles/site.css">
+<link rel="stylesheet" href="/styles/sdk-shell.css">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+<link rel="shortcut icon" href="/assets/favicon.ico">
+<style>
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--fg1); font-family: var(--font-sans); }
+
+  /* Reference-page hero — matches /sdk/python/app/. */
+  .ref-hero {
+    margin: 0 0 28px;
+    padding-bottom: 26px;
+    border-bottom: 1px solid var(--border);
+  }
+  .ref-hero .eyebrow {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-family: var(--font-mono); font-weight: 600; font-size: 12px;
+    color: var(--fg3);
+    margin-bottom: 14px;
+  }
+  .ref-hero .eyebrow .pill {
+    display: inline-block;
+    font-family: var(--font-mono); font-size: 10.5px; font-weight: 600;
+    color: var(--accent); background: var(--beava-orange-wash);
+    padding: 2px 8px; border-radius: 999px;
+    letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .ref-hero h1 {
+    font-family: var(--font-serif); font-weight: 700;
+    font-size: 44px; line-height: 1.05; letter-spacing: -0.025em;
+    color: var(--fg1);
+    margin: 0 0 14px;
+  }
+  .ref-hero h1 code {
+    font-family: var(--font-mono); font-weight: 700; font-size: 0.78em;
+    background: var(--beava-paper); border: 1px solid var(--border-inset);
+    padding: 2px 9px; border-radius: 8px; color: var(--accent);
+    letter-spacing: 0;
+  }
+  .ref-hero .lede {
+    font-family: var(--font-serif);
+    font-size: 19px; line-height: 1.5;
+    color: var(--fg2); font-weight: 400;
+    margin: 0; max-width: 60ch;
+  }
+</style>
+</head>
+<body class="beava">
+
+  <div id="bv-site-header"></div>
+
+  <div class="shell">
+
+    <!-- ============ SIDEBAR ============ -->
+    <aside class="sidebar">
+      <div id="bv-sdk-sidebar"></div>
+    </aside>
+
+    <!-- ============ MAIN ============ -->
+    <main class="content" data-pagefind-body>
+
+      <div class="crumbs">
+        <a href="/">beava</a><span class="sep">/</span>
+        <a href="/sdk/python/">SDK reference</a><span class="sep">/</span>
+        <span class="cur">bv.col / bv.lit</span>
+      </div>
+
+      <header class="ref-hero">
+        <div class="eyebrow">
+          <span class="pill">Python SDK</span>
+          <span><code>beava._col</code></span>
+        </div>
+        <h1><code>bv.col</code> — column expressions</h1>
+        <p class="lede"><code>bv.col</code> references a schema field; <code>bv.lit</code> wraps a Python constant. Together they build the operator-overloaded <code>_Expr</code> AST that powers <code>where=</code> predicates, <code>with_columns</code> derivations, and operator field selection in the chain DSL.</p>
+      </header>
+
+      <!-- =============== OVERVIEW =============== -->
+      <h2 id="overview">Overview</h2>
+      <p>Every predicate in beava — every <code>where=</code> kwarg, every filter clause, every derived-column expression — is built from two primitives: <code>bv.col(name)</code> for a field reference, and <code>bv.lit(value)</code> for a constant. Combine them with Python operators (<code>==</code>, <code>&gt;</code>, <code>&amp;</code>, <code>|</code>, <code>~</code>) to produce an <code>_Expr</code> AST node. The AST is inert at construction time; the server's expression parser evaluates it at push time.</p>
+
+      <div class="reqres">
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">filter on a predicate</span>
+          </div>
+<pre>bv<span class="tk-p">.</span>count<span class="tk-p">(</span>
+    window<span class="tk-p">=</span><span class="tk-s">"1h"</span><span class="tk-p">,</span>
+    where<span class="tk-p">=</span>bv<span class="tk-p">.</span>col<span class="tk-p">(</span><span class="tk-s">"amount"</span><span class="tk-p">)</span> <span class="tk-p">&gt;</span> <span class="tk-n">100</span><span class="tk-p">,</span>
+<span class="tk-p">)</span></pre>
+        </div>
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">derived column</span>
+          </div>
+<pre>pv<span class="tk-p">.</span>with_columns<span class="tk-p">(</span>
+    is_premium<span class="tk-p">=</span>bv<span class="tk-p">.</span>col<span class="tk-p">(</span><span class="tk-s">"plan"</span><span class="tk-p">)</span> <span class="tk-p">==</span> bv<span class="tk-p">.</span>lit<span class="tk-p">(</span><span class="tk-s">"premium"</span><span class="tk-p">),</span>
+<span class="tk-p">)</span></pre>
+        </div>
+      </div>
+
+      <p>Both helpers return <code>_Expr</code> nodes (subclasses <code>_Col</code> and <code>_Literal</code>). <code>_Expr</code> overloads Python's comparison, arithmetic, and bitwise operators to grow the AST; you never construct nodes by hand.</p>
+
+      <!-- =============== col ============= -->
+      <div class="method-head">
+        <h3 id="col" data-toc-label="col" class="name">bv.col(name)</h3>
+<div class="sig">bv.col(name: str) -&gt; _Col</div>
+      </div>
+      <p>Reference a schema field by name. Returns an <code>_Expr</code> — an unbound expression node that participates in operator overloads. The lookup is unresolved until the expression reaches the server; <code>bv.col("nonexistent")</code> only fails at register / push time when the schema check runs.</p>
+
+      <h3>Args</h3>
+      <ul>
+        <li><code>name</code> — the field name as declared on the upstream event class. Composite keys are addressed by their per-column names; there is no nested-field accessor.</li>
+      </ul>
+
+      <h3>Returns</h3>
+      <p><code>_Col</code> — a frozen-dataclass <code>_Expr</code> node. Hashable, immutable, safe to reuse across multiple chain expressions.</p>
+
+      <h3>Example</h3>
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">col.py</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+<pre><span class="tk-k">import</span> beava <span class="tk-k">as</span> bv
+
+amount <span class="tk-p">=</span> bv<span class="tk-p">.</span>col<span class="tk-p">(</span><span class="tk-s">"amount"</span><span class="tk-p">)</span>
+expr <span class="tk-p">=</span> amount <span class="tk-p">&gt;</span> <span class="tk-n">100</span>
+<span class="tk-fn">print</span><span class="tk-p">(</span>expr<span class="tk-p">.</span>to_expr_string<span class="tk-p">())</span>  <span class="tk-c"># → '(amount &gt; 100)'</span></pre>
+      </div>
+
+      <!-- =============== lit ============= -->
+      <div class="method-head">
+        <h3 id="lit" data-toc-label="lit" class="name">bv.lit(value)</h3>
+<div class="sig">bv.lit(value: int | float | str | bool | None) -&gt; _Literal</div>
+      </div>
+      <p>Wrap a Python constant as an explicit literal expression. The implicit form (<code>bv.col("a") &gt; 100</code>) and the explicit form (<code>bv.col("a") &gt; bv.lit(100)</code>) are wire-equivalent inside operator overloads — Python's dispatch coerces the right-hand side automatically. <code>bv.lit</code> is required when the literal stands on its own (a constant column in <code>with_columns</code>, the left-hand side of an arithmetic expression, or the only operand of a derivation).</p>
+
+      <p>Per <strong>ADR-003</strong>, <code>bv.lit</code> is also the canonical way to write a comparison-against-constant in any <code>where=</code> kwarg — bare strings are explicitly rejected (see <a href="#where">the <code>where=</code> contract</a>).</p>
+
+      <h3>Args</h3>
+      <ul>
+        <li><code>value</code> — a Python scalar. Accepted types: <code>int</code>, <code>float</code>, <code>str</code>, <code>bool</code>, <code>None</code>. Other types (e.g. <code>list</code>, <code>dict</code>, custom classes) are not supported by the server's expression grammar.</li>
+      </ul>
+
+      <h3>Returns</h3>
+      <p><code>_Literal</code> — a frozen-dataclass <code>_Expr</code> node. Renders to the wire-grammar form: single-quoted strings, <code>true</code>/<code>false</code> for booleans, <code>null</code> for <code>None</code>.</p>
+
+      <h3>Example</h3>
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">lit.py</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+<pre><span class="tk-k">import</span> beava <span class="tk-k">as</span> bv
+
+bv<span class="tk-p">.</span>lit<span class="tk-p">(</span><span class="tk-n">42</span><span class="tk-p">).</span>to_expr_string<span class="tk-p">()</span>     <span class="tk-c"># → '42'</span>
+bv<span class="tk-p">.</span>lit<span class="tk-p">(</span><span class="tk-s">"web"</span><span class="tk-p">).</span>to_expr_string<span class="tk-p">()</span>  <span class="tk-c"># → "'web'"</span>
+bv<span class="tk-p">.</span>lit<span class="tk-p">(</span><span class="tk-k">None</span><span class="tk-p">).</span>to_expr_string<span class="tk-p">()</span>   <span class="tk-c"># → 'null'</span>
+bv<span class="tk-p">.</span>lit<span class="tk-p">(</span><span class="tk-k">True</span><span class="tk-p">).</span>to_expr_string<span class="tk-p">()</span>   <span class="tk-c"># → 'true'</span></pre>
+      </div>
+
+      <!-- =============== EXPRESSION DSL =============== -->
+      <h2 id="dsl">Expression DSL</h2>
+      <p>An <code>_Expr</code> grows by operator overload. Every overload returns a new <code>_Expr</code> — the AST is immutable, so re-using a node in multiple chains is safe.</p>
+
+      <h3>Comparison</h3>
+      <p>Each comparison operator emits a <code>_BinOp</code> node. Both operands are <code>_Expr</code>; bare Python literals on either side are auto-wrapped via <code>_coerce</code>.</p>
+
+      <div class="params">
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">==&nbsp;&nbsp;!=</span>
+            <span class="param-tags">
+              <span class="param-tag type">_Expr × _Expr → _Expr</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>Equality and inequality. <code>bv.col("plan") == bv.lit("premium")</code> renders as <code>(plan == 'premium')</code>.</p>
+          </div>
+        </div>
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">&lt;&nbsp;&nbsp;&lt;=&nbsp;&nbsp;&gt;&nbsp;&nbsp;&gt;=</span>
+            <span class="param-tags">
+              <span class="param-tag type">_Expr × _Expr → _Expr</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>Ordered comparison. Numeric on both sides; the server rejects ordered comparison of strings.</p>
+          </div>
+        </div>
+      </div>
+
+      <h3>Logical combinators</h3>
+      <p>Python's <code>and</code> / <code>or</code> can't be overloaded — they short-circuit on truthiness. Beava overloads <code>&amp;</code> / <code>|</code> instead and serializes them as the server-grammar keywords <code>and</code> / <code>or</code>. <strong>Always parenthesize</strong> — Python's bitwise operators bind tighter than comparison.</p>
+
+      <div class="params">
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">&amp;</span>
+            <span class="param-tags">
+              <span class="param-tag type">_Expr × _Expr → _Expr</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>Logical AND. Wire form: <code>(left and right)</code>.</p>
+          </div>
+        </div>
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">|</span>
+            <span class="param-tags">
+              <span class="param-tag type">_Expr × _Expr → _Expr</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>Logical OR. Wire form: <code>(left or right)</code>.</p>
+          </div>
+        </div>
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">~</span>
+            <span class="param-tags">
+              <span class="param-tag type">_Expr → _Expr</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>Logical NOT. Wire form: <code>!(operand)</code>.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">combinators.py</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+<pre>expr <span class="tk-p">=</span> <span class="tk-p">(</span>bv<span class="tk-p">.</span>col<span class="tk-p">(</span><span class="tk-s">"amount"</span><span class="tk-p">)</span> <span class="tk-p">&gt;</span> <span class="tk-n">100</span><span class="tk-p">)</span> <span class="tk-p">&amp;</span> <span class="tk-p">(</span>bv<span class="tk-p">.</span>col<span class="tk-p">(</span><span class="tk-s">"plan"</span><span class="tk-p">)</span> <span class="tk-p">==</span> <span class="tk-s">"premium"</span><span class="tk-p">)</span>
+expr<span class="tk-p">.</span>to_expr_string<span class="tk-p">()</span>
+<span class="tk-c"># → "((amount &gt; 100) and (plan == 'premium'))"</span>
+
+negated <span class="tk-p">=</span> <span class="tk-p">~</span><span class="tk-p">(</span>bv<span class="tk-p">.</span>col<span class="tk-p">(</span><span class="tk-s">"path"</span><span class="tk-p">)</span> <span class="tk-p">==</span> <span class="tk-s">"/health"</span><span class="tk-p">)</span>
+negated<span class="tk-p">.</span>to_expr_string<span class="tk-p">()</span>
+<span class="tk-c"># → "!((path == '/health'))"</span></pre>
+      </div>
+
+      <h3>Methods</h3>
+
+      <div class="params">
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">.cast(target)</span>
+            <span class="param-tags">
+              <span class="param-tag type">str → _Expr</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>Cast the operand to one of <code>"str"</code>, <code>"int"</code>, <code>"float"</code>, <code>"bool"</code>. Any other target raises <code>ValueError</code> at construction time (client-side guard). Wire form: <code>cast(operand, target)</code>.</p>
+          </div>
+        </div>
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">.isnull()</span>
+            <span class="param-tags">
+              <span class="param-tag type">() → _Expr</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>Null-check. Wire form: <code>(operand == null)</code>. Combine with <code>~</code> for an "is not null" check: <code>~bv.col("x").isnull()</code>.</p>
+          </div>
+        </div>
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">.to_expr_string()</span>
+            <span class="param-tags">
+              <span class="param-tag type">() → str</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>Render the AST to its wire-grammar JSON form. Stable string representation; safe to use in tests.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- =============== where contract =============== -->
+      <h2 id="where">The <code>where=</code> contract</h2>
+      <p>Every kwarg that takes a predicate — every aggregation operator's <code>where=</code>, every filter clause — accepts an <code>_Expr</code> and only an <code>_Expr</code>. Bare strings are explicitly rejected per <strong>ADR-003</strong>. The check lives in <code>_serialize_where</code> on every aggregation operator: anything that isn't <code>None</code> or an <code>_Expr</code> raises <code>TypeError</code> client-side, before a single byte hits the wire.</p>
+
+      <div class="reqres">
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">rejected — bare string</span>
+          </div>
+<pre>bv<span class="tk-p">.</span>count<span class="tk-p">(</span>where<span class="tk-p">=</span><span class="tk-s">"amount &gt; 0"</span><span class="tk-p">)</span>
+<span class="tk-c"># TypeError: where= must be an _Expr or None;</span>
+<span class="tk-c">#   got str</span></pre>
+        </div>
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">canonical — _Expr</span>
+          </div>
+<pre>bv<span class="tk-p">.</span>count<span class="tk-p">(</span>where<span class="tk-p">=</span>bv<span class="tk-p">.</span>col<span class="tk-p">(</span><span class="tk-s">"amount"</span><span class="tk-p">)</span> <span class="tk-p">&gt;</span> <span class="tk-n">0</span><span class="tk-p">)</span>
+<span class="tk-c"># wire: where = "(amount &gt; 0)"</span></pre>
+        </div>
+      </div>
+
+      <p><strong>Why bare strings are blocked.</strong> A free-form predicate string would force the SDK to either ship a Python-side parser (hidden complexity, divergence risk against the server grammar) or pass the string through unchecked (typos surface only at push-time on the server). The <code>_Expr</code> AST removes both failure modes: it parses at construction, renders deterministically, and refactors statically.</p>
+
+      <!-- =============== FAQ =============== -->
+      <h2 id="faq">Common questions</h2>
+
+      <div class="accordion">
+        <details>
+          <summary>Why do I need <code>bv.lit</code> for constants? Polars does this automatically.</summary>
+          <div class="acc-body">
+            <p>Inside an operator overload (e.g. <code>bv.col("a") &gt; 100</code>), Python's dispatch <em>does</em> auto-coerce the right-hand side via <code>_coerce</code>. <code>bv.lit</code> is needed when the literal isn't on the right side of an overload — for instance, when assigning a constant column in <code>with_columns</code> (no operator to dispatch through), or in the few <code>where=</code> shapes where ADR-003 wants the explicit form to remove ambiguity. Pick whichever reads better; both render to the same wire form.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Can I use Python's <code>and</code> / <code>or</code>?</summary>
+          <div class="acc-body">
+            <p>No — Python forbids overloading <code>and</code> / <code>or</code> (they short-circuit on truthiness, not on operand types). The SDK overloads <code>&amp;</code> / <code>|</code> instead and serializes them as the server-grammar keywords <code>and</code> / <code>or</code>. Always parenthesize each side: <code>(a == 1) &amp; (b &gt; 0)</code>, not <code>a == 1 &amp; b &gt; 0</code> — Python's bitwise operators bind tighter than comparison.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Does <code>.cast</code> allow lossy conversions?</summary>
+          <div class="acc-body">
+            <p>The client-side guard only validates the target name — one of <code>"str"</code>, <code>"int"</code>, <code>"float"</code>, <code>"bool"</code>. The server applies the actual conversion at push time and rejects values that can't be represented (e.g. <code>cast("not-a-number", int)</code>). Lossy numeric casts (<code>float → int</code>) follow the server's coercion rules; check the operator catalogue's "type coercion" notes for the exact behaviour per call-site.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Can I reuse the same <code>_Expr</code> in multiple operators?</summary>
+          <div class="acc-body">
+            <p>Yes. <code>_Expr</code> subclasses are frozen dataclasses — the AST is immutable, so a single expression node can appear inside several aggregations safely. Build it once at module scope and pass it to each <code>where=</code> kwarg.</p>
+          </div>
+        </details>
+      </div>
+
+      <!-- =============== NEXT =============== -->
+      <h2 id="next">Where to go next</h2>
+      <p>You know how to reference and constrain. The next thing to learn is what to apply expressions to:</p>
+
+      <div class="card-grid">
+        <a class="card" href="#">
+          <div class="ttl">Operator catalogue</div>
+          <p class="desc">Every aggregation primitive — <code>count</code>, <code>sum</code>, <code>mean</code>, <code>n_unique</code>, <code>top_k</code>, <code>ewma</code>, plus the windowed and time-decay operators — and their <code>where=</code> / <code>field=</code> conventions.</p>
+          <span class="go">Operator reference <span class="arrow">→</span></span>
+        </a>
+        <a class="card" href="#">
+          <div class="ttl">@bv.table</div>
+          <p class="desc">Per-entity feature tables built with <code>group_by(...).agg(...)</code>. Composite keys, global tables, and the chain primitives that consume your <code>bv.col</code> / <code>bv.lit</code> expressions.</p>
+          <span class="go">Decorator reference <span class="arrow">→</span></span>
+        </a>
+      </div>
+
+      <!-- =============== FOOTER =============== -->
+      <div class="footer-area">
+        <div class="feedback">
+          <div class="ask">Was this page useful?</div>
+          <div class="feedback-btns">
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3z"/><line x1="7" y1="22" x2="7" y2="11"/></svg>
+              Yes
+            </button>
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3z"/><line x1="17" y1="2" x2="17" y2="13"/></svg>
+              Not really
+            </button>
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              Suggest an edit
+            </button>
+          </div>
+        </div>
+
+        <div id="bv-sdk-pager"></div>
+      </div>
+    </main>
+
+    <!-- ============ RIGHT TOC ============ -->
+    <aside class="toc">
+      <div id="bv-sdk-toc"></div>
+    </aside>
+
+  </div>
+
+  <div id="bv-site-footer"></div>
+
+  <!-- React + Babel — required by SiteHeader / SiteFooter / Sdk* -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script type="text/babel" src="/js/_shared/SiteHeader.jsx"></script>
+  <script type="text/babel" src="/js/_shared/SiteFooter.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkSidebar.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkTOC.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkPager.jsx"></script>
+
+  <script type="text/babel">
+    ReactDOM.createRoot(document.getElementById('bv-site-header'))
+      .render(<SiteHeader active="sdk" search maxWidth={1400}/>);
+    ReactDOM.createRoot(document.getElementById('bv-site-footer'))
+      .render(<SiteFooter maxWidth={1400}/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-sidebar'))
+      .render(<SdkSidebar active="col-lit"/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-toc'))
+      .render(<SdkTOC editPath="sdk/python/col-lit/index.html"/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-pager'))
+      .render(<SdkPager
+        prev={{ href: '/sdk/python/table/', label: '@bv.table' }}
+        next={{ href: '/sdk/python/operators/', label: 'Operator catalogue' }}
+      />);
+  </script>
+
+  <script src="/js/copy-buttons.js" defer></script>
+  <script src="/scripts/docs-headings.js" defer></script>
+</body>
+</html>

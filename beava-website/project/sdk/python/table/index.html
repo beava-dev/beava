@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>@bv.table · beava SDK reference</title>
+<meta name="description" content="@bv.table — the decorator that materializes a per-entity feature row from a group_by(...).agg(...) chain. Single-column keys, composite keys, and global tables.">
+<link rel="stylesheet" href="/styles/colors_and_type.css">
+<link rel="stylesheet" href="/styles/site.css">
+<link rel="stylesheet" href="/styles/sdk-shell.css">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+<link rel="shortcut icon" href="/assets/favicon.ico">
+<style>
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--fg1); font-family: var(--font-sans); }
+
+  /* Reference-page hero — tighter than the Quickstart's landing-style
+     hero. No mascot; eyebrow + h1 + lede in a single column. */
+  .ref-hero {
+    margin: 0 0 28px;
+    padding-bottom: 26px;
+    border-bottom: 1px solid var(--border);
+  }
+  .ref-hero .eyebrow {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-family: var(--font-mono); font-weight: 600; font-size: 12px;
+    color: var(--fg3);
+    margin-bottom: 14px;
+  }
+  .ref-hero .eyebrow .pill {
+    display: inline-block;
+    font-family: var(--font-mono); font-size: 10.5px; font-weight: 600;
+    color: var(--accent); background: var(--beava-orange-wash);
+    padding: 2px 8px; border-radius: 999px;
+    letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .ref-hero h1 {
+    font-family: var(--font-serif); font-weight: 700;
+    font-size: 44px; line-height: 1.05; letter-spacing: -0.025em;
+    color: var(--fg1);
+    margin: 0 0 14px;
+  }
+  .ref-hero h1 code {
+    font-family: var(--font-mono); font-weight: 700; font-size: 0.78em;
+    background: var(--beava-paper); border: 1px solid var(--border-inset);
+    padding: 2px 9px; border-radius: 8px; color: var(--accent);
+    letter-spacing: 0;
+  }
+  .ref-hero .lede {
+    font-family: var(--font-serif);
+    font-size: 19px; line-height: 1.5;
+    color: var(--fg2); font-weight: 400;
+    margin: 0; max-width: 60ch;
+  }
+</style>
+</head>
+<body class="beava">
+
+  <div id="bv-site-header"></div>
+
+  <div class="shell">
+
+    <!-- ============ SIDEBAR ============ -->
+    <aside class="sidebar">
+      <div id="bv-sdk-sidebar"></div>
+    </aside>
+
+    <!-- ============ MAIN ============
+         `data-pagefind-body` tells the Pagefind crawler this is the
+         main content region to index for search. Sidebar / TOC / nav
+         are excluded by build-search.mjs's excludeSelectors list. -->
+    <main class="content" data-pagefind-body>
+
+      <div class="crumbs">
+        <a href="/">beava</a><span class="sep">/</span>
+        <a href="/sdk/python/">SDK reference</a><span class="sep">/</span>
+        <span class="cur">@bv.table</span>
+      </div>
+
+      <header class="ref-hero">
+        <div class="eyebrow">
+          <span class="pill">Python SDK</span>
+          <span><code>beava._table</code></span>
+        </div>
+        <h1><code>@bv.table</code> — declare a feature table</h1>
+        <p class="lede">A <code>@bv.table</code> is a per-entity feature row, keyed on one or more event columns and refreshed on every push. Inside the function you build a chain that ends in <code>agg(...)</code>; the decorator captures the key shape and wraps it as a registry-ready descriptor.</p>
+      </header>
+
+      <!-- =============== OVERVIEW =============== -->
+      <h2 id="overview">Overview</h2>
+      <p>A table is the <em>output</em> side of an aggregation. You declare an event source with <code>@bv.event</code>, then declare a table that says &ldquo;group those events by some key column(s) and roll them up into a row of features.&rdquo; Each unique key gets its own row; <code>app.get(&quot;TableName&quot;, &quot;alice&quot;)</code> returns alice&rsquo;s row at sub-millisecond latency.</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">tiny.py</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+<pre><span class="tk-k">import</span> beava <span class="tk-k">as</span> bv
+
+<span class="tk-p">@</span><span class="tk-fn">bv.event</span>
+<span class="tk-k">class</span> <span class="tk-t">Click</span><span class="tk-p">:</span>
+    user_id<span class="tk-p">:</span> <span class="tk-t">str</span>
+    path<span class="tk-p">:</span> <span class="tk-t">str</span>
+
+<span class="tk-p">@</span><span class="tk-fn">bv.table</span><span class="tk-p">(</span>key<span class="tk-p">=</span><span class="tk-s">"user_id"</span><span class="tk-p">)</span>
+<span class="tk-k">def</span> <span class="tk-fn">UserClicks</span><span class="tk-p">(</span>c<span class="tk-p">:</span> <span class="tk-t">Click</span><span class="tk-p">):</span>
+    <span class="tk-k">return</span> c<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+        clicks_1h<span class="tk-p">=</span>bv<span class="tk-p">.</span>count<span class="tk-p">(</span>window<span class="tk-p">=</span><span class="tk-s">"1h"</span><span class="tk-p">),</span>
+    <span class="tk-p">)</span></pre>
+      </div>
+
+      <p>Three things are happening above:</p>
+      <ul>
+        <li>The function <code>UserClicks</code> takes one annotated parameter — that annotation tells the decorator which event source feeds the table.</li>
+        <li>The body returns a chain expression that <strong>must</strong> end in <code>agg(...)</code>; the decorator validates this.</li>
+        <li>The <code>key=&quot;user_id&quot;</code> kwarg locks in the entity column. Every <code>app.get(&quot;UserClicks&quot;, &lt;user_id&gt;)</code> looks up that row.</li>
+      </ul>
+
+      <!-- =============== SIGNATURE =============== -->
+      <h2 id="signature">Signature</h2>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">signature</span>
+        </div>
+<pre><span class="tk-p">@</span><span class="tk-fn">bv.table</span><span class="tk-p">(</span>
+    <span class="tk-p">*</span><span class="tk-p">,</span>
+    key<span class="tk-p">:</span> <span class="tk-t">str</span> <span class="tk-p">|</span> <span class="tk-t">list</span><span class="tk-p">[</span><span class="tk-t">str</span><span class="tk-p">]</span> <span class="tk-p">|</span> <span class="tk-t">tuple</span><span class="tk-p">[</span><span class="tk-t">str</span><span class="tk-p">,</span> <span class="tk-p">...</span><span class="tk-p">]</span> <span class="tk-p">|</span> <span class="tk-k">None</span> <span class="tk-p">=</span> <span class="tk-k">None</span><span class="tk-p">,</span>
+<span class="tk-p">)</span>
+<span class="tk-k">def</span> <span class="tk-fn">Foo</span><span class="tk-p">(</span>e<span class="tk-p">:</span> <span class="tk-t">EventName</span><span class="tk-p">):</span>
+    <span class="tk-k">return</span> e<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-p">...</span><span class="tk-p">).</span>agg<span class="tk-p">(</span><span class="tk-p">...</span><span class="tk-p">)</span></pre>
+      </div>
+
+      <p>Three call shapes are accepted:</p>
+      <ul>
+        <li><code>@bv.table(key=&quot;user_id&quot;)</code> — single-column key.</li>
+        <li><code>@bv.table(key=[&quot;user_id&quot;, &quot;device_id&quot;])</code> — composite key.</li>
+        <li><code>@bv.table</code> (bare) or <code>@bv.table()</code> (empty parens) — global table; no key. Equivalent to <code>key=[]</code>.</li>
+      </ul>
+
+      <p>Anything else for <code>key=</code> raises <code>TypeError</code> at decorator time — the rejection lists what was passed and what the valid shapes are.</p>
+
+      <div class="callout note">
+        <span class="ic">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        </span>
+        <p><strong>Function form only in v0.</strong> <code>@bv.table</code> wraps <code>def</code> functions; class form is reserved for <code>@bv.event</code>. The body returns a chain — see <a href="#chain">The chain function</a>.</p>
+      </div>
+
+      <!-- =============== SINGLE KEY =============== -->
+      <h2 id="single-key">Single-column key</h2>
+      <p>The most common shape. Pass <code>key=&quot;col&quot;</code> as a string; the decorator wraps it as <code>key_cols=[&quot;col&quot;]</code> internally and emits <code>table_primary_key: [&quot;col&quot;]</code> on the wire (always a list, even for a single key).</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">single_key.py</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+<pre><span class="tk-p">@</span><span class="tk-fn">bv.event</span>
+<span class="tk-k">class</span> <span class="tk-t">Txn</span><span class="tk-p">:</span>
+    user_id<span class="tk-p">:</span> <span class="tk-t">str</span>
+    amount<span class="tk-p">:</span>  <span class="tk-t">float</span>
+    merchant<span class="tk-p">:</span> <span class="tk-t">str</span>
+
+<span class="tk-p">@</span><span class="tk-fn">bv.table</span><span class="tk-p">(</span>key<span class="tk-p">=</span><span class="tk-s">"user_id"</span><span class="tk-p">)</span>
+<span class="tk-k">def</span> <span class="tk-fn">UserTxnFeatures</span><span class="tk-p">(</span>t<span class="tk-p">:</span> <span class="tk-t">Txn</span><span class="tk-p">):</span>
+    <span class="tk-k">return</span> t<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+        tx_count_1h<span class="tk-p">=</span>bv<span class="tk-p">.</span>count<span class="tk-p">(</span>window<span class="tk-p">=</span><span class="tk-s">"1h"</span><span class="tk-p">),</span>
+        tx_sum_1h<span class="tk-p">=</span>bv<span class="tk-p">.</span>sum<span class="tk-p">(</span>field<span class="tk-p">=</span><span class="tk-s">"amount"</span><span class="tk-p">,</span> window<span class="tk-p">=</span><span class="tk-s">"1h"</span><span class="tk-p">),</span>
+        tx_mean_1h<span class="tk-p">=</span>bv<span class="tk-p">.</span>mean<span class="tk-p">(</span>field<span class="tk-p">=</span><span class="tk-s">"amount"</span><span class="tk-p">,</span> window<span class="tk-p">=</span><span class="tk-s">"1h"</span><span class="tk-p">),</span>
+        tx_unique_merchants_1h<span class="tk-p">=</span>bv<span class="tk-p">.</span>n_unique<span class="tk-p">(</span>field<span class="tk-p">=</span><span class="tk-s">"merchant"</span><span class="tk-p">,</span> window<span class="tk-p">=</span><span class="tk-s">"1h"</span><span class="tk-p">),</span>
+    <span class="tk-p">)</span></pre>
+      </div>
+
+      <p>Look up a row with the key as a plain string:</p>
+
+      <div class="reqres">
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">request</span>
+          </div>
+<pre>app<span class="tk-p">.</span>get<span class="tk-p">(</span><span class="tk-s">"UserTxnFeatures"</span><span class="tk-p">,</span> <span class="tk-s">"alice"</span><span class="tk-p">)</span></pre>
+        </div>
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">response</span>
+          </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"tx_count_1h"</span>: <span class="tk-n">3</span><span class="tk-p">,</span>
+  <span class="tk-fn">"tx_sum_1h"</span>: <span class="tk-n">42.10</span><span class="tk-p">,</span>
+  <span class="tk-fn">"tx_mean_1h"</span>: <span class="tk-n">14.03</span><span class="tk-p">,</span>
+  <span class="tk-fn">"tx_unique_merchants_1h"</span>: <span class="tk-n">2</span>
+<span class="tk-p">}</span></pre>
+        </div>
+      </div>
+
+      <!-- =============== COMPOSITE KEY =============== -->
+      <h2 id="composite-key">Composite key</h2>
+      <p>Pass <code>key=[&quot;a&quot;, &quot;b&quot;, ...]</code> when one column isn&rsquo;t enough to uniquely address an entity. The chain&rsquo;s <code>group_by(...)</code> arguments must mirror the key list — they&rsquo;re what the server uses to bucket events at apply time.</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">composite_key.py</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+<pre><span class="tk-p">@</span><span class="tk-fn">bv.event</span>
+<span class="tk-k">class</span> <span class="tk-t">Login</span><span class="tk-p">:</span>
+    user_id<span class="tk-p">:</span>   <span class="tk-t">str</span>
+    device_id<span class="tk-p">:</span> <span class="tk-t">str</span>
+    ip<span class="tk-p">:</span>        <span class="tk-t">str</span>
+
+<span class="tk-p">@</span><span class="tk-fn">bv.table</span><span class="tk-p">(</span>key<span class="tk-p">=</span><span class="tk-p">[</span><span class="tk-s">"user_id"</span><span class="tk-p">,</span> <span class="tk-s">"device_id"</span><span class="tk-p">])</span>
+<span class="tk-k">def</span> <span class="tk-fn">UserDeviceStats</span><span class="tk-p">(</span>l<span class="tk-p">:</span> <span class="tk-t">Login</span><span class="tk-p">):</span>
+    <span class="tk-k">return</span> l<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">,</span> <span class="tk-s">"device_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
+        logins_24h<span class="tk-p">=</span>bv<span class="tk-p">.</span>count<span class="tk-p">(</span>window<span class="tk-p">=</span><span class="tk-s">"24h"</span><span class="tk-p">),</span>
+        unique_ips_24h<span class="tk-p">=</span>bv<span class="tk-p">.</span>n_unique<span class="tk-p">(</span>field<span class="tk-p">=</span><span class="tk-s">"ip"</span><span class="tk-p">,</span> window<span class="tk-p">=</span><span class="tk-s">"24h"</span><span class="tk-p">),</span>
+    <span class="tk-p">)</span></pre>
+      </div>
+
+      <p>The wire shape carries <code>table_primary_key</code> as a list in declaration order, matching the <code>group_by</code> column order. To look up a composite-keyed row, pass a list to <code>app.get</code>:</p>
+
+      <div class="reqres">
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">request</span>
+          </div>
+<pre>app<span class="tk-p">.</span>get<span class="tk-p">(</span><span class="tk-s">"UserDeviceStats"</span><span class="tk-p">,</span> <span class="tk-p">[</span><span class="tk-s">"alice"</span><span class="tk-p">,</span> <span class="tk-s">"iphone-15"</span><span class="tk-p">])</span></pre>
+        </div>
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">response</span>
+          </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"logins_24h"</span>: <span class="tk-n">7</span><span class="tk-p">,</span>
+  <span class="tk-fn">"unique_ips_24h"</span>: <span class="tk-n">2</span>
+<span class="tk-p">}</span></pre>
+        </div>
+      </div>
+
+      <p><code>tuple</code> is also accepted (<code>key=(&quot;user_id&quot;, &quot;device_id&quot;)</code>) and normalized to a list internally. Order is meaningful — it determines the column order used to compose the entity key at lookup time.</p>
+
+      <!-- =============== GLOBAL TABLE =============== -->
+      <h2 id="global-table">Global table</h2>
+      <p>When you want a single feature row that summarizes <em>everything</em> — site-wide rolling counters, fleet-wide error rates, top-line dashboards — declare a global table. Three equivalent forms:</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">global.py</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+<pre><span class="tk-c"># All three forms produce the same descriptor — key_cols=[].</span>
+
+<span class="tk-p">@</span><span class="tk-fn">bv.table</span>
+<span class="tk-k">def</span> <span class="tk-fn">SiteTotals</span><span class="tk-p">(</span>c<span class="tk-p">:</span> <span class="tk-t">Click</span><span class="tk-p">):</span>
+    <span class="tk-k">return</span> c<span class="tk-p">.</span>agg<span class="tk-p">(</span>total_clicks_1h<span class="tk-p">=</span>bv<span class="tk-p">.</span>count<span class="tk-p">(</span>window<span class="tk-p">=</span><span class="tk-s">"1h"</span><span class="tk-p">))</span>
+
+<span class="tk-p">@</span><span class="tk-fn">bv.table</span><span class="tk-p">()</span>
+<span class="tk-k">def</span> <span class="tk-fn">SiteTotals2</span><span class="tk-p">(</span>c<span class="tk-p">:</span> <span class="tk-t">Click</span><span class="tk-p">):</span>
+    <span class="tk-k">return</span> c<span class="tk-p">.</span>agg<span class="tk-p">(</span>total_clicks_1h<span class="tk-p">=</span>bv<span class="tk-p">.</span>count<span class="tk-p">(</span>window<span class="tk-p">=</span><span class="tk-s">"1h"</span><span class="tk-p">))</span>
+
+<span class="tk-p">@</span><span class="tk-fn">bv.table</span><span class="tk-p">(</span>key<span class="tk-p">=</span><span class="tk-p">[])</span>
+<span class="tk-k">def</span> <span class="tk-fn">SiteTotals3</span><span class="tk-p">(</span>c<span class="tk-p">:</span> <span class="tk-t">Click</span><span class="tk-p">):</span>
+    <span class="tk-k">return</span> c<span class="tk-p">.</span>agg<span class="tk-p">(</span>total_clicks_1h<span class="tk-p">=</span>bv<span class="tk-p">.</span>count<span class="tk-p">(</span>window<span class="tk-p">=</span><span class="tk-s">"1h"</span><span class="tk-p">))</span></pre>
+      </div>
+
+      <p>Per ADR-003, a global table&rsquo;s single row is addressed by the <strong>empty-string sentinel entity id</strong>. <code>app.get(&quot;SiteTotals&quot;)</code> with no <code>key</code> argument routes to that sentinel automatically:</p>
+
+      <div class="reqres">
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">request</span>
+          </div>
+<pre>app<span class="tk-p">.</span>get<span class="tk-p">(</span><span class="tk-s">"SiteTotals"</span><span class="tk-p">)</span></pre>
+        </div>
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">response</span>
+          </div>
+<pre><span class="tk-p">{</span> <span class="tk-fn">"total_clicks_1h"</span>: <span class="tk-n">14823</span> <span class="tk-p">}</span></pre>
+        </div>
+      </div>
+
+      <p>Pushes flow into a global table the same way they flow into a keyed one — fire-and-forget, processing-time, ack-on-write:</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">push.sh</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+<pre>curl http://localhost:8080/push <span class="tk-p">\</span>
+  <span class="tk-p">-</span>H <span class="tk-s">"content-type: application/json"</span> <span class="tk-p">\</span>
+  <span class="tk-p">-</span>d <span class="tk-s">'{"event": "Click", "data": {"user_id": "alice", "path": "/"}}'</span></pre>
+      </div>
+
+      <!-- =============== CHAIN =============== -->
+      <h2 id="chain">The chain function</h2>
+      <p>The function body of an <code>@bv.table</code> is a <em>chain builder</em>. The decorator calls it once at registration time, passing in proxy objects resolved from your parameter annotations, and inspects the returned chain expression.</p>
+
+      <p>Two contracts:</p>
+      <ul>
+        <li>Every parameter <strong>must</strong> be annotated with the upstream event class (or a <code>@bv.event</code>-decorated derivation function). Missing annotations raise <code>TypeError</code> at decorator time, pointing straight at the unannotated parameter.</li>
+        <li>The return value <strong>must</strong> end in <code>agg(...)</code>. Anything else (a bare <code>filter</code>, a dangling <code>with_columns</code>, a non-chain object) raises <code>TypeError</code> with the canonical rewrite hint.</li>
+      </ul>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">chain_with_filter.py</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+<pre><span class="tk-p">@</span><span class="tk-fn">bv.table</span><span class="tk-p">(</span>key<span class="tk-p">=</span><span class="tk-s">"user_id"</span><span class="tk-p">)</span>
+<span class="tk-k">def</span> <span class="tk-fn">HighValueUserStats</span><span class="tk-p">(</span>t<span class="tk-p">:</span> <span class="tk-t">Txn</span><span class="tk-p">):</span>
+    <span class="tk-k">return</span> <span class="tk-p">(</span>
+        t<span class="tk-p">.</span>filter<span class="tk-p">(</span>bv<span class="tk-p">.</span>col<span class="tk-p">(</span><span class="tk-s">"amount"</span><span class="tk-p">)</span> <span class="tk-p">&gt;</span> <span class="tk-n">100.0</span><span class="tk-p">)</span>
+         <span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">)</span>
+         <span class="tk-p">.</span>agg<span class="tk-p">(</span>
+             big_tx_count_24h<span class="tk-p">=</span>bv<span class="tk-p">.</span>count<span class="tk-p">(</span>window<span class="tk-p">=</span><span class="tk-s">"24h"</span><span class="tk-p">),</span>
+             big_tx_sum_24h<span class="tk-p">=</span>bv<span class="tk-p">.</span>sum<span class="tk-p">(</span>field<span class="tk-p">=</span><span class="tk-s">"amount"</span><span class="tk-p">,</span> window<span class="tk-p">=</span><span class="tk-s">"24h"</span><span class="tk-p">),</span>
+         <span class="tk-p">)</span>
+    <span class="tk-p">)</span></pre>
+      </div>
+
+      <p>Chain methods you can compose before the terminal <code>agg</code>: <code>filter</code>, <code>select</code>, <code>drop</code>, <code>rename</code>, <code>with_columns</code>, <code>cast</code>, <code>fillna</code>, <code>group_by</code>. The terminal call must be <code>agg(...)</code>; otherwise the descriptor is classified as an event-derivation (<code>output_kind=&quot;event&quot;</code>) and belongs under <a href="#"><code>@bv.event</code> (planned)</a>, not <code>@bv.table</code>.</p>
+
+      <div class="callout note">
+        <span class="ic">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        </span>
+        <p><strong>Processing-time only.</strong> Aggregation windows (<code>window=&quot;1h&quot;</code>, <code>&quot;24h&quot;</code>, <code>&quot;forever&quot;</code>, ...) are walltime-relative on the server. Beava v0 does not support event-time / watermarks; declaring an <code>event_time</code> field on the upstream <code>@bv.event</code> raises <code>TypeError</code> at decorator time.</p>
+      </div>
+
+      <!-- =============== WIRE SHAPE =============== -->
+      <h2 id="wire-shape">Wire shape</h2>
+      <p>At <code>app.register(...)</code> time, every <code>@bv.table</code> descriptor is serialized into a node on the registry payload. The shape:</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">node JSON</span>
+        </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"kind"</span>: <span class="tk-s">"derivation"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"name"</span>: <span class="tk-s">"UserTxnFeatures"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"output_kind"</span>: <span class="tk-s">"table"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"upstreams"</span>: <span class="tk-p">[</span><span class="tk-s">"Txn"</span><span class="tk-p">],</span>
+  <span class="tk-fn">"ops"</span>: <span class="tk-p">[</span>
+    <span class="tk-p">{</span>
+      <span class="tk-fn">"op"</span>: <span class="tk-s">"group_by"</span><span class="tk-p">,</span>
+      <span class="tk-fn">"keys"</span>: <span class="tk-p">[</span><span class="tk-s">"user_id"</span><span class="tk-p">],</span>
+      <span class="tk-fn">"agg"</span>: <span class="tk-p">{</span>
+        <span class="tk-fn">"tx_count_1h"</span>: <span class="tk-p">{</span> <span class="tk-fn">"op"</span>: <span class="tk-s">"count"</span><span class="tk-p">,</span> <span class="tk-fn">"params"</span>: <span class="tk-p">{</span> <span class="tk-fn">"window"</span>: <span class="tk-s">"1h"</span> <span class="tk-p">}</span> <span class="tk-p">},</span>
+        <span class="tk-fn">"tx_sum_1h"</span>:   <span class="tk-p">{</span> <span class="tk-fn">"op"</span>: <span class="tk-s">"sum"</span><span class="tk-p">,</span>   <span class="tk-fn">"params"</span>: <span class="tk-p">{</span> <span class="tk-fn">"field"</span>: <span class="tk-s">"amount"</span><span class="tk-p">,</span> <span class="tk-fn">"window"</span>: <span class="tk-s">"1h"</span> <span class="tk-p">}</span> <span class="tk-p">}</span>
+      <span class="tk-p">}</span>
+    <span class="tk-p">}</span>
+  <span class="tk-p">],</span>
+  <span class="tk-fn">"schema"</span>: <span class="tk-p">{</span> <span class="tk-fn">"fields"</span>: <span class="tk-p">{</span> <span class="tk-fn">"tx_count_1h"</span>: <span class="tk-s">"i64"</span><span class="tk-p">,</span> <span class="tk-fn">"tx_sum_1h"</span>: <span class="tk-s">"f64"</span> <span class="tk-p">},</span> <span class="tk-fn">"optional_fields"</span>: <span class="tk-p">[]</span> <span class="tk-p">},</span>
+  <span class="tk-fn">"table_primary_key"</span>: <span class="tk-p">[</span><span class="tk-s">"user_id"</span><span class="tk-p">]</span>
+<span class="tk-p">}</span></pre>
+      </div>
+
+      <p>Three things to notice:</p>
+      <ul>
+        <li><code>kind: &quot;derivation&quot;</code> always; <code>output_kind: &quot;table&quot;</code> is the discriminator that says &ldquo;this lands as a feature row,&rdquo; not as an event.</li>
+        <li><code>table_primary_key</code> is <strong>always a list</strong>. Single-column keys ship as <code>[&quot;user_id&quot;]</code>; composite keys ship as <code>[&quot;user_id&quot;, &quot;device_id&quot;]</code>; global tables ship as <code>[]</code>.</li>
+        <li><code>upstreams</code> is the list of event sources this derivation reads. The flatten rules in the SDK ensure this is always a root <code>@bv.event</code> source name, never an intermediate <code>__derived_</code> step.</li>
+      </ul>
+
+      <p>The full registry payload — the wrapper around <code>nodes</code>, additional flags like <code>force</code> / <code>dry_run</code>, the response body — is documented on <a href="#">POST /register (planned)</a>.</p>
+
+      <!-- =============== FAQ =============== -->
+      <h2 id="faq">Common questions</h2>
+
+      <div class="accordion">
+        <details>
+          <summary>Can a table key contain dots or slashes?</summary>
+          <div class="acc-body">
+            <p>Yes — the column <em>name</em> is restricted by your <code>@bv.event</code> schema, but the column <em>value</em> at lookup time is treated as an opaque string. <code>app.get(&quot;UserClicks&quot;, &quot;a.b/c&quot;)</code> works fine. The wire encoding is JSON, so any UTF-8 string is permitted; the only forbidden value is the empty string, which is reserved as the global-table sentinel per ADR-003.</p>
+          </div>
+        </details>
+        <details>
+          <summary>What if my key column has nulls?</summary>
+          <div class="acc-body">
+            <p>The server treats <code>null</code> as a distinct bucket — events with a null key value land in their own row, addressable by passing <code>None</code> for that key column. If you&rsquo;d rather reject them, add a <code>filter(bv.col(&quot;user_id&quot;).is_not_null())</code> step in front of the <code>group_by</code>; if you&rsquo;d rather replace them, use <code>fillna(user_id=&quot;anonymous&quot;)</code> earlier in the chain.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Does the table refresh on event arrival or on read?</summary>
+          <div class="acc-body">
+            <p>On arrival. Every <code>app.push(...)</code> applies the event to every aggregation that names its source as an upstream — atomically, on the data plane, before the push is acked. Reads are pure lookups: <code>app.get</code> returns the row as it exists at that instant, no recompute, no fan-out, no quorum. That&rsquo;s what makes batch-get sub-millisecond.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Can one table read from multiple event sources?</summary>
+          <div class="acc-body">
+            <p>Not yet. v0 supports one upstream per table; the function takes one annotated parameter and the chain builds off that one source. Multi-source joins / unions are deferred to v0.1+ — see the locked <code>project_v0_events_only_scope</code> commitment.</p>
+          </div>
+        </details>
+      </div>
+
+      <!-- =============== NEXT =============== -->
+      <h2 id="next">Where to go next</h2>
+      <p>You can declare tables; the next two stops are the operators that fill them and the client that pushes events at them:</p>
+
+      <div class="card-grid">
+        <a class="card" href="#">
+          <div class="ttl">Operator catalogue</div>
+          <p class="desc">The 40+ aggregation primitives — <code>count</code>, <code>sum</code>, <code>mean</code>, <code>n_unique</code>, quantiles, sketches, velocities, distances. Each one&rsquo;s wire shape, params, and memory cost.</p>
+          <span class="go">Catalogue (planned) <span class="arrow">→</span></span>
+        </a>
+        <a class="card" href="/sdk/python/app/">
+          <div class="ttl">App client</div>
+          <p class="desc">The synchronous Python client. <code>register</code>, <code>push</code>, <code>get</code>, <code>batch_get</code>, plus the embed-mode lifecycle for tests.</p>
+          <span class="go">Client reference <span class="arrow">→</span></span>
+        </a>
+      </div>
+
+      <!-- =============== FOOTER =============== -->
+      <div class="footer-area">
+        <div class="feedback">
+          <div class="ask">Was this page useful?</div>
+          <div class="feedback-btns">
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3z"/><line x1="7" y1="22" x2="7" y2="11"/></svg>
+              Yes
+            </button>
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3z"/><line x1="17" y1="2" x2="17" y2="13"/></svg>
+              Not really
+            </button>
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              Suggest an edit
+            </button>
+          </div>
+        </div>
+
+        <div id="bv-sdk-pager"></div>
+      </div>
+    </main>
+
+    <!-- ============ RIGHT TOC ============ -->
+    <aside class="toc">
+      <div id="bv-sdk-toc"></div>
+    </aside>
+
+  </div>
+
+  <div id="bv-site-footer"></div>
+
+  <!-- React + Babel — required by SiteHeader / SiteFooter / Sdk* -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script type="text/babel" src="/js/_shared/SiteHeader.jsx"></script>
+  <script type="text/babel" src="/js/_shared/SiteFooter.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkSidebar.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkTOC.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkPager.jsx"></script>
+
+  <script type="text/babel">
+    ReactDOM.createRoot(document.getElementById('bv-site-header'))
+      .render(<SiteHeader active="sdk" search maxWidth={1400}/>);
+    ReactDOM.createRoot(document.getElementById('bv-site-footer'))
+      .render(<SiteFooter maxWidth={1400}/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-sidebar'))
+      .render(<SdkSidebar active="table"/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-toc'))
+      .render(<SdkTOC editPath="sdk/python/table/index.html"/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-pager'))
+      .render(<SdkPager
+        prev={{ href: '/sdk/python/event/', label: '@bv.event' }}
+        next={{ href: '/sdk/python/col-lit/', label: 'bv.col / bv.lit' }}
+      />);
+  </script>
+
+  <script src="/js/copy-buttons.js" defer></script>
+  <!-- Heading anchor copy-link icons. Injects a "#" affordance into every
+       <h2 id> / <h3 id> inside `.content` (matches the `.bv-content` and
+       `.docs-prose` surfaces too). Idempotent + uses MutationObserver to
+       catch React-mounted content. -->
+  <script src="/scripts/docs-headings.js" defer></script>
+</body>
+</html>

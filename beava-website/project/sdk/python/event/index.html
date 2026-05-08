@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>@bv.event · beava SDK reference</title>
+<meta name="description" content="@bv.event — declare event sources and derivations for beava. Class form attaches a typed schema; def form wraps a chain into a stable, addressable name.">
+<link rel="stylesheet" href="/styles/colors_and_type.css">
+<link rel="stylesheet" href="/styles/site.css">
+<link rel="stylesheet" href="/styles/sdk-shell.css">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+<link rel="shortcut icon" href="/assets/favicon.ico">
+<style>
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--fg1); font-family: var(--font-sans); }
+
+  /* Reference-page hero — tighter than the Quickstart's landing-style
+     hero. No mascot; eyebrow + h1 + lede in a single column. */
+  .ref-hero {
+    margin: 0 0 28px;
+    padding-bottom: 26px;
+    border-bottom: 1px solid var(--border);
+  }
+  .ref-hero .eyebrow {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-family: var(--font-mono); font-weight: 600; font-size: 12px;
+    color: var(--fg3);
+    margin-bottom: 14px;
+  }
+  .ref-hero .eyebrow .pill {
+    display: inline-block;
+    font-family: var(--font-mono); font-size: 10.5px; font-weight: 600;
+    color: var(--accent); background: var(--beava-orange-wash);
+    padding: 2px 8px; border-radius: 999px;
+    letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .ref-hero h1 {
+    font-family: var(--font-serif); font-weight: 700;
+    font-size: 44px; line-height: 1.05; letter-spacing: -0.025em;
+    color: var(--fg1);
+    margin: 0 0 14px;
+  }
+  .ref-hero h1 code {
+    font-family: var(--font-mono); font-weight: 700; font-size: 0.78em;
+    background: var(--beava-paper); border: 1px solid var(--border-inset);
+    padding: 2px 9px; border-radius: 8px; color: var(--accent);
+    letter-spacing: 0;
+  }
+  .ref-hero .lede {
+    font-family: var(--font-serif);
+    font-size: 19px; line-height: 1.5;
+    color: var(--fg2); font-weight: 400;
+    margin: 0; max-width: 60ch;
+  }
+</style>
+</head>
+<body class="beava">
+
+  <div id="bv-site-header"></div>
+
+  <div class="shell">
+
+    <!-- ============ SIDEBAR ============ -->
+    <aside class="sidebar">
+      <div id="bv-sdk-sidebar"></div>
+    </aside>
+
+    <!-- ============ MAIN ============
+         `data-pagefind-body` tells the Pagefind crawler this is the
+         main content region to index for search. Sidebar / TOC / nav
+         are excluded by build-search.mjs's excludeSelectors list. -->
+    <main class="content" data-pagefind-body>
+
+      <div class="crumbs">
+        <a href="/">beava</a><span class="sep">/</span>
+        <a href="/sdk/python/">SDK reference</a><span class="sep">/</span>
+        <span class="cur">@bv.event</span>
+      </div>
+
+      <header class="ref-hero">
+        <div class="eyebrow">
+          <span class="pill">Python SDK</span>
+          <span><code>beava._events</code></span>
+        </div>
+        <h1><code>@bv.event</code> — declare an event source</h1>
+        <p class="lede">Decorate a class to declare a typed event source, or a function to derive a new event from existing sources. The decorator carries the schema and optional retention / dedupe knobs onto the wire.</p>
+      </header>
+
+      <!-- =============== OVERVIEW =============== -->
+      <h2 id="overview">Overview</h2>
+      <p>An <strong>event</strong> in beava is the typed input you push into the server. Every <code>app.push(...)</code> call references an event by name, and that name has to be registered first — either as a fresh source (class form) or as a derivation chained on top of an existing one (def form).</p>
+      <p>The decorator has two shapes:</p>
+      <ul>
+        <li><strong>Class form</strong> — <code>@bv.event class Click: ...</code>. Type annotations on the class body become the wire schema.</li>
+        <li><strong>Def form</strong> — <code>@bv.event def BigClick(click: Click): ...</code>. The function body returns a chain expression; the decorator captures it as a stable, addressable derivation.</li>
+      </ul>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">both forms</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+<pre><span class="tk-k">import</span> beava <span class="tk-k">as</span> bv
+
+<span class="tk-c"># Class form — declares a fresh event source.</span>
+<span class="tk-p">@</span><span class="tk-fn">bv.event</span>
+<span class="tk-k">class</span> <span class="tk-t">Click</span><span class="tk-p">:</span>
+    user_id<span class="tk-p">:</span> <span class="tk-t">str</span>
+    page<span class="tk-p">:</span>    <span class="tk-t">str</span>
+
+<span class="tk-c"># Def form — derives a new event from the source above.</span>
+<span class="tk-p">@</span><span class="tk-fn">bv.event</span>
+<span class="tk-k">def</span> <span class="tk-fn">BigClick</span><span class="tk-p">(</span>click<span class="tk-p">:</span> <span class="tk-t">Click</span><span class="tk-p">):</span>
+    <span class="tk-k">return</span> click<span class="tk-p">.</span>filter<span class="tk-p">(</span>bv<span class="tk-p">.</span>col<span class="tk-p">(</span><span class="tk-s">"page"</span><span class="tk-p">)</span> <span class="tk-p">==</span> <span class="tk-s">"/checkout"</span><span class="tk-p">)</span></pre>
+      </div>
+
+      <div class="callout note">
+        <span class="ic">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        </span>
+        <p><strong>Processing-time only in v0.</strong> The server stamps wall-clock time on every push. The decorator rejects an <code>event_time</code> class field and the <code>event_time_field</code> / <code>tolerate_delay</code> kwargs with <code>TypeError</code> at decorator time. Event-time semantics are roadmapped for post-v0.</p>
+      </div>
+
+      <!-- =============== CLASS FORM =============== -->
+      <h2 id="class-form">Class form</h2>
+      <p>Apply <code>@bv.event</code> to a plain Python class. Each annotated attribute becomes a column in the wire schema; types are mapped <code>str → "str"</code>, <code>int → "i64"</code>, <code>float → "f64"</code>, <code>bool → "bool"</code>. Anything else is coerced to <code>"str"</code>.</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">class form</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+<pre><span class="tk-p">@</span><span class="tk-fn">bv.event</span>
+<span class="tk-k">class</span> <span class="tk-t">Login</span><span class="tk-p">:</span>
+    user_id<span class="tk-p">:</span>    <span class="tk-t">str</span>
+    success<span class="tk-p">:</span>    <span class="tk-t">bool</span>
+    latency_ms<span class="tk-p">:</span> <span class="tk-t">int</span></pre>
+      </div>
+
+      <p>The decorator returns the same class with chain methods attached as static methods, so you can write <code>Login.filter(...)</code> or <code>Login.group_by(...).agg(...)</code> directly without instantiating it. The class also gains state attributes (<code>Login._name</code>, <code>Login._schema</code>, <code>Login._chain</code>, ...) that the SDK uses to walk the descriptor tree at register time.</p>
+
+      <p>When you pass <code>Login</code> to <code>app.register(...)</code>, it serializes to:</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">register node</span>
+        </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"kind"</span>: <span class="tk-s">"event"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"name"</span>: <span class="tk-s">"Login"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"schema"</span>: <span class="tk-p">{</span>
+    <span class="tk-fn">"fields"</span>: <span class="tk-p">{</span>
+      <span class="tk-fn">"user_id"</span>:    <span class="tk-s">"str"</span><span class="tk-p">,</span>
+      <span class="tk-fn">"success"</span>:    <span class="tk-s">"bool"</span><span class="tk-p">,</span>
+      <span class="tk-fn">"latency_ms"</span>: <span class="tk-s">"i64"</span>
+    <span class="tk-p">},</span>
+    <span class="tk-fn">"optional_fields"</span>: <span class="tk-p">[]</span>
+  <span class="tk-p">}</span>
+<span class="tk-p">}</span></pre>
+      </div>
+
+      <p>Once registered, push events by name:</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">push.sh</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+<pre>curl <span class="tk-p">-</span>X POST http://localhost:8080/push <span class="tk-p">\</span>
+  <span class="tk-p">-</span>H <span class="tk-s">"content-type: application/json"</span> <span class="tk-p">\</span>
+  <span class="tk-p">-</span>d <span class="tk-s">'{"event": "Login", "data": {"user_id": "alice", "success": true, "latency_ms": 142}}'</span></pre>
+      </div>
+
+      <!-- =============== DEF FORM =============== -->
+      <h2 id="def-form">Def form</h2>
+      <p>Apply <code>@bv.event</code> to a function that takes one or more decorated upstream events as parameters and returns a chain expression. The decorator captures the chain under the function's name, registering it as a derivation node on the wire.</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">def form</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+<pre><span class="tk-p">@</span><span class="tk-fn">bv.event</span>
+<span class="tk-k">class</span> <span class="tk-t">Click</span><span class="tk-p">:</span>
+    user_id<span class="tk-p">:</span> <span class="tk-t">str</span>
+    page<span class="tk-p">:</span>    <span class="tk-t">str</span>
+
+<span class="tk-p">@</span><span class="tk-fn">bv.event</span>
+<span class="tk-k">def</span> <span class="tk-fn">CheckoutClick</span><span class="tk-p">(</span>click<span class="tk-p">:</span> <span class="tk-t">Click</span><span class="tk-p">):</span>
+    <span class="tk-k">return</span> click<span class="tk-p">.</span>filter<span class="tk-p">(</span>bv<span class="tk-p">.</span>col<span class="tk-p">(</span><span class="tk-s">"page"</span><span class="tk-p">)</span> <span class="tk-p">==</span> <span class="tk-s">"/checkout"</span><span class="tk-p">)</span></pre>
+      </div>
+
+      <p><strong>Why the def form exists.</strong> The chain methods (<code>filter</code>, <code>select</code>, <code>with_columns</code>, ...) return anonymous <code>EventDerivation</code> objects with auto-generated names like <code>Click__derived_1</code>. Those auto-names are <strong>not addressable</strong> on the wire — the server's apply-time routing index keys derivations by their declared upstream name, and only stable names survive the round-trip. <code>@bv.event def</code> wraps a chain into a stable name (<code>"CheckoutClick"</code>) so downstream <code>@bv.table</code>s can declare it as their upstream and so you can push it by name from the client.</p>
+
+      <p>If you pass a raw chain expression (e.g. <code>Click.filter(...).named("X")</code>) to <code>app.register(...)</code>, the SDK raises <code>RegistrationError</code> with the canonical rewrite — wrap it in <code>@bv.event def</code> instead.</p>
+
+      <h3>Constraints on the function body</h3>
+      <ul>
+        <li>Must declare at least one parameter; each parameter's annotation must resolve to an <code>@bv.event</code>-decorated class or function.</li>
+        <li>Must return an <code>EventDerivation</code> (the result of a chain method). Returning anything else raises <code>TypeError</code>.</li>
+        <li>The function body runs once at decorator time with the upstream descriptors as arguments. It is not invoked per push; the server replays the chain on every event.</li>
+      </ul>
+
+      <!-- =============== KWARGS =============== -->
+      <h2 id="kwargs">Optional kwargs</h2>
+      <p>The decorator-factory shape <code>@bv.event(...)</code> accepts per-source knobs. They are stored on the <code>EventSource</code> and forwarded to the server at register time.</p>
+
+      <div class="params">
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">keep_events_for</span>
+            <span class="param-tags">
+              <span class="param-tag type">str | None</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>Per-event retention window. Events older than this are eligible for compaction out of the per-entity event log. Accepts duration strings (<code>"30d"</code>, <code>"1h"</code>, <code>"15m"</code>).</p>
+            <p class="default">default <code>None</code> (server-wide default applies)</p>
+          </div>
+        </div>
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">cold_after</span>
+            <span class="param-tags">
+              <span class="param-tag type">str | None</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>Idle threshold after which an entity that hasn't received this event is considered cold and may be evicted from hot memory. Accepts the same duration strings as <code>keep_events_for</code>.</p>
+            <p class="default">default <code>None</code> (server-wide default applies)</p>
+          </div>
+        </div>
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">dedupe_key</span>
+            <span class="param-tags">
+              <span class="param-tag type">str | None</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>Name of a field whose value uniquely identifies a logical event. Pushes carrying a previously-seen <code>dedupe_key</code> within <code>dedupe_window</code> return <code>"idempotent_replay": true</code> and do not mutate state.</p>
+            <p class="default">default <code>None</code> (no dedupe)</p>
+          </div>
+        </div>
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">dedupe_window</span>
+            <span class="param-tags">
+              <span class="param-tag type">str | None</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>Lookback window over which <code>dedupe_key</code> values are remembered. Required when <code>dedupe_key</code> is set.</p>
+            <p class="default">default <code>None</code></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">decorator-factory shape</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+<pre><span class="tk-p">@</span><span class="tk-fn">bv.event</span><span class="tk-p">(</span>
+    keep_events_for<span class="tk-p">=</span><span class="tk-s">"30d"</span><span class="tk-p">,</span>
+    dedupe_key<span class="tk-p">=</span><span class="tk-s">"id"</span><span class="tk-p">,</span>
+    dedupe_window<span class="tk-p">=</span><span class="tk-s">"5m"</span><span class="tk-p">,</span>
+<span class="tk-p">)</span>
+<span class="tk-k">class</span> <span class="tk-t">Login</span><span class="tk-p">:</span>
+    id<span class="tk-p">:</span>      <span class="tk-t">str</span>
+    user_id<span class="tk-p">:</span> <span class="tk-t">str</span></pre>
+      </div>
+
+      <div class="callout note">
+        <span class="ic">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        </span>
+        <p><strong>Forbidden kwargs.</strong> <code>event_time_field</code> and <code>tolerate_delay</code> raise <code>TypeError</code> at decorator time — v0 has no event-time. A class field literally named <code>event_time</code> is also rejected.</p>
+      </div>
+
+      <!-- =============== WIRE SHAPE =============== -->
+      <h2 id="wire-shape">Wire shape</h2>
+      <p>At register time the SDK serializes each <code>@bv.event</code> descriptor into a JSON node and posts the array as <code>{"nodes": [...]}</code> to the server. The class form emits a node with <code>kind: "event"</code>; the def form emits <code>kind: "derivation"</code> with the upstream's name and the chain ops.</p>
+
+      <div class="reqres">
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">class form (event)</span>
+          </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"kind"</span>: <span class="tk-s">"event"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"name"</span>: <span class="tk-s">"Click"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"schema"</span>: <span class="tk-p">{</span>
+    <span class="tk-fn">"fields"</span>: <span class="tk-p">{</span>
+      <span class="tk-fn">"user_id"</span>: <span class="tk-s">"str"</span><span class="tk-p">,</span>
+      <span class="tk-fn">"page"</span>:    <span class="tk-s">"str"</span>
+    <span class="tk-p">},</span>
+    <span class="tk-fn">"optional_fields"</span>: <span class="tk-p">[]</span>
+  <span class="tk-p">}</span>
+<span class="tk-p">}</span></pre>
+        </div>
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">def form (derivation)</span>
+          </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"kind"</span>: <span class="tk-s">"derivation"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"name"</span>: <span class="tk-s">"CheckoutClick"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"output_kind"</span>: <span class="tk-s">"event"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"upstreams"</span>: <span class="tk-p">[</span><span class="tk-s">"Click"</span><span class="tk-p">],</span>
+  <span class="tk-fn">"ops"</span>: <span class="tk-p">[</span>
+    <span class="tk-p">{</span> <span class="tk-fn">"op"</span>: <span class="tk-s">"filter"</span><span class="tk-p">,</span> <span class="tk-fn">"expr"</span>: <span class="tk-s">"page == '/checkout'"</span> <span class="tk-p">}</span>
+  <span class="tk-p">],</span>
+  <span class="tk-fn">"schema"</span>: <span class="tk-p">{</span> <span class="tk-fn">"fields"</span>: <span class="tk-p">{...}</span><span class="tk-p">,</span> <span class="tk-fn">"optional_fields"</span>: <span class="tk-p">[]</span> <span class="tk-p">}</span>
+<span class="tk-p">}</span></pre>
+        </div>
+      </div>
+
+      <p>The full envelope and per-field semantics are reproduced inline on the <a href="#">HTTP /register reference (planned)</a>.</p>
+
+      <!-- =============== FAQ =============== -->
+      <h2 id="faq">Common questions</h2>
+
+      <div class="accordion">
+        <details>
+          <summary>Can I add fields after the event is registered?</summary>
+          <div class="acc-body">
+            <p>Yes. Re-decorate the class with the new annotation, call <code>app.register(MyEvent, force=True)</code>, and the server hot-swaps the schema; <code>registry_version</code> increments. Existing on-disk events keep their old schema — the server reconciles missing fields as <code>null</code> on read.</p>
+          </div>
+        </details>
+        <details>
+          <summary>What happens if I push a field that isn't in the schema?</summary>
+          <div class="acc-body">
+            <p>The server rejects the push with <code>code="schema_mismatch"</code>. There is no implicit schema-on-write; every field on a push has to be declared on the event. The SDK surfaces this as <code>RegistrationError</code> with the structured error body intact.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Is <code>dedupe_key</code> exact-match?</summary>
+          <div class="acc-body">
+            <p>Yes — exact byte-for-byte equality on the value of the named field, scoped to the <code>dedupe_window</code>. There's no fuzzy match, no normalization, and no canonicalization. If you need normalized dedupe (e.g. lowercase emails), normalize the field upstream of the push and dedupe on the normalized value.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Do I need <code>@bv.event def</code> if I already have a derivation chained inline inside a <code>@bv.table</code>?</summary>
+          <div class="acc-body">
+            <p>Not always. Inline chains inside the <code>@bv.table</code> body work for one-shot pipelines because the SDK flattens the chain to the root event source at register time. Use <code>@bv.event def</code> when you want a stable, addressable name — e.g. so two tables can share the same upstream derivation, or so you can push events by that name from the client.</p>
+          </div>
+        </details>
+      </div>
+
+      <!-- =============== NEXT =============== -->
+      <h2 id="next">Where to go next</h2>
+      <p>You've declared the inputs. The next step is to declare the per-entity feature tables that aggregate them:</p>
+
+      <div class="card-grid">
+        <a class="card" href="#">
+          <div class="ttl">@bv.table (planned)</div>
+          <p class="desc">Declare per-entity feature tables with <code>group_by(...).agg(...)</code>. Composite keys, global tables, and the chain primitives.</p>
+          <span class="go">Decorator reference <span class="arrow">→</span></span>
+        </a>
+        <a class="card" href="#">
+          <div class="ttl">Operator catalogue (planned)</div>
+          <p class="desc">The 40+ aggregation primitives — counters, velocities, distances, rates, distributions — that go inside an <code>agg(...)</code> block.</p>
+          <span class="go">Operator reference <span class="arrow">→</span></span>
+        </a>
+      </div>
+
+      <!-- =============== FOOTER =============== -->
+      <div class="footer-area">
+        <div class="feedback">
+          <div class="ask">Was this page useful?</div>
+          <div class="feedback-btns">
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3z"/><line x1="7" y1="22" x2="7" y2="11"/></svg>
+              Yes
+            </button>
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3z"/><line x1="17" y1="2" x2="17" y2="13"/></svg>
+              Not really
+            </button>
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              Suggest an edit
+            </button>
+          </div>
+        </div>
+
+        <div id="bv-sdk-pager"></div>
+      </div>
+    </main>
+
+    <!-- ============ RIGHT TOC ============ -->
+    <aside class="toc">
+      <div id="bv-sdk-toc"></div>
+    </aside>
+
+  </div>
+
+  <div id="bv-site-footer"></div>
+
+  <!-- React + Babel — required by SiteHeader / SiteFooter / Sdk* -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script type="text/babel" src="/js/_shared/SiteHeader.jsx"></script>
+  <script type="text/babel" src="/js/_shared/SiteFooter.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkSidebar.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkTOC.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkPager.jsx"></script>
+
+  <script type="text/babel">
+    ReactDOM.createRoot(document.getElementById('bv-site-header'))
+      .render(<SiteHeader active="sdk" search maxWidth={1400}/>);
+    ReactDOM.createRoot(document.getElementById('bv-site-footer'))
+      .render(<SiteFooter maxWidth={1400}/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-sidebar'))
+      .render(<SdkSidebar active="event"/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-toc'))
+      .render(<SdkTOC editPath="sdk/python/event/index.html"/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-pager'))
+      .render(<SdkPager
+        prev={{ href: '/sdk/python/app/', label: 'App client' }}
+        next={{ href: '/sdk/python/table/', label: '@bv.table' }}
+      />);
+  </script>
+
+  <script src="/js/copy-buttons.js" defer></script>
+  <!-- Heading anchor copy-link icons. Injects a "#" affordance into every
+       <h2 id> / <h3 id> inside `.content` (matches the `.bv-content` and
+       `.docs-prose` surfaces too). Idempotent + uses MutationObserver to
+       catch React-mounted content. -->
+  <script src="/scripts/docs-headings.js" defer></script>
+</body>
+</html>
