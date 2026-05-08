@@ -6,6 +6,7 @@
 <title>Quickstart · beava SDK reference</title>
 <meta name="description" content="Install the beava server, install the Python SDK, push your first event and query the feature — in five minutes.">
 <link rel="stylesheet" href="/styles/colors_and_type.css">
+<link rel="stylesheet" href="/styles/site.css">
 <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
@@ -14,57 +15,12 @@
   html, body { margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--fg1); font-family: var(--font-sans); }
 
-  /* ===== TOP NAV ===== */
-  .topnav {
-    position: sticky; top: 0; z-index: 30;
-    height: 64px;
-    display: grid; grid-template-columns: 268px minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 32px;
-    padding: 0 32px;
-    background: rgba(253,250,244,0.88);
-    backdrop-filter: blur(10px);
-    border-bottom: 1px solid var(--border);
-  }
-  .brand {
-    display: flex; align-items: center; gap: 10px;
-    font-family: var(--font-serif); font-weight: 700;
-    font-size: 22px; letter-spacing: -0.01em;
-    color: var(--fg1); text-decoration: none;
-  }
-  .brand img { width: 26px; height: 26px; }
-  .brand .v {
-    font-family: var(--font-mono); font-size: 11px; font-weight: 500;
-    color: var(--accent); background: var(--beava-orange-wash);
-    padding: 2px 7px; border-radius: 999px; margin-left: 4px;
-    transform: translateY(-1px);
-  }
-  .search {
-    width: 100%; max-width: 520px;
-    display: flex; align-items: center; gap: 10px;
-    height: 36px; padding: 0 12px;
-    background: #fff; border: 1px solid var(--border); border-radius: 10px;
-    color: var(--fg3); font-size: 13.5px;
-    cursor: text;
-    transition: border-color 150ms var(--ease-out);
-  }
-  .search:hover { border-color: var(--border-strong); }
-  .search .placeholder { flex: 1; }
-  .search .kbd {
-    font-family: var(--font-mono); font-size: 11px;
-    color: var(--fg3); background: var(--beava-paper);
-    border: 1px solid var(--border); border-radius: 5px;
-    padding: 1px 6px;
-  }
-  .nav-links { display: flex; gap: 26px; align-items: center; }
-  .nav-links a {
-    font-size: 14px; color: var(--fg2); text-decoration: none; font-weight: 500;
-  }
-  .nav-links a:hover { color: var(--accent); }
-  .nav-links a.active { color: var(--fg1); font-weight: 600; }
-  .nav-links .gh { color: var(--fg2); display: inline-flex; align-items: center; gap: 6px; }
-
-  /* ===== LAYOUT ===== */
+  /* ===== LAYOUT =====
+   * Top chrome lives in the shared SiteHeader.jsx (60px tall, sticky,
+   * blur backdrop). The .topnav / .brand / .search / .nav-links rules
+   * that used to live here are gone — chrome consistency with /docs/
+   * and /guide/ is now load-bearing.
+   */
   .shell {
     display: grid;
     grid-template-columns: 268px minmax(0, 1fr) 232px;
@@ -76,9 +32,9 @@
 
   /* ===== SIDEBAR ===== */
   .sidebar {
-    position: sticky; top: 64px;
+    position: sticky; top: 60px;
     align-self: start;
-    height: calc(100vh - 64px);
+    height: calc(100vh - 60px);
     overflow-y: auto;
     padding: 32px 28px 40px 0;
   }
@@ -136,7 +92,7 @@
     padding: 40px 56px 140px 32px;
     max-width: 760px;
     border-left: 1px solid var(--border);
-    min-height: calc(100vh - 64px);
+    min-height: calc(100vh - 60px);
   }
 
   .crumbs {
@@ -511,10 +467,12 @@
 
   /* ===== RIGHT TOC ===== */
   .toc {
-    position: sticky; top: 96px;
+    /* Sticky offset = SiteHeader height (60px) + 32px breathing room
+       so the kicker doesn't kiss the header border. */
+    position: sticky; top: 92px;
     align-self: start;
     padding: 40px 0 40px 28px;
-    max-height: calc(100vh - 96px);
+    max-height: calc(100vh - 92px);
     overflow-y: auto;
   }
   .toc .kicker {
@@ -550,27 +508,13 @@
 </head>
 <body class="beava">
 
-  <!-- ============ TOP NAV ============ -->
-  <nav class="topnav">
-    <a class="brand" href="/">
-      <img src="/assets/mascot-mark-geometric.png" alt="">
-      <span>beava</span>
-      <span class="v">v0</span>
-    </a>
-
-    <div class="search" tabindex="0">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
-      <span class="placeholder">Search the SDK reference · ask anything</span>
-      <span class="kbd">⌘K</span>
-    </div>
-
-    <div class="nav-links">
-      <a href="/docs/">Docs</a>
-      <a href="/sdk/python/" class="active">SDK reference</a>
-      <a href="/guide/">Learn</a>
-      <a href="https://github.com/beava-dev/beava" class="gh">GitHub <span style="opacity:.6">↗</span></a>
-    </div>
-  </nav>
+  <!-- ============ TOP NAV ============
+       Shared SiteHeader.jsx is mounted into #bv-site-header below by
+       the React+Babel bootstrap at the end of <body>. Chrome (60px
+       height, blur backdrop, brand/search/nav layout) stays identical
+       to /docs/ and /guide/ — only the search bar in the middle slot
+       distinguishes the SDK + docs pages from the guide. -->
+  <div id="bv-site-header"></div>
 
   <!-- ============ SHELL ============ -->
   <div class="shell">
@@ -982,6 +926,33 @@
 
   </div>
 
+  <!-- ============ SITE FOOTER ============
+       Shared SiteFooter.jsx mount point. Identical chrome (3-column
+       Project / Community + tagline + bottom row) on every page. The
+       page-internal feedback widget + pager above stay where they are
+       — those are content, not site chrome. -->
+  <div id="bv-site-footer"></div>
+
+  <!-- React + Babel — required by SiteHeader.jsx / SiteFooter.jsx. The
+       scripts below mount the shared chrome into the #bv-site-header /
+       #bv-site-footer divs above without touching the rest of the
+       hand-written HTML body. -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script type="text/babel" src="/js/_shared/SiteHeader.jsx"></script>
+  <script type="text/babel" src="/js/_shared/SiteFooter.jsx"></script>
+
+  <script type="text/babel">
+    // Mount the shared chrome into the existing static SDK page. This
+    // is the one place where the SDK page touches React — the rest of
+    // the body is hand-written HTML+CSS that Babel never compiles.
+    ReactDOM.createRoot(document.getElementById('bv-site-header'))
+      .render(<SiteHeader active="sdk" search maxWidth={1400}/>);
+    ReactDOM.createRoot(document.getElementById('bv-site-footer'))
+      .render(<SiteFooter maxWidth={1400}/>);
+  </script>
+
   <script>
     // tabs
     document.querySelectorAll('.tabs').forEach(tabRoot => {
@@ -999,8 +970,6 @@
     });
     // Copy-button click handling lives in /js/copy-buttons.js below —
     // shared with the rendered docs pages so behaviour stays in one place.
-    // The previous inline implementation animated the label without
-    // actually putting anything on the clipboard.
   </script>
   <script src="/js/copy-buttons.js" defer></script>
 </body>
