@@ -426,6 +426,7 @@ const SiteHeader = ({ active = null, search = false, maxWidth = 1200 }) => {
         <nav className="bv-nav-desktop" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <Link id="guide" label="Guide" href="/guide/"/>
           <Link id="docs" label="Docs" href="/docs/"/>
+          <Link id="sdk" label="SDK reference" href="/sdk/python/"/>
           <Link id="community" label="Community" href="/community/"/>
           <Link id="github" label="GitHub" href="https://github.com/beava-dev/beava" external/>
           <Link id="discord" label="Discord" href="https://discord.gg/Jnx89PN9" external/>
