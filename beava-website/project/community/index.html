@@ -84,7 +84,13 @@
       <>
         <SiteHeader active="community" maxWidth={1400}/>
         <div className="bv-marketing" style={{ maxWidth: 920, margin: '0 auto', padding: '48px 28px 80px' }}>
-          <main className="bv-content">
+          {/* bv-content is sized + asymmetrically-padded for the docs
+              3-column shell (sidebar to its left, TOC to its right). On
+              the community page it sits inside bv-marketing instead, so
+              we override to symmetric padding + auto margins to center
+              within the 920px wrapper. Typography rules (h1/h2/lede) are
+              the load-bearing reason for keeping the class. */}
+          <main className="bv-content" style={{ margin: '0 auto', padding: 0, maxWidth: '100%' }}>
             <h1>Community</h1>
             <p className="bv-lede">beava is built in the open. Weekly streamed dev meetups, public RFCs, GitHub Discussions. The model is TiDB and PingCAP: OSS engine fully featured, commercial scope explicit, no paywalls on basics.</p>
 
