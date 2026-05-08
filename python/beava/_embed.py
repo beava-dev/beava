@@ -5,7 +5,11 @@ Binary discovery order (locked):
      executable; otherwise :class:`BinaryNotFoundError` is raised
      immediately (no fallthrough — silent fallback would mask user
      misconfiguration).
-  2. ``beava`` on PATH via ``shutil.which``.
+  2. ``beava`` on PATH via ``shutil.which``, BUT shebang scripts
+     (``#!``) are skipped — the ``[project.scripts] beava`` entry
+     installs a Python shim of that name, and execing into it would
+     re-enter ``discover_binary``, find itself, and loop. Only native
+     binaries (ELF / Mach-O / etc.) qualify.
   3. Walk CWD upward looking for ``target/debug/beava`` (dev-loop
      convenience).
   4. Raise :class:`BinaryNotFoundError` with install guidance.
@@ -32,6 +36,29 @@ from beava._errors import BinaryNotFoundError
 _log = logging.getLogger("beava.embed")
 
 
+def _is_shebang_script(path: str) -> bool:
+    """True if ``path`` is a text file starting with ``#!`` (interpreter).
+
+    The Python ``[project.scripts]`` entry installs a ``beava`` console
+    script as a shebang-headed Python file (e.g. ``#!/usr/bin/env
+    python3``). Treating it as the server binary causes an exec loop:
+    spawn shim → shim's main runs ``discover_binary`` → finds itself
+    → execs into itself → ...
+
+    Native server binaries are ELF / Mach-O / PE — none start with
+    ``#!``. A read failure (permission denied, broken symlink) is
+    treated as "not a shebang" so we don't reject candidates we
+    couldn't classify; the subsequent ``Popen`` will surface any
+    real exec error.
+    """
+    try:
+        with open(path, "rb") as f:
+            head = f.read(2)
+    except OSError:
+        return False
+    return head == b"#!"
+
+
 def discover_binary() -> Path:
     """Locate the beava binary using the 4-step discovery order.
 
@@ -53,9 +80,23 @@ def discover_binary() -> Path:
             f"Unset BEAVA_BINARY or fix the path."
         )
 
-    on_path = shutil.which("beava")
-    if on_path is not None:
-        return Path(on_path)
+    # Scan every PATH directory rather than just the first match. A user
+    # with both `pip install beava` (shim in e.g. ~/.local/bin) and
+    # `cargo install beava-server` (binary in ~/.cargo/bin) on PATH must
+    # find the native binary regardless of which directory comes first.
+    # `shutil.which(name, path=dir)` enforces both file-existence + the
+    # executable bit and handles platform quirks (PATHEXT on Windows).
+    for path_dir in os.environ.get("PATH", "").split(os.pathsep):
+        if not path_dir:
+            continue
+        resolved = shutil.which("beava", path=path_dir)
+        if resolved is None:
+            continue
+        if _is_shebang_script(resolved):
+            # Python console_script shim from `[project.scripts]` —
+            # execing into it would loop. Try the next PATH entry.
+            continue
+        return Path(resolved)
 
     for parent in [Path.cwd(), *Path.cwd().parents]:
         candidate = parent / "target" / "debug" / "beava"

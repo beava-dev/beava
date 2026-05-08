@@ -68,7 +68,9 @@ class TestDiscoverBinary:
         # Remove beava from PATH by patching shutil.which
         import beava._embed as embed_mod
 
-        monkeypatch.setattr(embed_mod.shutil, "which", lambda _name: None)
+        monkeypatch.setattr(
+            embed_mod.shutil, "which", lambda _name, *_a, **_k: None
+        )
         with pytest.raises(BinaryNotFoundError) as exc_info:
             discover_binary()
         msg = str(exc_info.value).lower()
@@ -105,7 +107,9 @@ class TestDiscoverBinary:
 
         import beava._embed as embed_mod
 
-        monkeypatch.setattr(embed_mod.shutil, "which", lambda _name: str(shim))
+        monkeypatch.setattr(
+            embed_mod.shutil, "which", lambda _name, *_a, **_k: str(shim)
+        )
 
         found = discover_binary()
         # Must NOT be the shim — that would create an exec loop.
