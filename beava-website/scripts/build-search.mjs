@@ -87,6 +87,18 @@ async function main() {
   });
 
   // Index the rendered docs tree (static HTML with data-pagefind-body)
+  //
+  // KNOWN REGRESSION (2026-05-08): docs/**/*.html pages are React+Babel
+  // templates that use JSX `className` instead of HTML `class`, so
+  // Pagefind's HTML crawler can extract NOTHING from them. addDirectory
+  // reports the file count but page_count in the final index drops to
+  // ~0 from these pages. Net effect: docs/ is currently un-indexable.
+  //
+  // To fix: either (a) curated addCustomRecord entries per docs page
+  // matching the LEGACY_PAGES pattern below, or (b) introduce an SSR
+  // build step that renders the docs/* templates to real static HTML
+  // before this script runs. Tracked separately; not blocking SDK
+  // pages, which use real `class` attributes and ARE indexed correctly.
   const dirRes = await index.addDirectory({
     path: SITE_ROOT,
     glob: 'docs/**/*.html',
