@@ -1,7 +1,7 @@
 # Shared SDK Semantics
 
 > **Status:** Authoritative for v0. The 3 v0 SDKs (Python, TypeScript, Go) MUST implement the **communicate** surfaces in this doc with semantic parity. The **authoring** layer (decorators, expression DSL, op helpers) is **Python-only** in v0 — see "Authoring vs communicate" below.
-> **Last reviewed:** 2026-05-03 (Phase 13.6).
+> **Last reviewed:** 2026-05-03.
 
 ## Overview
 
@@ -39,7 +39,7 @@ beava v0 splits its public SDK surface into two layers:
 2. Compile to JSON via `bv.App.register_json(...)` or by serializing descriptors.
 3. Ship that JSON to a TypeScript / Go application — they pass it through verbatim to `app.register(...)` and never inspect it.
 
-This split was locked 2026-05-03 (Phase 13.6 scope amendment) per the user directive: "pipeline sdk in python only; only communicate sdk are in all languages." The TS+Go SDKs deliberately ship NO DSL files (no `events.ts`/`col.ts`/`agg.ts`/`table.ts`; same for Go). Their `Descriptor` type is opaque pass-through (`Record<string, unknown>` in TS, `map[string]any` in Go).
+This split was locked 2026-05-03 (v0 scope amendment) per the user directive: "pipeline sdk in python only; only communicate sdk are in all languages." The TS+Go SDKs deliberately ship NO DSL files (no `events.ts`/`col.ts`/`agg.ts`/`table.ts`; same for Go). Their `Descriptor` type is opaque pass-through (`Record<string, unknown>` in TS, `map[string]any` in Go).
 
 This is not a permanent constraint — TS/Go authoring may land in v0.1+ if demand justifies it. The key insight is that **the wire spec is the cross-language contract**, not the authoring DSL: a TS app pushing events against a Python-authored pipeline is observably identical to a Python app doing the same.
 
@@ -53,7 +53,7 @@ transport.
 |--------|-----------|----------|------|
 | `http://host:port` / `https://host:port` | HTTP/1.1 + JSON | curl reach, observability, LB / WAF integration | [docs/http-api.md](../http-api.md) |
 | `tcp://host:port` | Custom-framed TCP, `[u32 length][u16 op][u8 ct][payload]` | Low-latency fast-path, fraud / ad-tech serving | [docs/wire-spec.md](../wire-spec.md) |
-| (no URL) | Embed mode — spawn local `beava` binary on ephemeral ports | Tests, local dev, in-process default | [docs/concepts/embed-mode.md](../concepts/embed-mode.md) (forward-ref Plan 13.0-13) |
+| (no URL) | Embed mode — spawn local `beava` binary on ephemeral ports | Tests, local dev, in-process default | [docs/concepts/embed-mode.md](../concepts/embed-mode.md) (forward-ref an internal plan) |
 
 Embed mode is the default when the user constructs an `App` with no URL:
 
@@ -75,7 +75,7 @@ languages:
 
 ```
 window := digit+ unit | "forever"
-unit   := "ms" | "s" | "m" | "h" | "d"
+unit := "ms" | "s" | "m" | "h" | "d"
 ```
 
 Examples (parse-equivalent across all 3 SDKs): `100ms`, `30s`, `5m`, `1h`,
@@ -148,7 +148,7 @@ bv.lit(value: int | float | str | bool | None) -> Expr
 
 **TS / Go do NOT expose `bv.lit`** — both SDKs are communicate-only in v0 (no expression layer). Cross-language workflow: Python authors expressions including literals → compiles to JSON → TS/Go ship the pre-compiled JSON.
 
-If TS/Go authoring lands in v0.1+, they would expose mirror factories (`bv.lit(...)` / `beava.Lit(...)`); that's deferred per the Phase 13.6 communicate-only rescope.
+If TS/Go authoring lands in v0.1+, they would expose mirror factories (`bv.lit(...)` / `beava.Lit(...)`); that's deferred per the v0 communicate-only rescope.
 
 ## Field types
 
@@ -161,7 +161,7 @@ boundary.
 |-----------|--------|------------|-----|-------|
 | `str` | `str` | `string` | `string` | UTF-8 strings; max length per server config. |
 | `f64` | `float` | `number` | `float64` | IEEE 754 double precision. |
-| `i64` | `int` | `number` | `int64` | TypeScript has no native 64-bit integer; values up to `Number.MAX_SAFE_INTEGER` (`2^53 - 1`) are safe. Larger integers MUST be sent as strings (subject to TS-13.6 design — see [typescript.md](typescript.md)). |
+| `i64` | `int` | `number` | `int64` | TypeScript has no native 64-bit integer; values up to `Number.MAX_SAFE_INTEGER` (`2^53 - 1`) are safe. Larger integers MUST be sent as strings (subject to TS-v0 design — see [typescript.md](typescript.md)). |
 | `bool` | `bool` | `boolean` | `bool` | |
 | `bytes` | `bytes` | `Uint8Array` | `[]byte` | Base64-encoded on the JSON wire; SDKs decode/encode transparently. |
 | `datetime` | `datetime.datetime` | `Date` | `time.Time` | ISO 8601 (RFC 3339) on the JSON wire; SDKs parse / serialise. |
@@ -176,7 +176,7 @@ form is the same Python `bv.Optional[T]` / TypeScript `T | null` / Go
 
 A required field that is missing from a push payload returns
 `missing_field` per [docs/error-codes.md](../error-codes.md) (forward-ref
-Plan 13.0-12).
+an internal plan).
 
 ## FeatureResult shape
 
@@ -210,7 +210,7 @@ The cross-language schema for the validation-error envelope matches
 {
   "kind": "<one-of-9>",
   "path": "<DAG/JSON path>",
-  "message": "<human-readable, forward-looking framing per Phase 12.7 D-02>"
+  "message": "<human-readable, forward-looking framing per the events-only error framing>"
 }
 ```
 
@@ -226,9 +226,9 @@ The 9 `kind` values are **frozen for v0**; new kinds require an ADR:
 | `table_key_invalid` | Composite-key shape is malformed at register time. |
 | `registration_conflict` | Destructive change (field type change, field removal) without `force=true`. |
 | `duplicate_name` | Two descriptors in the same register call have the same name. |
-| `unsupported_node_kind` | Body has `kind="upsert"`/`"delete"`/`"retract"` etc. — pre-12.7 surface that is permanently killed per `project_v0_events_only_scope`. |
+| `unsupported_node_kind` | Body has `kind="upsert"`/`"delete"`/`"retract"` etc. — pre-v0 surface that is permanently killed per `project_v0_events_only_scope`. |
 
-`message` text follows the **forward-looking framing** locked in Phase 12.7
+`message` text follows the **forward-looking framing** locked in v0
 D-02: messages say "X is not supported in v0", **not** "X has been removed"
 or "X was deprecated". This avoids implying a previous-version reference
 for users who never saw older revisions.
@@ -293,7 +293,7 @@ request removed. Partial success is reserved for v0.1+ per
 
 ## Lifetime aggregation rules (cross-language register-time validation)
 
-Per [V0-MEM-GOV-02](../../.planning/REQUIREMENTS.md) (Phase 12.8):
+Per [V0-MEM-GOV-02](../../.planning/REQUIREMENTS.md):
 
 > Lifetime aggregations (windowless mode — `window=` omitted or set to
 > `"forever"`) MUST declare a finite per-entity memory ceiling at register-time.
@@ -301,14 +301,14 @@ Per [V0-MEM-GOV-02](../../.planning/REQUIREMENTS.md) (Phase 12.8):
 Server-side enforcement: the JSON-prelude shim returns
 `code: "unbounded_op_in_lifetime_mode"` if a register payload places an
 unbounded operator in lifetime mode. The shim is default-on per Phase
-12.8 Plan 06; the env-var `BEAVA_MEMORY_GOV_ENFORCE=0` disables it
+12.8 an internal plan; the env-var `BEAVA_MEMORY_GOV_ENFORCE=0` disables it
 (operators MUST NOT disable in production).
 
 All 3 SDKs SHOULD validate this client-side (not strictly required, but
 recommended) so the user gets fast feedback. The catalogue of bounded
 vs unbounded ops in lifetime mode lives at
 [docs/architecture/memory-budget.md](../architecture/memory-budget.md)
-(forward-ref Plan 13.0-13). v0 enforces this on the server regardless
+(forward-ref an internal plan). v0 enforces this on the server regardless
 of SDK behavior.
 
 ## Cross-language API surface map
@@ -333,12 +333,12 @@ Each language doc fills in the per-language signature details with full type ann
 
 ## Plan-level traceability
 
-This document is authored by Plan 13.0-04 (Wave 1). Downstream consumers:
+This document is authored by an internal plan (Wave 1). Downstream consumers:
 
 - [Python SDK](python.md), [TypeScript SDK](typescript.md), [Go SDK](go.md) — per-language docs in the same plan import the cross-language rules above.
-- **Phase 13.5** — Python SDK rewrite implements the canonical surface.
-- **Phase 13.6** — TypeScript + Go SDK ports implement the per-language docs.
-- **Phase 13.4** — engine validates the wire contract that all 3 SDKs target.
+- **v0** — Python SDK rewrite implements the canonical surface.
+- **v0** — TypeScript + Go SDK ports implement the per-language docs.
+- **v0** — engine validates the wire contract that all 3 SDKs target.
 
-For the full Phase 13.0 plan tree, see
-[`.planning/phases/13.0-design-contract-spec-docs/13.0-PLAN.md`](../../.planning/phases/13.0-design-contract-spec-docs/13.0-PLAN.md).
+For the planning history, see
+[`.planning/phases/v0-design-contract-spec-docs/v0-PLAN.md`](../../.planning/phases/v0-design-contract-spec-docs/v0-PLAN.md).

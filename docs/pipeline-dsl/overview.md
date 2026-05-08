@@ -1,10 +1,10 @@
 # Pipeline DSL Overview
 
-> **Status:** Authoritative for v0. Documents the **post-13.5 target** Python
+> **Status:** Authoritative for v0. Documents the **v0 target** Python
 > pipeline-DSL surface. The current `python/beava/` predates the v0 launch
-> design session — Phase 13.5 implements the rewrite. This doc is the spec
+> design session — v0 implements the rewrite. This doc is the spec
 > the rewrite targets.
-> **Last reviewed:** 2026-05-03 (Phase 13.0).
+> **Last reviewed:** 2026-05-03.
 
 ## What pipelines are
 
@@ -51,7 +51,7 @@ def UserTxnFeatures(txn) -> bv.Table:
            )
     )
 
-with bv.App() as app:                    # embed mode — spawns the binary locally
+with bv.App() as app: # embed mode — spawns the binary locally
     app.register(Txn, UserTxnFeatures)
     app.push("Txn", {"user_id": "alice", "amount": 12.50})
     app.push("Txn", {"user_id": "alice", "amount": 30.00})
@@ -87,10 +87,10 @@ You may parameterise the decorator with retention / dedupe knobs:
 
 ```python
 @bv.event(
-    keep_events_for="30d",     # event-history retention for replay (optional)
-    dedupe_key="txn_id",       # idempotent re-pushes within dedupe_window
+    keep_events_for="30d", # event-history retention for replay (optional)
+    dedupe_key="txn_id", # idempotent re-pushes within dedupe_window
     dedupe_window="24h",
-    cold_after="7d",           # cold-entity TTL (Phase 12.8 D-01)
+    cold_after="7d", # cold-entity TTL (v0 D-01)
 )
 class Txn:
     txn_id: str
@@ -149,7 +149,7 @@ the JSON wire derivation node with `output_kind=table`.
 
 Wire-level: the decorator emits a `{"kind": "derivation", "name": "<Name>",
 "output_kind": "table", "key": [...], ...}` payload, identical to what the
-server would accept from a hand-written register JSON. SDK porters in 13.6
+server would accept from a hand-written register JSON. SDK porters in v0
 implement the same shape via builders (TS) or struct-returning functions (Go).
 
 ### Global aggregation — `@bv.table` no-`key=` form (per ADR-003)
@@ -168,26 +168,26 @@ def UserClicks(c) -> bv.Table:
     return c.group_by("user_id").agg(total=bv.count(window="1h"))
 
 # Global (per ADR-003) — declares a single state slot for the whole table
-@bv.table   # no key= → global table
+@bv.table # no key= → global table
 def TotalClicks(c) -> bv.Table:
-    return c.agg(total=bv.count(window="1h"))   # no group_by
+    return c.agg(total=bv.count(window="1h")) # no group_by
 
-app.get("UserClicks", "alice")  # → {"total": 7}, requires entity arg
-app.get("TotalClicks")          # → {"total": 1234}, no entity arg
+app.get("UserClicks", "alice") # → {"total": 7}, requires entity arg
+app.get("TotalClicks") # → {"total": 1234}, no entity arg
 ```
 
 Three equivalent forms compile to the same wire payload (all use `key: []`):
 
 ```python
-clicks.agg(total=bv.count(...))                     # shortest — direct .agg() shorthand
-clicks.group_by().agg(total=bv.count(...))          # explicit empty group_by
-@bv.table                                           # decorator with no key=
+clicks.agg(total=bv.count(...)) # shortest — direct .agg() shorthand
+clicks.group_by().agg(total=bv.count(...)) # explicit empty group_by
+@bv.table # decorator with no key=
 def Foo(c): return c.agg(total=bv.count(...))
 ```
 
 All 53 operators work with both per-entity and global aggregation — same op semantics, different state-keying dimension. See [`docs/concepts/global-aggregation.md`](../concepts/global-aggregation.md) for the full conceptual treatment (when to use global vs per-entity, performance characteristics, composition with `cold_after=`).
 
-Implementation deferred to Phase 13.4 (engine sentinel routing) + Phase 13.5 (Python SDK no-`key=` form) + Phase 13.6 (TS + Go SDK overloads). Acceptance gate: `python/tests/v0/test_global.py` (Plan 13.0-16, 8 tests).
+Implementation deferred to the engine rename + v0 (Python SDK no-`key=` form) + v0 (TS + Go SDK overloads). Acceptance gate: `python/tests/v0/test_global.py` (an internal plan, 8 tests).
 
 ## Chain methods overview
 
@@ -248,7 +248,7 @@ surfaces are out of scope:
 - **Session windows** (`bv.session(gap_ms=..., inner=...)`) — out of v0 + v0.1
   per `.planning/ideas/session-windows-v0.1.md`.
 - **Table mutation surface** (`app.upsert / app.delete / app.retract`) —
-  killed in Phase 12.7. `@bv.table` is revived for **aggregation output
+  killed in v0. `@bv.table` is revived for **aggregation output
   only** per [ADR-001](../../.planning/decisions/ADR-001-bv-table-partial-overturn.md).
 - **`bv.fork(...)` / `playground.beava.dev`** — dropped from the v0 ship.
 - **CEP / sequence pattern detection / `on_timer` callbacks** — deferred

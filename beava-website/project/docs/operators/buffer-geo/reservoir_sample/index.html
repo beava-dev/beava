@@ -124,7 +124,7 @@
 <pre><code class="language-python">bv.reservoir_sample(
     field: str,
     *,
-    samples: int,                    # REQUIRED — register-time kwarg
+    samples: int, # REQUIRED — register-time kwarg
     where: bv.Col | None = None,
 ) -&gt; AggDescriptor
 </code></pre>
@@ -227,7 +227,7 @@ never <code>null</code>.</p>
 </tr>
 <tr>
 <td>Memory per entity</td>
-<td><strong><code>BoundedByRequiredKwarg(&quot;samples&quot;)</code></strong> — <code>samples × sizeof(Value)</code> bytes + 1 <code>u64</code> (items_seen) per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a></td>
+<td><strong><code>BoundedByRequiredKwarg(&quot;samples&quot;)</code></strong> — <code>samples × sizeof(Value)</code> bytes + 1 <code>u64</code> (items_seen) per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a></td>
 </tr>
 <tr>
 <td>Lifetime mode</td>
@@ -253,7 +253,7 @@ def UserAmountSample(txn) -&gt; bv.Table:
 
 # After 50,000 transactions for &quot;alice&quot;:
 result = app.get(&quot;UserAmountSample&quot;, &quot;alice&quot;)
-# result == {&quot;amount_sample&quot;: [12.5, 87.0, 240.0, ...]}  # 100 values uniformly chosen
+# result == {&quot;amount_sample&quot;: [12.5, 87.0, 240.0, ...]} # 100 values uniformly chosen
 </code></pre>
 <h3 id="example-2-50-sample-of-failed-login-ips" tabindex="-1"><a class="header-anchor" href="#example-2-50-sample-of-failed-login-ips" aria-hidden="true">#</a> Example 2: 50-sample of failed login IPs</h3>
 <pre><code class="language-python">@bv.table(key=&quot;account_id&quot;)

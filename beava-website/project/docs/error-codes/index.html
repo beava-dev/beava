@@ -122,7 +122,7 @@
 emits across the wire (HTTP and TCP transports), the Python exception
 hierarchy, the 9 frozen <code>ValidationError.kind</code> values, and the HTTP status
 mapping. This document is the canonical reference for SDK error handling.
-<strong>Last reviewed:</strong> 2026-05-03 (Phase 13.0).</p>
+<strong>Last reviewed:</strong> 2026-05-03.</p>
 </blockquote>
 <h2 id="overview" tabindex="-1"><a class="header-anchor" href="#overview" aria-hidden="true">#</a> Overview</h2>
 <p>Every beava error response — whether emitted over HTTP (any <code>4xx</code> / <code>5xx</code>) or
@@ -143,7 +143,7 @@ element. Examples: <code>&quot;descriptors[1].schema.amount&quot;</code> (during
 validation), <code>&quot;fields.amount&quot;</code> (during push), <code>&quot;requests[2].table&quot;</code> (during
 batch_get). Optional — absent for transport-level errors.</p>
 <p>The <strong><code>message</code></strong> field is human-readable. <strong>Forward-looking framing per
-Phase 12.7 D-02</strong> applies — messages say &quot;X is not supported in v0&quot;,
+the events-only error framing</strong> applies — messages say &quot;X is not supported in v0&quot;,
 <strong>not</strong> &quot;X has been removed&quot; or &quot;X was deprecated&quot;. The framing avoids
 implying a previous-version reference for users who never saw older
 revisions of the surface.</p>
@@ -154,10 +154,10 @@ HTTP returns it as the response body with the appropriate status code.</p>
 <p>The Python SDK exposes three exception types (re-exported from <code>beava</code>):</p>
 <pre><code class="language-python">class RegistrationError(Exception):
     &quot;&quot;&quot;Raised when registration fails — locally (DAG/schema) or on the server (409).&quot;&quot;&quot;
-    code: str                              # Structured code (one of the codes below)
-    path: str                              # DAG / JSON path
-    message: str                           # Human-readable
-    errors: list[ValidationError]          # Full list when server returns multiple
+    code: str # Structured code (one of the codes below)
+    path: str # DAG / JSON path
+    message: str # Human-readable
+    errors: list[ValidationError] # Full list when server returns multiple
 </code></pre>
 <pre><code class="language-python">class BinaryNotFoundError(Exception):
     &quot;&quot;&quot;Raised by embed mode when the beava binary cannot be found.
@@ -172,9 +172,9 @@ HTTP returns it as the response body with the appropriate status code.</p>
 <pre><code class="language-python">@dataclass(frozen=True)
 class ValidationError:
     &quot;&quot;&quot;Frozen dataclass for client-side and server-side validation errors.&quot;&quot;&quot;
-    kind: str                              # One of the 9 frozen kinds below
-    path: str                              # JSON-pointer-style path
-    message: str                           # Human-readable
+    kind: str # One of the 9 frozen kinds below
+    path: str # JSON-pointer-style path
+    message: str # Human-readable
 </code></pre>
 <p><code>RegistrationError</code> is the canonical exception raised on register failures —
 both local (DAG cycle / schema mismatch detected client-side) and remote
@@ -233,7 +233,7 @@ ADR. Source: <code>python/beava/_errors.py::VALIDATION_ERROR_KINDS</code>.</p>
 </tr>
 <tr>
 <td><code>unsupported_node_kind</code></td>
-<td>Body has <code>kind=&quot;upsert&quot;</code> / <code>kind=&quot;delete&quot;</code> / <code>kind=&quot;retract&quot;</code> etc. — pre-12.7 surface that is permanently killed per <code>project_v0_events_only_scope</code>. Per ADR-001, <code>kind=&quot;table&quot;</code> is now PERMITTED for aggregation-output (Phase 13.4).</td>
+<td>Body has <code>kind=&quot;upsert&quot;</code> / <code>kind=&quot;delete&quot;</code> / <code>kind=&quot;retract&quot;</code> etc. — pre-v0 surface that is permanently killed per <code>project_v0_events_only_scope</code>. Per ADR-001, <code>kind=&quot;table&quot;</code> is now PERMITTED for aggregation-output.</td>
 </tr>
 </tbody>
 </table>
@@ -331,7 +331,7 @@ processing-time only; the server stamps wall-clock arrival time on every push.
 <strong>Recovery:</strong> Remove the <code>event_time</code> field / kwarg. Windowed operators bucket
 on server-side <code>now_ms()</code> automatically. The Python SDK rejects this at
 decoration time (<code>TypeError</code>); register-time rejection is the server's defense
-against hand-written JSON. Wire-level codes from Phase 12.6:
+against hand-written JSON. Wire-level codes:
 <code>unknown_field_event_time_v0</code> / <code>unknown_field_tolerate_delay_v0</code>.</p>
 <h3 id="code-featurenotintable" tabindex="-1"><a class="header-anchor" href="#code-featurenotintable" aria-hidden="true">#</a> code = &quot;feature_not_in_table&quot;</h3>
 <p><strong>HTTP status:</strong> 400
@@ -359,8 +359,7 @@ joins in a future minor release.</p>
 <strong>Wire opcode (TCP):</strong> <code>OP_ERROR_RESPONSE = 0xFFFF</code> (JSON body shape below)
 <strong>When:</strong> A <code>POST /register</code> payload contains a destructive change (rename,
 type-change, op removal, agg removal, window-change, or key-cols change) and
-<code>force=true</code> is not set in the body. Per D-01 (Phase 13.4 Plan 06,
-USER-LOCKED), destructive registry changes require an explicit <code>force=true</code>
+<code>force=true</code> is not set in the body. Per D-01 (USER-LOCKED), destructive registry changes require an explicit <code>force=true</code>
 opt-in to apply; otherwise the server rejects with this code.
 <strong>Path:</strong> <em>(no path; the offending changes are enumerated in <code>error.diff.destructive</code>)</em>
 <strong>Recovery:</strong> Either (1) send <code>force=true</code> in the register body to apply
@@ -401,12 +400,12 @@ diff-checks against staging registries).</p>
 <p>The diff envelope is <strong>categorized lists</strong> (NOT JSON-Patch). Each entry's
 <code>kind</code> discriminator names the destructive class per D-01.</p>
 <p><code>force_required</code> is distinct from the legacy <code>registration_conflict</code> (HTTP
-409) emitted by the Phase 2 diff machinery — <code>registration_conflict</code>
+409) emitted by the diff machinery — <code>registration_conflict</code>
 predates D-01 and uses a different envelope shape. Both codes coexist in
-the v0 surface; the dispatch order is force_required FIRST (Phase 13.4
-Plan 06), legacy <code>registration_conflict</code> SECOND (additive-only path with a
+the v0 surface; the dispatch order is force_required FIRST (v0
+an internal plan), legacy <code>registration_conflict</code> SECOND (additive-only path with a
 diff that still detects schema drift from the prior registry).</p>
-<p><strong>Source:</strong> Phase 13.4 Plan 06 / D-01 (USER-LOCKED).</p>
+<p><strong>Source:</strong> v0 an internal plan / D-01 (USER-LOCKED).</p>
 <h3 id="code-frametoolarge" tabindex="-1"><a class="header-anchor" href="#code-frametoolarge" aria-hidden="true">#</a> code = &quot;frame_too_large&quot;</h3>
 <p><strong>HTTP status:</strong> <em>(TCP only — no HTTP equivalent; HTTP frames are rejected by
 the LB / web server before reaching beava)</em>
@@ -510,7 +509,7 @@ sort. The SDK's local validator surfaces it as <code>cycle</code> (the
 <strong>Wire opcode (TCP):</strong> <code>OP_ERROR_RESPONSE = 0xFFFF</code> (JSON body shape below)
 <strong>When:</strong> A <code>POST /reset</code> (HTTP) or <code>OP_RESET</code> (TCP, opcode <code>0x0040</code>) request
 arrives at a server whose effective <code>test_mode</code> flag is <code>false</code>. Per D-03
-(Phase 13.4 Plan 08, USER-LOCKED), <code>OP_RESET</code> is the full state + registry
+(USER-LOCKED), <code>OP_RESET</code> is the full state + registry
 clear — production-by-default rejects it.
 <strong>Path:</strong> <em>(no path)</em>
 <strong>Recovery:</strong> Enable <code>test_mode</code> via either of two boot-time opt-ins (the
@@ -540,7 +539,7 @@ flipped at runtime to escalate.</p>
 actionable error text. Test
 <code>phase13_4_reset_default_rejected::default_config_no_env_var_post_reset_returns_403_structured</code>
 pins this contract.</p>
-<p><strong>Source:</strong> Phase 13.4 Plan 08 / D-03 (USER-LOCKED). Predecessor: the
+<p><strong>Source:</strong> v0 an internal plan / D-03 (USER-LOCKED). Predecessor: the
 pre-D-03 sketch used the shorter code <code>reset_disabled</code> with a single-flag
 gate; this entry replaces it.</p>
 <h3 id="code-schemainvalid" tabindex="-1"><a class="header-anchor" href="#code-schemainvalid" aria-hidden="true">#</a> code = &quot;schema_invalid&quot;</h3>
@@ -602,7 +601,7 @@ authors must take care.</p>
 <p><strong>HTTP status:</strong> 400
 <strong>When:</strong> A windowless op (lifetime mode — <code>window=</code> omitted or set to
 <code>&quot;forever&quot;</code>) without a finite per-entity memory bound was registered. Per
-V0-MEM-GOV-02 (Phase 12.8), every windowless op MUST declare a bound via
+V0-MEM-GOV-02, every windowless op MUST declare a bound via
 <code>O1</code> / <code>BoundedSketch</code> / <code>BoundedByRequiredKwarg</code> / <code>BoundedByConfig</code>.
 <strong>Path:</strong> <code>descriptors[&lt;i&gt;].agg.&lt;feature&gt;</code>.
 <strong>Recovery:</strong> Either (1) add a <code>window=</code> kwarg to bound the op to a sliding
@@ -682,9 +681,9 @@ reserved).
 <h3 id="code-unsupportednodekind" tabindex="-1"><a class="header-anchor" href="#code-unsupportednodekind" aria-hidden="true">#</a> code = &quot;unsupported_node_kind&quot;</h3>
 <p><strong>HTTP status:</strong> 400
 <strong>When:</strong> Register payload has <code>kind=&quot;upsert&quot;</code> / <code>kind=&quot;delete&quot;</code> /
-<code>kind=&quot;retract&quot;</code> etc. — pre-12.7 surface that is permanently killed per
+<code>kind=&quot;retract&quot;</code> etc. — pre-v0 surface that is permanently killed per
 <code>project_v0_events_only_scope</code>. Per ADR-001, <code>kind=&quot;table&quot;</code> is now PERMITTED
-for aggregation-output (the JSON-prelude shim amendment lands in Phase 13.4).
+for aggregation-output (the JSON-prelude shim amendment landed in v0).
 <strong>Path:</strong> <code>nodes[&lt;i&gt;].&lt;name&gt;.kind</code>.
 <strong>Recovery:</strong> Use <code>kind=&quot;event&quot;</code>, <code>kind=&quot;table&quot;</code> (aggregation-output only per
 ADR-001), or <code>kind=&quot;derivation&quot;</code>. Mutation surfaces (upsert/delete/retract)
@@ -767,7 +766,7 @@ double the memory cost without sufficient benefit in v0.
 SDKs should dispatch on <code>code</code>, not on status, except for transport-level
 concerns (retry on <code>5xx</code>, fail-fast on <code>4xx</code>).</p>
 <h2 id="forward-looking-framing-rule" tabindex="-1"><a class="header-anchor" href="#forward-looking-framing-rule" aria-hidden="true">#</a> Forward-looking framing rule</h2>
-<p>Per Phase 12.7 D-02 (locked 2026-05-01), error messages use <strong>forward-looking
+<p>Per the events-only error framing (locked 2026-05-01), error messages use <strong>forward-looking
 framing</strong>:</p>
 <ul>
 <li>✅ &quot;X is not supported in v0&quot; — implies future versions may add support.</li>

@@ -118,12 +118,12 @@
 <article class="docs-prose">
 <h1>Pipeline DSL Compilation Rules</h1>
 <blockquote>
-<p><strong>Status:</strong> Authoritative for v0. Documents the <strong>post-13.5 target</strong> Python
-→ JSON wire compilation contract. SDK porters in 13.6 (TypeScript + Go)
+<p><strong>Status:</strong> Authoritative for v0. Documents the <strong>v0 target</strong> Python
+→ JSON wire compilation contract. SDK porters in v0 (TypeScript + Go)
 consume this doc as the canonical reference for what their compilers MUST
 emit. Where this doc and the current <code>python/beava/</code> source disagree, this
-doc wins — Phase 13.5 implements the target shape.
-<strong>Last reviewed:</strong> 2026-05-03 (Phase 13.0).</p>
+doc wins — v0 implements the target shape.
+<strong>Last reviewed:</strong> 2026-05-03.</p>
 </blockquote>
 <h2 id="how-to-read-this-doc" tabindex="-1"><a class="header-anchor" href="#how-to-read-this-doc" aria-hidden="true">#</a> How to read this doc</h2>
 <p>For each chain method (<code>events.filter()</code>, <code>events.group_by()</code>, etc.) we show:</p>
@@ -135,7 +135,7 @@ doc wins — Phase 13.5 implements the target shape.
 </ol>
 <p>After all methods, the <a href="#boolean-sum-trick-recommended-pattern-for-conditional-counts">Boolean-sum trick</a>
 section documents the v0-locked recommended pattern for conditional counts
-(per <a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/13.0-design-contract-spec-docs/13.0-CONTEXT.md">Q1 Path B</a>).</p>
+(per <a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/v0-design-contract-spec-docs/v0-CONTEXT.md">Q1 Path B</a>).</p>
 <p>The <a href="#ambiguity-matrix">Ambiguity Matrix</a> at the bottom rules out 20+ edge
 cases as ALLOWED / FORBIDDEN / UNDEFINED with a fixture link or structured
 error code per row.</p>
@@ -524,13 +524,13 @@ windowed state with up to 64 rolling buckets indexed by server-side
 <ul>
 <li><strong>Lifetime mode</strong> (<code>window=None</code> or <code>window=&quot;forever&quot;</code>): single state slot
 per entity. The op accumulates over all events for that entity. Memory
-bound MUST be declared at register time per Phase 12.8 V0-MEM-GOV-02 — for
+bound MUST be declared at register time per v0 V0-MEM-GOV-02 — for
 ops without an O(1) lifetime bound, the JSON-prelude shim
 <code>pre_check_unbounded_op_in_lifetime_mode</code> rejects with
 <code>unbounded_op_in_lifetime_mode</code>.</li>
 <li><strong>Windowed mode</strong> (<code>window=&quot;&lt;duration&gt;&quot;</code>): up to 64 rolling buckets
 bucketed by server-side <code>now_ms()</code>. Bucket reclaim is per-event during
-<code>update_at</code> (Phase 12.8 V0-MEM-GOV-03). Buckets older than <code>window</code> ms are
+<code>update_at</code> (v0 V0-MEM-GOV-03). Buckets older than <code>window</code> ms are
 dropped from the result.</li>
 <li><strong>Decay ops</strong> (<code>ewma</code>, <code>ewvar</code>, <code>decayed_sum</code>, <code>decayed_count</code>,
 <code>ew_zscore</code>) take <code>half_life=</code> instead of <code>window=</code> and reject <code>forever</code>
@@ -587,9 +587,9 @@ time.</p>
 <p>Server-side state allocation matches <code>groupby.agg(...)</code> above: per-entity
 op state, lazy allocation on first event, queryable via
 <code>app.get(&quot;UserTxnFeatures&quot;, &quot;alice&quot;)</code> returning the row-shape.</p>
-<p>The Phase 12.7 architectural test
+<p>The v0 architectural test
 <code>crates/beava-server/tests/phase12_7_no_table_surface.rs</code> is amended in
-Phase 13.4 to permit <code>OpNode::Table*</code> ONLY when it appears as the
+v0 to permit <code>OpNode::Table*</code> ONLY when it appears as the
 <code>output_kind</code> of a derivation (per-AST-context check) — top-level
 <code>{&quot;kind&quot;: &quot;table&quot;, ...}</code> register payloads remain rejected with
 <code>unsupported_node_kind</code>.</p>
@@ -621,20 +621,20 @@ def TotalClicks(clicks) -&gt; bv.Table:
 }
 </code></pre>
 <h4 id="three-equivalent-forms-compile-to-the-same-wire-payload" tabindex="-1"><a class="header-anchor" href="#three-equivalent-forms-compile-to-the-same-wire-payload" aria-hidden="true">#</a> Three equivalent forms compile to the same wire payload:</h4>
-<pre><code class="language-python">clicks.agg(total=bv.count(window=&quot;forever&quot;))                  # shortest
-clicks.group_by().agg(total=bv.count(window=&quot;forever&quot;))       # explicit empty group_by
-@bv.table                                                     # decorator no key=
+<pre><code class="language-python">clicks.agg(total=bv.count(window=&quot;forever&quot;)) # shortest
+clicks.group_by().agg(total=bv.count(window=&quot;forever&quot;)) # explicit empty group_by
+@bv.table # decorator no key=
 def Foo(c): return c.agg(total=bv.count(window=&quot;forever&quot;))
 </code></pre>
 <p>All three produce <code>key: []</code> on the wire. Server-side state allocation: a single state slot at sentinel <code>entity_id = &quot;&quot;</code>, queryable via <code>app.get(&quot;TotalClicks&quot;)</code> (1-arg overload — returns the global feature dict).</p>
 <h4 id="server-semantics-12" tabindex="-1"><a class="header-anchor" href="#server-semantics-12" aria-hidden="true">#</a> Server semantics</h4>
 <p>Per ADR-003, the engine routes <code>entity_id = &quot;&quot;</code> (empty string) through the same per-entity hashmap machinery — no new code path. Register-time validation accepts <code>key: []</code> as a valid global-table declaration; <code>key</code> MUST be either non-empty (per-entity) or empty (global) — never null.</p>
 <p>All 53 operators work in both per-entity and global modes — semantics identical, only the state-keying dimension differs. Standard memory governance applies: <code>cold_after=</code> doesn't affect global state (always-live); lifetime ops still subject to V0-MEM-GOV-02 lifetime-bound enforcement.</p>
-<p>Implementation deferred to Phase 13.4 (engine, ~30 LOC) + Phase 13.5 (Python SDK, ~110 LOC) + Phase 13.6 (TS + Go SDK overloads, ~150 LOC). Acceptance gate: <code>python/tests/v0/test_global.py</code> (Plan 13.0-16, 8 tests).</p>
+<p>Implementation deferred to v0 (engine, ~30 LOC) + v0 (Python SDK, ~110 LOC) + v0 (TS + Go SDK overloads, ~150 LOC). Acceptance gate: <code>python/tests/v0/test_global.py</code> (an internal plan, 8 tests).</p>
 <p>See <a href="/docs/concepts/global-aggregation/"><code>docs/concepts/global-aggregation.md</code></a> for the full conceptual treatment.</p>
 <hr>
 <h2 id="boolean-sum-trick-recommended-pattern-for-conditional-counts" tabindex="-1"><a class="header-anchor" href="#boolean-sum-trick-recommended-pattern-for-conditional-counts" aria-hidden="true">#</a> Boolean-sum trick (recommended pattern for conditional counts)</h2>
-<p>Per <a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/13.0-design-contract-spec-docs/13.0-CONTEXT.md">Q1 Path B locked answer</a>,
+<p>Per <a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/v0-design-contract-spec-docs/v0-CONTEXT.md">Q1 Path B locked answer</a>,
 v0 keeps <code>bv.sum(field: str)</code> only — the <code>field</code> arg accepts a <strong>string
 column name</strong>, NOT an <code>_ExprAST</code>. To implement a &quot;count where condition&quot;
 semantic, use the two-stage <code>with_columns</code> + <code>sum</code> pattern:</p>
@@ -686,7 +686,7 @@ v0.1+.</p>
 <hr>
 <h2 id="ambiguity-matrix" tabindex="-1"><a class="header-anchor" href="#ambiguity-matrix" aria-hidden="true">#</a> Ambiguity Matrix</h2>
 <p>Explicit ALLOWED / FORBIDDEN / UNDEFINED rulings on edge cases. SDK porters
-in 13.6 grep this matrix during their compiler work; each row links to a
+in v0 grep this matrix during their compiler work; each row links to a
 fixture (ALLOWED) or a structured error code (FORBIDDEN).</p>
 <table>
 <thead>

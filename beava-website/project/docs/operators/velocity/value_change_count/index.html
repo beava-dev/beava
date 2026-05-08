@@ -222,7 +222,7 @@ lifetime-bound <code>O(1)</code>.</p>
 @bv.event
 class Login:
     user_id: str
-    country_code: int  # ISO 3166 numeric code, e.g. 840 for US
+    country_code: int # ISO 3166 numeric code, e.g. 840 for US
 
 @bv.table(key=&quot;user_id&quot;)
 def UserCountryFlips(logins) -&gt; bv.Table:
@@ -234,11 +234,11 @@ def UserCountryFlips(logins) -&gt; bv.Table:
     )
 
 # Push events
-app.push(&quot;Login&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;country_code&quot;: 840})  # flips = 0 (first event)
-app.push(&quot;Login&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;country_code&quot;: 840})  # flips = 0 (same)
-app.push(&quot;Login&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;country_code&quot;: 124})  # flips = 1 (US → CA)
-app.push(&quot;Login&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;country_code&quot;: 826})  # flips = 2 (CA → UK)
-app.push(&quot;Login&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;country_code&quot;: 826})  # flips = 2 (same)
+app.push(&quot;Login&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;country_code&quot;: 840}) # flips = 0 (first event)
+app.push(&quot;Login&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;country_code&quot;: 840}) # flips = 0 (same)
+app.push(&quot;Login&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;country_code&quot;: 124}) # flips = 1 (US → CA)
+app.push(&quot;Login&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;country_code&quot;: 826}) # flips = 2 (CA → UK)
+app.push(&quot;Login&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;country_code&quot;: 826}) # flips = 2 (same)
 
 # Query
 result = app.get(&quot;UserCountryFlips&quot;, &quot;alice&quot;)

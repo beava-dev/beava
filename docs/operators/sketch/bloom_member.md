@@ -60,7 +60,7 @@ events report `true` (may-have-been-seen) for repeats.
 |----------|-------|
 | CPU per event | **Tier 2** (~35 ns algorithm floor / ~70 ns measured — k=7 hashes × k=7 bit-sets at default fpr) — see [cost-class.md](../cost-class.md#tier-2-moderate-30-100-nscall--6-ops) |
 | Memory per entity | `BoundedSketch` — fixed size at register time: `~capacity × 9.6 bits` for fpr=0.01 (~1.2 KB at capacity=1024) |
-| Lifetime mode (no `window=` kwarg) | **Required** — bloom is always lifetime; per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) the structural cap is declared at register time |
+| Lifetime mode (no `window=` kwarg) | **Required** — bloom is always lifetime; per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) the structural cap is declared at register time |
 
 ## Examples
 
@@ -88,7 +88,7 @@ app.push("Login", {"user_id": "alice", "device_id": "macbook-pro"})
 
 # Query (returns bool result of the LAST matching event's check)
 result = app.get("UserDeviceCheck", "alice")
-# result == {"seen_device_before": false}  # macbook-pro was new
+# result == {"seen_device_before": false} # macbook-pro was new
 ```
 
 ### Example 2: Is this a novel destination country for this card?

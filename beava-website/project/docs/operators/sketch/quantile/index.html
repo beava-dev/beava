@@ -148,7 +148,7 @@ fraud rules need both central-tendency and tail behavior.</p>
 <p>The hybrid mode is transparent at the API: callers always read a single
 float. Promotion happens server-side without observable behavior change
 beyond a small accuracy tradeoff. <code>bv.quantile</code> belongs to the <strong>sketch</strong>
-family and is <code>BoundedSketch</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a> — fixed structural cap regardless of stream length.</p>
+family and is <code>BoundedSketch</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a> — fixed structural cap regardless of stream length.</p>
 <h2 id="parameters" tabindex="-1"><a class="header-anchor" href="#parameters" aria-hidden="true">#</a> Parameters</h2>
 <table>
 <thead>
@@ -231,7 +231,7 @@ family and is <code>BoundedSketch</code> per <a href="https://github.com/beava-d
 </tr>
 <tr>
 <td>Lifetime mode (<code>window=None</code>)</td>
-<td><strong>Allowed</strong> — <code>BoundedSketch</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a></td>
+<td><strong>Allowed</strong> — <code>BoundedSketch</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a></td>
 </tr>
 </tbody>
 </table>
@@ -298,7 +298,7 @@ def LatencyP50(reqs) -&gt; bv.Table:
 <li><strong><code>q</code> out of range:</strong> values outside <code>[0, 1]</code> raise <code>RegistrationError(code=&quot;aggregation_invalid_param&quot;)</code> at register time.</li>
 <li><strong>Non-numeric field:</strong> schema validation rejects at register time with structured error code <code>schema_mismatch</code>.</li>
 <li><strong>NaN inputs:</strong> poisons the sketch state in DDSketch mode (NaN routes to a non-finite bucket); filter with <code>where=~bv.col(&quot;amount&quot;).isnull()</code> if your source can emit NaN.</li>
-<li><strong>Lifetime mode (<code>window=None</code>):</strong> explicitly allowed — DDSketch is <code>BoundedSketch</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a>.</li>
+<li><strong>Lifetime mode (<code>window=None</code>):</strong> explicitly allowed — DDSketch is <code>BoundedSketch</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a>.</li>
 <li><strong>Hybrid promotion:</strong> transparent. Callers cannot observe whether the entity is in exact or sketch mode (intentional). Promotion happens once the entity has seen <code>exact_threshold</code> distinct values.</li>
 <li><strong><code>exact_threshold</code> lowered to 0:</strong> equivalent to &quot;always sketch mode&quot;; useful only for explicit memory tuning.</li>
 </ul>

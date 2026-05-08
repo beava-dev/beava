@@ -8,7 +8,7 @@
 bv.most_recent_n(
     field: str,
     *,
-    n: int,                          # REQUIRED — register-time kwarg
+    n: int, # REQUIRED — register-time kwarg
     where: bv.Col | None = None,
 ) -> AggDescriptor
 ```
@@ -69,7 +69,7 @@ returns the empty list `[]` — never `null`.
 | Resource | Bound |
 |----------|-------|
 | CPU per event | **Tier 3** (~12 ns floor / ~32 ns measured — circular-buffer write + one `Value::clone()`) — see [cost-class.md](../cost-class.md#tier-3-algorithmic-floor-100-300-nscall--9-ops). Clone-path variance: `Value::Str` is `Arc::clone` (cheap); `Value::Bytes` of large payloads can dominate |
-| Memory per entity | **`BoundedByRequiredKwarg("n")`** — `n × sizeof(Value)` bytes per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
+| Memory per entity | **`BoundedByRequiredKwarg("n")`** — `n × sizeof(Value)` bytes per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
 | Lifetime mode | **Required** — `bv.most_recent_n` has no `window=` kwarg in v0; lifetime is the only mode |
 
 ## Examples

@@ -237,7 +237,7 @@ def IpLoginBurst(logins) -&gt; bv.Table:
 # ... 100 events at t=0..1000ms (all in the same 1m bucket) ...
 # Query
 result = app.get(&quot;IpLoginBurst&quot;, &quot;1.2.3.4&quot;)
-# result == {&quot;peak_per_min_1h&quot;: 100}  # peak burst = 100 in one minute slice
+# result == {&quot;peak_per_min_1h&quot;: 100} # peak burst = 100 in one minute slice
 </code></pre>
 <h3 id="example-2-filtered-peak-failed-login-burst-per-user" tabindex="-1"><a class="header-anchor" href="#example-2-filtered-peak-failed-login-burst-per-user" aria-hidden="true">#</a> Example 2: Filtered peak failed-login burst per user</h3>
 <pre><code class="language-python">@bv.table(key=&quot;user_id&quot;)

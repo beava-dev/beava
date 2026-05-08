@@ -124,7 +124,7 @@
 <pre><code class="language-python">bv.histogram(
     field: str,
     *,
-    buckets: list[float],            # REQUIRED — register-time kwarg
+    buckets: list[float], # REQUIRED — register-time kwarg
     where: bv.Col | None = None,
 ) -&gt; AggDescriptor
 </code></pre>
@@ -214,7 +214,7 @@ events, the result is the dict with all counters at <code>0</code>.</p>
 </tr>
 <tr>
 <td>Memory per entity</td>
-<td><strong><code>BoundedByRequiredKwarg(&quot;buckets&quot;)</code></strong> — <code>(len(buckets) + 1) × 8</code> bytes per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a></td>
+<td><strong><code>BoundedByRequiredKwarg(&quot;buckets&quot;)</code></strong> — <code>(len(buckets) + 1) × 8</code> bytes per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a></td>
 </tr>
 <tr>
 <td>Lifetime mode</td>

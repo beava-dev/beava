@@ -191,7 +191,7 @@ matching events with a non-null <code>field</code>, the result is <code>null</co
 </tr>
 <tr>
 <td>Memory per entity</td>
-<td><code>O(1)</code> — single <code>Option&lt;Value&gt;</code> slot per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a></td>
+<td><code>O(1)</code> — single <code>Option&lt;Value&gt;</code> slot per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a></td>
 </tr>
 <tr>
 <td>Lifetime mode</td>
@@ -258,7 +258,7 @@ def CardLastSuccess(txns) -&gt; bv.Table:
 <li><strong>Field missing from event:</strong> treated identically to null — skipped.</li>
 <li><strong>Out-of-order event-time:</strong> <strong>does not matter.</strong> beava is processing-time-only per <a href="https://github.com/beava-dev/beava/blob/main/.planning/PROJECT.md"><code>project_redis_shaped_no_event_time_ever</code></a>; <code>last</code> always reflects the <strong>server arrival order</strong>, never the event payload's timestamp field.</li>
 <li><strong><code>window=</code> kwarg attempted:</strong> raises <code>TypeError</code> at SDK-helper-call time. Use <a href="/docs/operators/point-ordinal/last_n/"><code>bv.last_n(n=1, window=&quot;...&quot;)</code></a> for a windowed alternative.</li>
-<li><strong>Lifetime mode:</strong> <strong>the only mode.</strong> Footprint is <code>O(1)</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a>.</li>
+<li><strong>Lifetime mode:</strong> <strong>the only mode.</strong> Footprint is <code>O(1)</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a>.</li>
 </ul>
 <h2 id="see-also" tabindex="-1"><a class="header-anchor" href="#see-also" aria-hidden="true">#</a> See also</h2>
 <ul>

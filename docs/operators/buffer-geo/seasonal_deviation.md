@@ -30,11 +30,11 @@ qualifies as `O(1)` per entity under the
 [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) lifetime-aggregation
 contract — no required register-time kwarg, no fallback default. State per
 entity is `[HourBucket; 24] + Option<(f64, usize)>` for the latest
-observation: 24 × 24 bytes + 16 bytes ≈ 600 bytes. Phase 12.9 boxed
+observation: 24 × 24 bytes + 16 bytes ≈ 600 bytes. v0 boxed
 `SeasonalDeviationState` so the `AggOp::SeasonalDeviation` variant fits the
 80-byte enum cap (the state itself lives on the heap behind a `Box`); see
 `crates/beava-core/src/agg_op.rs` line 482 and
-[Phase 12.9 SUMMARY](../../../.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md).
+[SUMMARY](../../../.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md).
 
 `bv.seasonal_deviation` belongs to the **bounded-buffer** family — it
 shares state-shape with [`bv.hour_of_day_histogram`](./hour_of_day_histogram.md)
@@ -76,7 +76,7 @@ Specifically, the result is `null` when:
 | Resource | Bound |
 |----------|-------|
 | CPU per event | **Tier 1** (~10 ns floor / ~30 ns measured — `n += 1; sum += v; sum_sq += v*v` on the indexed bucket) — see [cost-class.md](../cost-class.md#tier-1-fast-40-nscall--38-ops) |
-| Memory per entity | **`O(1)`** — `[HourBucket; 24] + Option<(f64, usize)>` ≈ 600 bytes per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md). Boxed inside `AggOp` per Phase 12.9 to fit the 80-byte enum cap |
+| Memory per entity | **`O(1)`** — `[HourBucket; 24] + Option<(f64, usize)>` ≈ 600 bytes per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md). Boxed inside `AggOp` per v0 to fit the 80-byte enum cap |
 | Lifetime mode | **Required** — `bv.seasonal_deviation` has no `window=` kwarg in v0; lifetime is the only mode |
 
 ## Examples

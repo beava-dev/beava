@@ -85,8 +85,8 @@ def UserAmtEwma(txns) -> bv.Table:
     )
 
 # Push events
-app.push("Txn", {"user_id": "alice", "amount": 100.0})  # value = 100
-app.push("Txn", {"user_id": "alice", "amount": 200.0})  # value blends toward 200
+app.push("Txn", {"user_id": "alice", "amount": 100.0}) # value = 100
+app.push("Txn", {"user_id": "alice", "amount": 200.0}) # value blends toward 200
 
 # Query
 result = app.get("UserAmtEwma", "alice")

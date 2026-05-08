@@ -214,7 +214,7 @@ events report <code>true</code> (may-have-been-seen) for repeats.</p>
 </tr>
 <tr>
 <td>Lifetime mode (no <code>window=</code> kwarg)</td>
-<td><strong>Required</strong> — bloom is always lifetime; per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a> the structural cap is declared at register time</td>
+<td><strong>Required</strong> — bloom is always lifetime; per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a> the structural cap is declared at register time</td>
 </tr>
 </tbody>
 </table>
@@ -241,7 +241,7 @@ app.push(&quot;Login&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;devic
 
 # Query (returns bool result of the LAST matching event's check)
 result = app.get(&quot;UserDeviceCheck&quot;, &quot;alice&quot;)
-# result == {&quot;seen_device_before&quot;: false}  # macbook-pro was new
+# result == {&quot;seen_device_before&quot;: false} # macbook-pro was new
 </code></pre>
 <h3 id="example-2-is-this-a-novel-destination-country-for-this-card" tabindex="-1"><a class="header-anchor" href="#example-2-is-this-a-novel-destination-country-for-this-card" aria-hidden="true">#</a> Example 2: Is this a novel destination country for this card?</h3>
 <pre><code class="language-python">@bv.table(key=&quot;card_id&quot;)

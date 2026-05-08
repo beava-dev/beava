@@ -148,28 +148,28 @@ just wrote next to your shell):</p>
       path: str
       dwell_ms: int
 
-  @bv.table   # no key= → one row, site-wide
+  @bv.table # no key= → one row, site-wide
   def SiteMetrics(e: PageView):
       return e.agg(
-          median_dwell_1h  = bv.quantile(&quot;dwell_ms&quot;, q=0.5, window=&quot;1h&quot;),
+          median_dwell_1h = bv.quantile(&quot;dwell_ms&quot;, q=0.5, window=&quot;1h&quot;),
           page_views_today = bv.count(window=&quot;24h&quot;),
-          top_page_1h      = bv.top_k(&quot;path&quot;, k=1, window=&quot;1h&quot;),
+          top_page_1h = bv.top_k(&quot;path&quot;, k=1, window=&quot;1h&quot;),
       )
 
   POST /register → 201 (registry_version=1)
 
 [2/4] Push 5 events
 ───────────────────
-  POST /push  {event:&quot;PageView&quot;, data:{session_id:&quot;s_1&quot;, …}} → ack_lsn=…
+  POST /push {event:&quot;PageView&quot;, data:{session_id:&quot;s_1&quot;, …}} → ack_lsn=…
   …
 
 [3/4] Query the global row
 ──────────────────────────
-  POST /get  {table:&quot;SiteMetrics&quot;, key:&quot;&quot;}
+  POST /get {table:&quot;SiteMetrics&quot;, key:&quot;&quot;}
   → {
-      &quot;median_dwell_1h&quot;:  2110.0,
+      &quot;median_dwell_1h&quot;: 2110.0,
       &quot;page_views_today&quot;: 5,
-      &quot;top_page_1h&quot;:      [{&quot;value&quot;: &quot;/&quot;, &quot;count&quot;: 2}]
+      &quot;top_page_1h&quot;: [{&quot;value&quot;: &quot;/&quot;, &quot;count&quot;: 2}]
     }
 
 [4/4] Now run it for real
@@ -207,7 +207,7 @@ container. The <code>:edge</code> tag rebuilds from <code>main</code> on every p
 <p>Step 1 dropped a Python file in your shell's working directory:</p>
 <pre><code class="language-python"># beava_quickstart.py — same pipeline as `beava quickstart`.
 # Run a real server in another terminal (`beava`) and run this file:
-#     $ python beava_quickstart.py
+# $ python beava_quickstart.py
 
 import beava as bv
 
@@ -219,12 +219,12 @@ class PageView:
     dwell_ms: int
 
 
-@bv.table   # no key= → one row, site-wide
+@bv.table # no key= → one row, site-wide
 def SiteMetrics(e: PageView):
     return e.agg(
-        median_dwell_1h  = bv.quantile(&quot;dwell_ms&quot;, q=0.5, window=&quot;1h&quot;),
+        median_dwell_1h = bv.quantile(&quot;dwell_ms&quot;, q=0.5, window=&quot;1h&quot;),
         page_views_today = bv.count(window=&quot;24h&quot;),
-        top_page_1h      = bv.top_k(&quot;path&quot;, k=1, window=&quot;1h&quot;),
+        top_page_1h = bv.top_k(&quot;path&quot;, k=1, window=&quot;1h&quot;),
     )
 
 
@@ -232,11 +232,11 @@ app = bv.App(&quot;127.0.0.1:8080&quot;)
 app.register(PageView, SiteMetrics)
 
 for sid, path, dwell in [
-    (&quot;s_1&quot;, &quot;/&quot;,        1240),
+    (&quot;s_1&quot;, &quot;/&quot;, 1240),
     (&quot;s_2&quot;, &quot;/pricing&quot;, 3380),
-    (&quot;s_3&quot;, &quot;/docs&quot;,     890),
-    (&quot;s_4&quot;, &quot;/&quot;,        2110),
-    (&quot;s_5&quot;, &quot;/docs&quot;,    5620),
+    (&quot;s_3&quot;, &quot;/docs&quot;, 890),
+    (&quot;s_4&quot;, &quot;/&quot;, 2110),
+    (&quot;s_5&quot;, &quot;/docs&quot;, 5620),
 ]:
     app.push(&quot;PageView&quot;, {&quot;session_id&quot;: sid, &quot;path&quot;: path, &quot;dwell_ms&quot;: dwell})
 
@@ -296,7 +296,7 @@ def CampaignStats(imp: Impression):
         bid_mean_1h=bv.mean(&quot;bid&quot;, window=&quot;1h&quot;),
     )
 
-print(app.get(&quot;CampaignStats&quot;, &quot;c1&quot;))  # -&gt; {&quot;impressions_1h&quot;: 2, ...}
+print(app.get(&quot;CampaignStats&quot;, &quot;c1&quot;)) # -&gt; {&quot;impressions_1h&quot;: 2, ...}
 </code></pre>
 <p>Per <a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-003-global-aggregation-and-bv-lit.md">ADR-003</a>,
 all 54 operators work with both shapes. See
@@ -306,9 +306,9 @@ when to pick which.</p>
 <p>A self-contained tour with realistic-shape data:</p>
 <pre><code class="language-python">import beava as bv
 
-bv.demo(&quot;adtech&quot;)     # ad-impression / click-rate aggregations
-bv.demo(&quot;fraud&quot;)      # high-cardinality velocity + sketch
-bv.demo(&quot;ecommerce&quot;)  # purchase / basket aggregations
+bv.demo(&quot;adtech&quot;) # ad-impression / click-rate aggregations
+bv.demo(&quot;fraud&quot;) # high-cardinality velocity + sketch
+bv.demo(&quot;ecommerce&quot;) # purchase / basket aggregations
 </code></pre>
 <p>Each demo registers descriptors, pushes ~10 events, and queries the
 resulting features. Source:

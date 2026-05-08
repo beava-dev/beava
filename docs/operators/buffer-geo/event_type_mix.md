@@ -32,13 +32,13 @@ dropped**; their events still increment `total`, matching SQL `OTHER`
 collapse semantics. This means the proportions do not necessarily sum to
 `1.0` once the cap is hit — they sum to `(1 − dropped/total)` for the cap.
 v0 surfaces this via the per-source cap-hit metric introduced in
-[Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md); the
+[V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md); the
 metric increments whenever the cap-and-drop path runs.
 
 You can also supply `categories=[...]` to **lock** the allowlist at register
 time: events whose category falls outside the allowlist are dropped on the
 counting side (they still increment `total`, like the cap-and-drop path).
-Plan 19.2-05 (D-04b) backs the allowlist with an `AHashSet` for O(1)
+A backs the allowlist with an `AHashSet` for O(1)
 membership tests on the apply path; the serde-stable `Vec<String>` is kept
 for snapshot back-compat. Allowlist-mode is the recommended pattern when you
 know the category set in advance — it removes the cap-and-drop ambiguity.
@@ -47,11 +47,11 @@ know the category set in advance — it removes the cap-and-drop ambiguity.
 update is Tier 3 (~70 ns floor / ~150 ns measured per
 [cost-class.md](../cost-class.md)) — `BTreeMap` key insert is the
 irreducible cost (string-key allocation on cap-miss, `AHashSet::contains`
-when an allowlist is set). Phase 12.9 boxed `EventTypeMixState` so the
+when an allowlist is set). v0 boxed `EventTypeMixState` so the
 `AggOp::EventTypeMix` variant fits the 80-byte enum cap (the state itself
 lives on the heap behind a `Box`); see
 `crates/beava-core/src/agg_op.rs` line 483 and
-[Phase 12.9 SUMMARY](../../../.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md).
+[SUMMARY](../../../.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md).
 There is no `window=` kwarg in v0 — `bv.event_type_mix` is **lifetime-only**.
 For a "category mix in the last 24 h", compose with
 `@bv.event(cold_after="24h")` per
@@ -79,7 +79,7 @@ detect this case.
 | Resource | Bound |
 |----------|-------|
 | CPU per event | **Tier 3** (~70 ns floor / ~150 ns measured — `BTreeMap` key insert + cap-or-allowlist check) — see [cost-class.md](../cost-class.md#tier-3-algorithmic-floor-100-300-nscall--9-ops). String-key allocation is the irreducible cost on the accept path |
-| Memory per entity | **`BoundedByConfig("max_categories", 256)`** per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) — `BTreeMap` of size ≤ `max_categories` (or ≤ `len(categories)` when allowlisted). Boxed inside `AggOp` per Phase 12.9 |
+| Memory per entity | **`BoundedByConfig("max_categories", 256)`** per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) — `BTreeMap` of size ≤ `max_categories` (or ≤ `len(categories)` when allowlisted). Boxed inside `AggOp` per v0 |
 | Lifetime mode | **Required** — `bv.event_type_mix` has no `window=` kwarg in v0; lifetime is the only mode |
 
 ## Examples
@@ -92,7 +92,7 @@ import beava as bv
 @bv.event
 class Txn:
     user_id: str
-    txn_type: str  # "card" | "p2p" | "crypto" | "ach" | ...
+    txn_type: str # "card" | "p2p" | "crypto" | "ach" | ...
 
 @bv.table(key="user_id")
 def UserTxnTypeMix(txn) -> bv.Table:
@@ -148,7 +148,7 @@ See [examples/wire/register-fraud-team.request.json](../../../examples/wire/regi
 ## Edge cases
 
 - **Empty stream / cold-start:** result is `{}` (empty dict) — never `null`.
-- **`max_categories` cap reached:** new categories are dropped silently from `counts` but still increment `total`. Proportions sum to `(1 − dropped/total)`, not to `1.0`. The Phase 12.8 cap-hit metric increments per drop — wire this to your alerting if the cap-hit rate is non-zero in production.
+- **`max_categories` cap reached:** new categories are dropped silently from `counts` but still increment `total`. Proportions sum to `(1 − dropped/total)`, not to `1.0`. The v0 cap-hit metric increments per drop — wire this to your alerting if the cap-hit rate is non-zero in production.
 - **`categories=[...]` allowlist set:** events outside the allowlist are dropped from `counts` but still increment `total`. Identical surfacing semantics to the cap-and-drop path; the allowlist removes the ambiguity by forcing a known schema.
 - **Allowlist + cap interaction:** when both `categories=` and `max_categories=` are set, the allowlist takes precedence — `len(categories)` is the effective cap (the cap-and-drop path is unreachable).
 - **Non-string source field:** `i64` and `bool` are coerced to their string form (`"42"`, `"true"`); other types (`f64`, `bytes`, `null`, `list`, `map`) are silently dropped (no `total` increment either, since `str_from_row` returns `None`).

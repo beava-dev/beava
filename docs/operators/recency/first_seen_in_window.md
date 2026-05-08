@@ -7,7 +7,7 @@
 ```python
 bv.first_seen_in_window(
     *,
-    window: str,                    # REQUIRED — register-time kwarg
+    window: str, # REQUIRED — register-time kwarg
     where: bv.Col | None = None,
 ) -> AggDescriptor
 ```
@@ -63,7 +63,7 @@ returns `false` (never `null`).
 | Resource | Bound |
 |----------|-------|
 | CPU per event | **Tier 1** (~8 ns floor / ~30 ns measured) — see [cost-class.md](../cost-class.md#tier-1-fast-40-nscall--38-ops) |
-| Memory per entity | `O(1)` — single `Option<i64>` slot in `FirstSeenInWindowState` per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) (the `window_ms` parameter is shared with the descriptor, not per-entity state) |
+| Memory per entity | `O(1)` — single `Option<i64>` slot in `FirstSeenInWindowState` per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) (the `window_ms` parameter is shared with the descriptor, not per-entity state) |
 | Lifetime mode | **Special** — windowed semantics, but `O(1)` lifetime state. The `window=` kwarg is **required** at register time. |
 
 ## Examples
@@ -141,7 +141,7 @@ See [examples/wire/register-fraud-team.request.json](../../../examples/wire/regi
 - **Reads flip false → true and back without new events:** the slot stays the same, but query-time `now_ms() - last_ms` grows; once it crosses the threshold, the read returns false. This is intentional — windowed-recency is the question being asked.
 - **Server-time, NOT event-time:** the captured value is server `now_ms()` at apply per [`project_redis_shaped_no_event_time_ever`](../../../.planning/PROJECT.md). Producers cannot influence the captured timestamp via the payload.
 - **Cold-entity eviction:** if [`@bv.event(cold_after=...)`](../../../.planning/REQUIREMENTS.md) evicts the entity, the slot is dropped; the next event after eviction starts a fresh `last_ms` (Redis-TTL pattern, V0-MEM-GOV-01).
-- **Lifetime state, windowed semantics:** unlike Phase 5/10 windowed ops (which carry up to 64 buckets), `first_seen_in_window` is `O(1)` because it only needs the last arrival timestamp + a constant window threshold to decide.
+- **Lifetime state, windowed semantics:** unlike v0/10 windowed ops (which carry up to 64 buckets), `first_seen_in_window` is `O(1)` because it only needs the last arrival timestamp + a constant window threshold to decide.
 
 ## See also
 

@@ -12,7 +12,7 @@ The 5 point/ordinal ops return specific events from the entity's event stream â€
 
 Three of five (`first_n`, `last_n`, `lag`) require an explicit `n` kwarg per [V0-MEM-GOV-02 BoundedByRequiredKwarg("n")](../../../.planning/REQUIREMENTS.md) â€” the lifetime-aggregation memory contract. Without `n` the register-time JSON-prelude shim (`pre_check_unbounded_op_in_lifetime_mode`) rejects the payload with the structured code `unbounded_op_in_lifetime_mode`.
 
-All 5 ops are **lifetime-only** in v0 (no `window=` kwarg). For sliding-window "values in the last N ms" semantics, see [`bv.most_recent_n`](../buffer-geo/most_recent_n.md) (Phase 11 buffer family). For arrival-timestamp variants instead of values, see the [recency family](../recency/).
+All 5 ops are **lifetime-only** in v0 (no `window=` kwarg). For sliding-window "values in the last N ms" semantics, see [`bv.most_recent_n`](../buffer-geo/most_recent_n.md) (v0 buffer family). For arrival-timestamp variants instead of values, see the [recency family](../recency/).
 
 ## See also
 

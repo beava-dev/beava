@@ -201,7 +201,7 @@ result is <code>null</code> (Python <code>None</code>) — sample variance is un
 </tr>
 <tr>
 <td>Lifetime mode (<code>window=&quot;forever&quot;</code>)</td>
-<td><strong>Allowed</strong> — <code>O(1)</code> footprint per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a></td>
+<td><strong>Allowed</strong> — <code>O(1)</code> footprint per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a></td>
 </tr>
 </tbody>
 </table>
@@ -228,7 +228,7 @@ app.push(&quot;Txn&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;amount&
 
 # Query
 result = app.get(&quot;TxnSpread&quot;, &quot;alice&quot;)
-# result == {&quot;amount_var_1h&quot;: 400.0}  # sample variance: ((10-30)^2 + (30-30)^2 + (50-30)^2) / 2
+# result == {&quot;amount_var_1h&quot;: 400.0} # sample variance: ((10-30)^2 + (30-30)^2 + (50-30)^2) / 2
 </code></pre>
 <h3 id="example-2-latency-variance-for-successful-payments-only" tabindex="-1"><a class="header-anchor" href="#example-2-latency-variance-for-successful-payments-only" aria-hidden="true">#</a> Example 2: Latency-variance for successful payments only</h3>
 <pre><code class="language-python">@bv.table(key=&quot;user_id&quot;)

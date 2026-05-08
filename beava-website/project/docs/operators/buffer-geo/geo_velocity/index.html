@@ -123,8 +123,8 @@
 <h2 id="signature" tabindex="-1"><a class="header-anchor" href="#signature" aria-hidden="true">#</a> Signature</h2>
 <pre><code class="language-python">bv.geo_velocity(
     *,
-    lat: str,                        # REQUIRED — name of the latitude field on the event
-    lon: str,                        # REQUIRED — name of the longitude field on the event
+    lat: str, # REQUIRED — name of the latitude field on the event
+    lon: str, # REQUIRED — name of the longitude field on the event
     where: bv.Col | None = None,
 ) -&gt; AggDescriptor
 </code></pre>
@@ -150,9 +150,9 @@ signal-to-noise ratio of fraud-detection thresholds.</p>
 <p><code>bv.geo_velocity</code> belongs to the <strong>bounded-buffer + geo</strong> family. State
 is <code>O(1)</code> per entity — three <code>f64</code> slots for the previous <code>(lat, lon, t)</code>
 plus one <code>f64</code> for the running max km/h, behind a <code>Box</code> for the
-<code>AggOp::GeoVelocity</code> variant per Phase 12.9 boxing (the variant fits the
+<code>AggOp::GeoVelocity</code> variant per v0 boxing (the variant fits the
 80-byte <code>AggOp</code> enum cap; see <code>crates/beava-core/src/agg_op.rs</code> line 486
-and <a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md">Phase 12.9 SUMMARY</a>).
+and <a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md">SUMMARY</a>).
 Per-event update is <strong>Tier 2</strong> (~20 ns floor / ~45 ns measured per
 <a href="/docs/operators/cost-class/#tier-2-moderate-30-100-nscall--6-ops">cost-class.md</a>) —
 two field reads + one haversine (<code>sin</code>/<code>cos</code>/<code>sqrt</code> identities) + one
@@ -178,7 +178,7 @@ next post-eviction matching event.</p>
 <td><code>str</code></td>
 <td><strong>Yes</strong></td>
 <td>—</td>
-<td>Name of the latitude field on the event (NOT a literal coordinate). Field value must be <code>f64</code> or <code>i64</code> decimal degrees in <code>[-90, 90]</code>. Resolved to a column index at register time per Plan 19.2-06 D-01 fast-path.</td>
+<td>Name of the latitude field on the event (NOT a literal coordinate). Field value must be <code>f64</code> or <code>i64</code> decimal degrees in <code>[-90, 90]</code>. Resolved to a column index at register time.</td>
 </tr>
 <tr>
 <td><code>lon</code></td>
@@ -217,7 +217,7 @@ is a non-negative <code>f64</code>.</p>
 </tr>
 <tr>
 <td>Memory per entity</td>
-<td><strong><code>O(1)</code></strong> — <code>Option&lt;(f64, f64, i64)&gt;</code> for the previous point + <code>f64</code> for max km/h. Boxed inside <code>AggOp</code> per Phase 12.9 (<code>crates/beava-core/src/agg_op.rs</code> line 486).</td>
+<td><strong><code>O(1)</code></strong> — <code>Option&lt;(f64, f64, i64)&gt;</code> for the previous point + <code>f64</code> for max km/h. Boxed inside <code>AggOp</code> per v0 (<code>crates/beava-core/src/agg_op.rs</code> line 486).</td>
 </tr>
 <tr>
 <td>Lifetime mode</td>
@@ -243,12 +243,12 @@ def CardMaxImpliedKmh(swipes) -&gt; bv.Table:
     )
 
 # Push events
-app.push(&quot;CardSwipe&quot;, {&quot;card_id&quot;: &quot;abc&quot;, &quot;latitude&quot;: 40.7128, &quot;longitude&quot;: -74.0060})  # NYC
+app.push(&quot;CardSwipe&quot;, {&quot;card_id&quot;: &quot;abc&quot;, &quot;latitude&quot;: 40.7128, &quot;longitude&quot;: -74.0060}) # NYC
 # 30 seconds later
-app.push(&quot;CardSwipe&quot;, {&quot;card_id&quot;: &quot;abc&quot;, &quot;latitude&quot;:  1.3521, &quot;longitude&quot;: 103.8198})  # Singapore
+app.push(&quot;CardSwipe&quot;, {&quot;card_id&quot;: &quot;abc&quot;, &quot;latitude&quot;: 1.3521, &quot;longitude&quot;: 103.8198}) # Singapore
 
 result = app.get(&quot;CardMaxImpliedKmh&quot;, &quot;abc&quot;)
-# result == {&quot;max_kmh&quot;: 1_867_000.0}  # ~1.86 million km/h — physically impossible
+# result == {&quot;max_kmh&quot;: 1_867_000.0} # ~1.86 million km/h — physically impossible
 </code></pre>
 <h3 id="example-2-per-user-max-kmh-with-a-where-filter" tabindex="-1"><a class="header-anchor" href="#example-2-per-user-max-kmh-with-a-where-filter" aria-hidden="true">#</a> Example 2: Per-user max km/h with a <code>where=</code> filter</h3>
 <pre><code class="language-python">@bv.table(key=&quot;user_id&quot;)
@@ -300,7 +300,7 @@ def UserMaxKmhMobile(events) -&gt; bv.Table:
 <li><a href="/docs/operators/buffer-geo/geo_spread/">bv.geo_spread</a> — RMS-dispersion sibling (how spread out are this entity's points around their mean centroid)</li>
 <li><a href="/docs/operators/buffer-geo/distance_from_home/">bv.distance_from_home</a> — current-event distance from a centroid of recent locations</li>
 <li><a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-01</a> — cold-entity eviction (<code>@bv.event(cold_after=...)</code>) for windowing the lifetime</li>
-<li><a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md">Phase 12.9 SUMMARY</a> — <code>AggOp::GeoVelocity</code> boxing context</li>
+<li><a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md">SUMMARY</a> — <code>AggOp::GeoVelocity</code> boxing context</li>
 <li><a href="/docs/pipeline-dsl/compilation-rules/">pipeline-dsl/compilation-rules.md</a> — chain compilation rules</li>
 </ul>
 

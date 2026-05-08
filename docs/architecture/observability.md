@@ -12,12 +12,12 @@ trace-id propagation contract.
 
 ## Overview
 
-| Endpoint     | Method | Purpose                                              |
+| Endpoint | Method | Purpose |
 | ------------ | ------ | ---------------------------------------------------- |
-| `/health`    | GET    | Liveness probe. 200 if the server process is up.      |
-| `/ready`     | GET    | Readiness probe. 200 only after recovery completes.   |
-| `/metrics`   | GET    | Prometheus exposition format. All families in one scrape. |
-| `/registry`  | GET    | Current registry version + node count + (debug) snapshot. |
+| `/health` | GET | Liveness probe. 200 if the server process is up. |
+| `/ready` | GET | Readiness probe. 200 only after recovery completes. |
+| `/metrics` | GET | Prometheus exposition format. All families in one scrape. |
+| `/registry` | GET | Current registry version + node count + (debug) snapshot. |
 
 All four endpoints respond with `X-Runtime: tokio` so operators can
 verify which runtime served the response (data-plane responses get
@@ -61,9 +61,9 @@ Prometheus exposition format (`text/plain; version=0.0.4`). All metric
 families in one scrape. Counters monotonically increase; gauges sample
 live; histograms expose `_bucket`, `_sum`, `_count`.
 
-### Phase 13-01 metric families
+### v0-01 metric families
 
-(Land in Phase 13.4 alongside the verb-route rename.)
+(Land in v0 alongside the verb-route rename.)
 
 - `beava_register_total` (counter) — count of register operations
   (success + fail; labeled by status).
@@ -74,10 +74,10 @@ live; histograms expose `_bucket`, `_sum`, `_count`.
 - `beava_get_latency_seconds` (histogram) — get / batch_get latency
   buckets.
 
-### Phase 12.8 memory-governance metric families (5)
+### memory-governance metric families (5)
 
-Land at Phase 12.8 Plan 06. All five are aggregate (no per-source
-labels in v0; per-source labels deferred to v0.0.x per Plan 06
+Land at v0 an internal plan. All five are aggregate (no per-source
+labels in v0; per-source labels deferred to v0.0.x per an internal plan
 PLANNER-SURFACED CONCERN 3):
 
 - **`beava_cold_entity_evictions_total`** (counter) — V0-MEM-GOV-01
@@ -87,15 +87,15 @@ PLANNER-SURFACED CONCERN 3):
   cap-hit events: entropy categories capped, plus future top_k /
   histogram cap-hits as those are wired.
 - **`beava_entity_count_resident`** (gauge) — resident entity count
-  snapshot. Sampled (not real-time) per Phase 12.8 Plan 06 to avoid
+  snapshot. Sampled (not real-time) per v0 an internal plan to avoid
   O(N_tables) read on every `/metrics` scrape.
 - **`beava_bucket_reclaim_total`** (counter) — V0-MEM-GOV-03 per-event
   bucket reclaims. Increments on `WindowedOp::evict_oldest_bucket`
   firings.
 - **`beava_bytes_per_entity_p99`** (gauge) — currently a static 7000
-  placeholder per Phase 12.8 Plan 06 PLANNER-SURFACED CONCERN.
+  placeholder per v0 an internal plan PLANNER-SURFACED CONCERN.
   Dynamic sampling (~30 LOC in `agg_state.rs::EntityCountResidentSnapshot`)
-  is deferred to Phase 13.4 / v0.0.x. The post-Phase-12.9 actual
+  is deferred to v0 / v0.0.x. The post-Phase-12.9 actual
   fraud-team weighted-avg is ~6 KB so the static value is no longer
   misleading, just not informative.
 
@@ -110,17 +110,17 @@ invariants the metrics observe.
   serialization latency (off the apply thread).
 - `beava_wal_synced_lsn` / `beava_wal_committed_lsn` /
   `beava_wal_acked_lsn` (gauges) — four-watermark LSN values per
-  Phase 18 WAL design.
+  v0 WAL design.
 
 ### Runtime identity
 
 - `beava_runtime_kind` (gauge, value=1 with label
-  `kind="hand-rolled"` or `"tokio"`) — Plan 18-04.6 Task 4.6.5;
+  `kind="hand-rolled"` or `"tokio"`) — an internal plan.6 Task 4.6.5;
   identifies which runtime is serving the data plane.
 
 ### Op-specific metric families
 
-- `beava_entropy_categories_capped_total` (counter) — Phase 19.2
+- `beava_entropy_categories_capped_total` (counter) — v0
   D-05a; entropy op cap-hit events.
 - (More land per phase; see `metrics_handler` in
   [`crates/beava-server/src/http_admin.rs`](../../crates/beava-server/src/http_admin.rs)
@@ -176,11 +176,11 @@ trace id → easy grep across services.
 
 ## Implementation notes
 
-The 5 Phase 12.8 metric families use **process-static atomic counters**
+The 5 v0 metric families use **process-static atomic counters**
 (`AtomicU64` / `AtomicUsize` with `inc()` / `count()` shape) instead of
-plumbing through `AdminState`. This was a Plan 06 Rule 3 auto-fix —
+plumbing through `AdminState`. This was a an internal plan Rule 3 auto-fix —
 process-static avoids the 10-file cascade that explicit plumbing would
-have required. The pattern follows Phase 19.2 D-05a's
+have required. The pattern follows v0 D-05a's
 `EntropyStateWrap::categories_capped_count` precedent.
 
 The middleware that stamps `X-Runtime: tokio` is in
@@ -195,7 +195,7 @@ path in `apply_shard.rs`.
 - [mio-data-plane.md](./mio-data-plane.md) — the admin sidecar's
   separation from the data plane.
 - [memory-budget.md](./memory-budget.md) — the V0-MEM-GOV invariants
-  the 5 Phase 12.8 metrics observe.
+  the 5 v0 metrics observe.
 - [wal-snapshot.md](./wal-snapshot.md) — the WAL / snapshot metrics
   context (four-watermark LSNs).
 - [`CLAUDE.md` § Memory Governance Invariant](../../CLAUDE.md) — the

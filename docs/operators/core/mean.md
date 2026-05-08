@@ -52,7 +52,7 @@ behavior.
 |----------|-------|
 | CPU per event | **Tier 1** (~8 ns algorithm floor / ~25 ns measured) — see [cost-class.md](../cost-class.md#tier-1-fast-40-nscall--38-ops) |
 | Memory per entity | `O(1)` — `(sum, count)` plus bucket array (≤64 buckets) |
-| Lifetime mode (`window="forever"`) | **Allowed** — `O(1)` footprint per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
+| Lifetime mode (`window="forever"`) | **Allowed** — `O(1)` footprint per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
 
 ## Examples
 

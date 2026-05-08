@@ -29,7 +29,7 @@ contract — no required register-time kwarg, no fallback default. The state
 is `[u64; 24]`; per-event update is a single saturating array write.
 
 `bv.hour_of_day_histogram` belongs to the **bounded-buffer** family. It is
-the fastest Phase 11 buffer op — Tier 1 floor (~4 ns / ~25 ns measured per
+the fastest v0 buffer op — Tier 1 floor (~4 ns / ~25 ns measured per
 [cost-class.md](../cost-class.md)) — because the bin index is a direct
 modular arithmetic, no field extraction, no string allocation. There is no
 `window=` kwarg in v0 — the histogram is **lifetime-only**. For a
@@ -47,11 +47,11 @@ z-score-against-this-baseline companion.
 | `where` | `bv.Col` | No | `None` | Boolean expression on event fields; only matching events increment a bin. |
 
 No `field=` kwarg — the operator buckets on event arrival time, not on a
-payload value. Phase 12.9 boxed `HourOfDayHistogramState` so the
+payload value. v0 boxed `HourOfDayHistogramState` so the
 `AggOp::HourOfDayHistogram` variant fits within the 80-byte enum cap (the
 state itself is 24 × 8 = 192 bytes, allocated on the heap behind a `Box`).
 See `crates/beava-core/src/agg_op.rs` line 480 and
-[Phase 12.9 SUMMARY](../../../.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md).
+[SUMMARY](../../../.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md).
 
 ## Returns
 
@@ -65,7 +65,7 @@ Cold-start (no events) returns the dict with all 24 keys at `0`.
 | Resource | Bound |
 |----------|-------|
 | CPU per event | **Tier 1** (~4 ns floor / ~25 ns measured — direct `[u64; 24]` array write) — see [cost-class.md](../cost-class.md#tier-1-fast-40-nscall--38-ops) |
-| Memory per entity | **`O(1)`** — fixed `[u64; 24]` = 192 bytes per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md). Boxed inside `AggOp` per Phase 12.9 to fit the 80-byte enum cap |
+| Memory per entity | **`O(1)`** — fixed `[u64; 24]` = 192 bytes per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md). Boxed inside `AggOp` per v0 to fit the 80-byte enum cap |
 | Lifetime mode | **Required** — `bv.hour_of_day_histogram` has no `window=` kwarg in v0; lifetime is the only mode |
 
 ## Examples
@@ -139,7 +139,7 @@ See [examples/wire/register-fraud-team.request.json](../../../examples/wire/regi
 
 ## See also
 
-- [cost-class.md](../cost-class.md) — performance tier (Tier 1 — fastest Phase 11 buffer op)
+- [cost-class.md](../cost-class.md) — performance tier (Tier 1 — fastest v0 buffer op)
 - [bv.dow_hour_histogram](./dow_hour_histogram.md) — 168-bin day-of-week × hour companion (weekly granularity)
 - [bv.seasonal_deviation](./seasonal_deviation.md) — z-score against this hour-of-day baseline (consumes `HourBucket` state)
 - [bv.histogram](./histogram.md) — value-bucket companion (configurable bucket edges on a numeric field)

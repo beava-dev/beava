@@ -123,8 +123,8 @@
 <h2 id="signature" tabindex="-1"><a class="header-anchor" href="#signature" aria-hidden="true">#</a> Signature</h2>
 <pre><code class="language-python">bv.geo_distance(
     *,
-    lat: str,                        # REQUIRED — name of the latitude field on the event
-    lon: str,                        # REQUIRED — name of the longitude field on the event
+    lat: str, # REQUIRED — name of the latitude field on the event
+    lon: str, # REQUIRED — name of the longitude field on the event
     where: bv.Col | None = None,
 ) -&gt; AggDescriptor
 </code></pre>
@@ -152,9 +152,9 @@ trip).</p>
 <p><code>bv.geo_distance</code> belongs to the <strong>bounded-buffer + geo</strong> family.
 State is <code>O(1)</code> per entity — <code>Option&lt;(f64, f64)&gt;</code> for the previous
 point + <code>f64</code> for the running total — behind a <code>Box</code> for the
-<code>AggOp::GeoDistance</code> variant per Phase 12.9 boxing (the variant fits
+<code>AggOp::GeoDistance</code> variant per v0 boxing (the variant fits
 the 80-byte <code>AggOp</code> enum cap; see <code>crates/beava-core/src/agg_op.rs</code>
-line 487 and <a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md">Phase 12.9 SUMMARY</a>).
+line 487 and <a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md">SUMMARY</a>).
 Per-event update is <strong>Tier 2</strong> (~18 ns floor / ~42 ns measured per
 <a href="/docs/operators/cost-class/#tier-2-moderate-30-100-nscall--6-ops">cost-class.md</a>) —
 two field reads + one haversine + one floating-point add. There is no
@@ -178,7 +178,7 @@ accumulation per <a href="https://github.com/beava-dev/beava/blob/main/.planning
 <td><code>str</code></td>
 <td><strong>Yes</strong></td>
 <td>—</td>
-<td>Name of the latitude field on the event (NOT a literal coordinate). Field value must be <code>f64</code> or <code>i64</code> decimal degrees in <code>[-90, 90]</code>. Resolved to a column index at register time per Plan 19.2-06 D-01 fast-path.</td>
+<td>Name of the latitude field on the event (NOT a literal coordinate). Field value must be <code>f64</code> or <code>i64</code> decimal degrees in <code>[-90, 90]</code>. Resolved to a column index at register time.</td>
 </tr>
 <tr>
 <td><code>lon</code></td>
@@ -217,7 +217,7 @@ to the total.</p>
 </tr>
 <tr>
 <td>Memory per entity</td>
-<td><strong><code>O(1)</code></strong> — <code>Option&lt;(f64, f64)&gt;</code> for the previous point + <code>f64</code> for the running total. Boxed inside <code>AggOp</code> per Phase 12.9 (<code>crates/beava-core/src/agg_op.rs</code> line 487).</td>
+<td><strong><code>O(1)</code></strong> — <code>Option&lt;(f64, f64)&gt;</code> for the previous point + <code>f64</code> for the running total. Boxed inside <code>AggOp</code> per v0 (<code>crates/beava-core/src/agg_op.rs</code> line 487).</td>
 </tr>
 <tr>
 <td>Lifetime mode</td>
@@ -247,7 +247,7 @@ result = app.get(&quot;DriverTotalKm&quot;, &quot;driver_42&quot;)
 # result == {&quot;total_km&quot;: 12.34}
 </code></pre>
 <h3 id="example-2-distance-per-session-scoped-via-cold-entity-ttl" tabindex="-1"><a class="header-anchor" href="#example-2-distance-per-session-scoped-via-cold-entity-ttl" aria-hidden="true">#</a> Example 2: Distance per session, scoped via cold-entity TTL</h3>
-<pre><code class="language-python">@bv.event(cold_after=&quot;2h&quot;)        # entity state drops after 2h of inactivity
+<pre><code class="language-python">@bv.event(cold_after=&quot;2h&quot;) # entity state drops after 2h of inactivity
 class TripPing:
     trip_id: str
     lat: float
@@ -299,7 +299,7 @@ def TripPathLength(pings) -&gt; bv.Table:
 <li><a href="/docs/operators/buffer-geo/geo_spread/">bv.geo_spread</a> — RMS-dispersion sibling (how spread out are this entity's points around their mean centroid)</li>
 <li><a href="/docs/operators/buffer-geo/distance_from_home/">bv.distance_from_home</a> — current-event distance from a centroid of recent locations</li>
 <li><a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-01</a> — cold-entity eviction (<code>@bv.event(cold_after=...)</code>) for windowing the lifetime</li>
-<li><a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md">Phase 12.9 SUMMARY</a> — <code>AggOp::GeoDistance</code> boxing context</li>
+<li><a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md">SUMMARY</a> — <code>AggOp::GeoDistance</code> boxing context</li>
 <li><a href="/docs/pipeline-dsl/compilation-rules/">pipeline-dsl/compilation-rules.md</a> — chain compilation rules</li>
 </ul>
 

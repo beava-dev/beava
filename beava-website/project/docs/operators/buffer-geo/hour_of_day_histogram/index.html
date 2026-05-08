@@ -141,7 +141,7 @@ stream length, so <code>bv.hour_of_day_histogram</code> qualifies as <code>O(1)<
 contract — no required register-time kwarg, no fallback default. The state
 is <code>[u64; 24]</code>; per-event update is a single saturating array write.</p>
 <p><code>bv.hour_of_day_histogram</code> belongs to the <strong>bounded-buffer</strong> family. It is
-the fastest Phase 11 buffer op — Tier 1 floor (~4 ns / ~25 ns measured per
+the fastest v0 buffer op — Tier 1 floor (~4 ns / ~25 ns measured per
 <a href="/docs/operators/cost-class/">cost-class.md</a>) — because the bin index is a direct
 modular arithmetic, no field extraction, no string allocation. There is no
 <code>window=</code> kwarg in v0 — the histogram is <strong>lifetime-only</strong>. For a
@@ -173,11 +173,11 @@ z-score-against-this-baseline companion.</p>
 </tbody>
 </table>
 <p>No <code>field=</code> kwarg — the operator buckets on event arrival time, not on a
-payload value. Phase 12.9 boxed <code>HourOfDayHistogramState</code> so the
+payload value. v0 boxed <code>HourOfDayHistogramState</code> so the
 <code>AggOp::HourOfDayHistogram</code> variant fits within the 80-byte enum cap (the
 state itself is 24 × 8 = 192 bytes, allocated on the heap behind a <code>Box</code>).
 See <code>crates/beava-core/src/agg_op.rs</code> line 480 and
-<a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md">Phase 12.9 SUMMARY</a>.</p>
+<a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md">SUMMARY</a>.</p>
 <h2 id="returns" tabindex="-1"><a class="header-anchor" href="#returns" aria-hidden="true">#</a> Returns</h2>
 <p>A <code>dict[str, int]</code> keyed by zero-padded UTC hour string (<code>&quot;00&quot;</code>, <code>&quot;01&quot;</code>,
 …, <code>&quot;23&quot;</code>) with <code>i64</code> count values. Wire form is <code>Value::Map</code> with
@@ -198,7 +198,7 @@ Cold-start (no events) returns the dict with all 24 keys at <code>0</code>.</p>
 </tr>
 <tr>
 <td>Memory per entity</td>
-<td><strong><code>O(1)</code></strong> — fixed <code>[u64; 24]</code> = 192 bytes per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a>. Boxed inside <code>AggOp</code> per Phase 12.9 to fit the 80-byte enum cap</td>
+<td><strong><code>O(1)</code></strong> — fixed <code>[u64; 24]</code> = 192 bytes per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a>. Boxed inside <code>AggOp</code> per v0 to fit the 80-byte enum cap</td>
 </tr>
 <tr>
 <td>Lifetime mode</td>
@@ -265,7 +265,7 @@ def AccountSuccessHourly(reqs) -&gt; bv.Table:
 </ul>
 <h2 id="see-also" tabindex="-1"><a class="header-anchor" href="#see-also" aria-hidden="true">#</a> See also</h2>
 <ul>
-<li><a href="/docs/operators/cost-class/">cost-class.md</a> — performance tier (Tier 1 — fastest Phase 11 buffer op)</li>
+<li><a href="/docs/operators/cost-class/">cost-class.md</a> — performance tier (Tier 1 — fastest v0 buffer op)</li>
 <li><a href="/docs/operators/buffer-geo/dow_hour_histogram/">bv.dow_hour_histogram</a> — 168-bin day-of-week × hour companion (weekly granularity)</li>
 <li><a href="/docs/operators/buffer-geo/seasonal_deviation/">bv.seasonal_deviation</a> — z-score against this hour-of-day baseline (consumes <code>HourBucket</code> state)</li>
 <li><a href="/docs/operators/buffer-geo/histogram/">bv.histogram</a> — value-bucket companion (configurable bucket edges on a numeric field)</li>

@@ -118,9 +118,9 @@
 <article class="docs-prose">
 <h1>beava HTTP API</h1>
 <blockquote>
-<p><strong>Status:</strong> Authoritative for v0. Documents the <strong>post-13.4 target</strong> route
+<p><strong>Status:</strong> Authoritative for v0. Documents the <strong>v0 target</strong> route
 table — verb-style POST + JSON body for all 6 data-plane operations.
-<strong>Last reviewed:</strong> 2026-05-03 (Phase 13.0).</p>
+<strong>Last reviewed:</strong> 2026-05-03.</p>
 </blockquote>
 <h2 id="overview" tabindex="-1"><a class="header-anchor" href="#overview" aria-hidden="true">#</a> Overview</h2>
 <p>beava ships HTTP/1.1 + JSON as its primary data-plane transport so that any
@@ -185,7 +185,7 @@ opcode table — one transport reads as a literal translation of the other.</p>
 </tbody>
 </table>
 <p>The <strong>admin sidecar</strong> is a separate axum server on a separate port
-(<code>cfg.admin_addr</code>) per the <a href="../CLAUDE.md">Phase 12.6 mio-only invariant</a>. It
+(<code>cfg.admin_addr</code>) per the <a href="../CLAUDE.md">mio-only invariant</a>. It
 exposes 4 <code>GET</code> endpoints — <code>/health</code>, <code>/ready</code>, <code>/metrics</code>, <code>/registry</code> — and
 is the only place where tokio + axum touch the runtime. The data-plane port
 itself is hand-rolled mio + non-blocking I/O. See
@@ -196,16 +196,14 @@ schemas, error envelope, opcode-level semantics) live in
 <a href="/docs/wire-spec/"><code>docs/wire-spec.md</code></a>. Every route listed here is a verb-form of
 an opcode in the wire spec, and each route description below cross-links to the
 matching opcode section.</p>
-<h3 id="a-note-on-the-post-134-target-state" tabindex="-1"><a class="header-anchor" href="#a-note-on-the-post-134-target-state" aria-hidden="true">#</a> A note on the post-13.4 target state</h3>
-<p>The current code (post-12.7) uses event-name-suffixed routes for push:
-<code>POST /push/{event_name}</code>. This is a Phase 12.6 carry-over. Phase 13.4 (engine
-prep) renames the routes mechanically to the verb-style form documented in this
-doc — <code>POST /push</code> with <code>event_name</code> in the body. Phase 13.0 (this phase)
-declares the <strong>target</strong> state so that downstream SDK ports (Phase 13.5 Python,
-Phase 13.6 TS + Go) can author against a stable contract while the engine
-rename ships in parallel. After Phase 13.4 lands, this doc and the engine match
-exactly. See the <a href="#note-on-event-name-routing">Note on event-name routing</a>
-section at the bottom for the migration rationale.</p>
+<h3 id="a-note-on-the-route-style" tabindex="-1"><a class="header-anchor" href="#a-note-on-the-route-style" aria-hidden="true">#</a> A note on the route style</h3>
+<p>v0 ships verb-style routes — <code>POST /push</code> with <code>event_name</code> in the body, not
+the older <code>POST /push/{event_name}</code> form. The legacy event-name-suffixed
+routes (<code>POST /push/{event_name}</code>, <code>POST /push-sync/{event_name}</code>,
+<code>POST /push-batch/{event_name}</code>) stay alive for back-compat and are
+documented in <a href="#note-on-event-name-routing">Note on event-name routing</a> at
+the bottom of this page. New code, including all 3 SDKs, uses the verb-style
+routes.</p>
 <h2 id="authentication-and-headers" tabindex="-1"><a class="header-anchor" href="#authentication-and-headers" aria-hidden="true">#</a> Authentication and headers</h2>
 <p>beava v0 ships <strong>unauthenticated</strong>. The OSS launch is intentionally an
 &quot;unauthenticated single-process server&quot; — operators front it with whatever
@@ -366,7 +364,7 @@ schema-dependent state.</p>
 <tbody>
 <tr>
 <td><code>unsupported_node_kind</code></td>
-<td>Body has <code>kind=&quot;upsert&quot;</code>, <code>kind=&quot;delete&quot;</code>, etc. — pre-12.7 surface that is permanently killed per <code>project_v0_events_only_scope</code>.</td>
+<td>Body has <code>kind=&quot;upsert&quot;</code>, <code>kind=&quot;delete&quot;</code>, etc. — pre-v0 surface that is permanently killed per <code>project_v0_events_only_scope</code>.</td>
 <td>Use <code>kind=event</code>, <code>kind=table</code> (aggregation-output only per ADR-001), or <code>kind=derivation</code>.</td>
 </tr>
 <tr>
@@ -397,7 +395,7 @@ schema-dependent state.</p>
 </tbody>
 </table>
 <p>See <a href="/docs/error-codes/">docs/error-codes.md</a> for the alphabetical structured-code
-list with full HTTP status mapping (Plan 13.0-12 — forward reference).</p>
+list with full HTTP status mapping (forthcoming).</p>
 <h3 id="post-push" tabindex="-1"><a class="header-anchor" href="#post-push" aria-hidden="true">#</a> POST /push</h3>
 <table>
 <thead>
@@ -433,17 +431,17 @@ list with full HTTP status mapping (Plan 13.0-12 — forward reference).</p>
 <a href="/docs/wire-spec/#op_push-0x0010"><code>OP_PUSH</code> request schema</a>. The full JSON Schema
 lives at
 <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/schemas/push.request.schema.json"><code>examples/wire/schemas/push.request.schema.json</code></a>.</p>
-<p>The body shape is <code>{event_name, fields: {...}}</code> in the post-13.4 verb-style
+<p>The body shape is <code>{event_name, fields: {...}}</code> in the v0 verb-style
 form. The <code>event_name</code> field MUST match a registered <code>@bv.event</code> source; the
 <code>fields</code> object MUST match its declared schema (same field names, compatible
 types). Type coercion on the JSON boundary is allowed in v0 — string <code>&quot;42&quot;</code>
 for an <code>i64</code> field is accepted (the JSON-to-Rust coercer handles common
 mismatches). Strict-mode rejection is v0.1+.</p>
 <blockquote>
-<p><strong>Pre-13.4 form:</strong> the current engine accepts <code>POST /push/{event_name}</code> with
+<p><strong>Pre-v0 form:</strong> the current engine accepts <code>POST /push/{event_name}</code> with
 body <code>{fields: {...}}</code> (no <code>event_name</code> key — it is in the URL path). Phase
-13.4 mechanically renames to the verb-style form documented above. SDKs ship
-against the post-13.4 form from day one (Plan 13.5 Python, Plan 13.6 TS + Go).</p>
+v0 mechanically renames to the verb-style form documented above. SDKs ship
+against the v0 form from day one (an internal plan Python, an internal plan TS + Go).</p>
 </blockquote>
 <p><strong>Response body (success):</strong> see the wire-spec
 <a href="/docs/wire-spec/#op_push-0x0010"><code>OP_PUSH</code> response schema</a>. The full JSON
@@ -451,7 +449,7 @@ Schema lives at
 <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/schemas/push.response.schema.json"><code>examples/wire/schemas/push.response.schema.json</code></a>.</p>
 <p>The success response carries <code>{ack_lsn, registry_version}</code>. <code>ack_lsn</code> is the
 server-assigned monotonic Log Sequence Number. v0 push is <strong><code>acks=1</code></strong> per
-Phase 6.1 (<code>SyncMode::Periodic</code>) — the response returns after the WAL append
+(<code>SyncMode::Periodic</code>) — the response returns after the WAL append
 returns success, before the periodic fsync flushes to disk. This is the
 intentional latency / durability tradeoff for v0; <code>acks=all</code> is reserved for
 v0.1+ via the wire-level opcode <code>OP_PUSH_SYNC = 0x0011</code>.</p>
@@ -495,7 +493,7 @@ v0.1+ via the wire-level opcode <code>OP_PUSH_SYNC = 0x0011</code>.</p>
   -H 'Content-Type: application/json' \
   -d '{&quot;event_name&quot;: &quot;Txn&quot;, &quot;fields&quot;: '&quot;$(cat examples/wire/push-success.request.json | jq .fields)&quot;'}'
 </code></pre>
-<p>Or, when the <code>event_name</code> is already inlined in the fixture (post-13.4
+<p>Or, when the <code>event_name</code> is already inlined in the fixture (v0
 fixtures bundle the field):</p>
 <pre><code class="language-bash">curl -X POST http://localhost:7380/push \
   -H 'Content-Type: application/json' \
@@ -504,7 +502,7 @@ fixtures bundle the field):</p>
 <blockquote>
 <p>Note: <code>examples/wire/push-success.request.json</code> currently carries only the
 <code>fields</code> object (matching the wire-level body which routes <code>event_name</code>
-separately on TCP). The HTTP transport in the post-13.4 target form expects
+separately on TCP). The HTTP transport in the v0 target form expects
 <code>event_name</code> inside the body; SDKs synthesise that from their <code>app.push(&quot;Txn&quot;, {...})</code>
 call. The two-line <code>jq</code> example above demonstrates the manual transform.</p>
 </blockquote>
@@ -969,7 +967,7 @@ does not validate any input.</p>
 <h2 id="admin-sidecar-endpoints-separate-port-get-shaped" tabindex="-1"><a class="header-anchor" href="#admin-sidecar-endpoints-separate-port-get-shaped" aria-hidden="true">#</a> Admin sidecar endpoints (separate port, GET-shaped)</h2>
 <p>The admin sidecar binds on <code>cfg.admin_addr</code> — a <strong>separate port</strong> from the
 data-plane HTTP listener. Per the
-<a href="../CLAUDE.md">Phase 12.6 mio-only Hot-Path Invariant</a>, the data plane is the
+<a href="../CLAUDE.md">mio-only Hot-Path Invariant</a>, the data plane is the
 hand-rolled mio + non-blocking I/O loop and the admin sidecar is the only
 place tokio + axum run in the runtime. This separation is enforced by the
 architectural test
@@ -1046,7 +1044,7 @@ service from receiving traffic until the cold-start replay finishes.</p>
 <p><strong>Back-compat note:</strong> the data-plane port also exposes <code>GET /ready</code> and
 <code>GET /health</code> at <code>cfg.bind_addr</code> for back-compat with the ~20 test files
 that poll <code>ts.base_url()</code> for readiness. The canonical location is the
-admin sidecar; the data-plane mirroring is a Plan 12.6-01 carry-over and
+admin sidecar; the data-plane mirroring is a an internal plan carry-over and
 may be removed in v0.0.x.</p>
 </blockquote>
 <h3 id="get-metrics" tabindex="-1"><a class="header-anchor" href="#get-metrics" aria-hidden="true">#</a> GET /metrics</h3>
@@ -1086,18 +1084,18 @@ identity per <code>project_phase18_no_dual_runtime</code>.</li>
 <li><code>beava_entropy_categories_capped_total</code> (counter) — entropy operator
 cap-hit total.</li>
 <li><code>beava_cold_entity_evictions_total</code> (counter) — cold-TTL entity evictions
-(Plan 12.8-03).</li>
+(an internal plan).</li>
 <li><code>beava_lifetime_op_cap_hit_total</code> (counter) — lifetime aggregation cap-hit
 total.</li>
 <li><code>beava_entity_count_resident</code> (gauge) — current resident entity count.</li>
 <li><code>beava_bucket_reclaim_total</code> (counter) — windowed-op trailing-bucket
 reclaims (AGG-CORE-09 64-bucket cap firings).</li>
 <li><code>beava_bytes_per_entity_p99</code> (gauge) — static v0 estimate of per-entity
-memory footprint (~7000 bytes per Phase 12.9 verification).</li>
+memory footprint (~7000 bytes (verified)).</li>
 </ul>
 <p>See <a href="/docs/architecture/observability/"><code>docs/architecture/observability.md</code></a>
-(Plan 13.0-13 — forward reference) for the full metric-family catalogue, label
-discipline, scrape interval recommendations, and Phase 12.8 memory-governance
+(forthcoming) for the full metric-family catalogue, label
+discipline, scrape interval recommendations, and memory-governance
 counter semantics.</p>
 <h3 id="get-registry" tabindex="-1"><a class="header-anchor" href="#get-registry" aria-hidden="true">#</a> GET /registry</h3>
 <table>
@@ -1149,14 +1147,14 @@ location is the admin sidecar.</p>
 <ul>
 <li><strong><code>code</code></strong> is a structured machine-readable identifier. Stable across
 releases. The canonical alphabetised list with full HTTP status mapping
-lives at <a href="/docs/error-codes/"><code>docs/error-codes.md</code></a> (Plan 13.0-12 — forward
+lives at <a href="/docs/error-codes/"><code>docs/error-codes.md</code></a> (an internal plan — forward
 reference).</li>
 <li><strong><code>path</code></strong> is an optional JSON path or DAG path locating the offending
 element. Examples: <code>descriptors[1].schema.amount</code> (during register
 validation), <code>fields.amount</code> (during push), <code>requests[2].table</code> (during
 batch_get).</li>
 <li><strong><code>message</code></strong> is a human-readable explanation. <strong>Forward-looking framing per
-Phase 12.7 D-02</strong> — messages say &quot;X is not supported in v0&quot;, <strong>not</strong> &quot;X has
+the events-only error framing</strong> — messages say &quot;X is not supported in v0&quot;, <strong>not</strong> &quot;X has
 been removed&quot; or &quot;X was deprecated&quot;. The framing avoids implying a
 previous-version reference for users who never saw older revisions of the
 product.</li>
@@ -1181,7 +1179,7 @@ and the call surfaces the error if both attempts fail.</li>
 pin a value. Reverse-proxies in front of beava (nginx, Envoy) typically
 enforce their own idle-timeout; aim to keep the SDK's idle-timeout below the
 proxy's.</li>
-<li><strong>Idempotency.</strong> Per Phase 6.1, push idempotency is opt-in via the
+<li><strong>Idempotency.</strong> Per the durability contract, push idempotency is opt-in via the
 <code>dedupe_key</code> + <code>dedupe_window</code> fields registered on the event source.
 Duplicate pushes within the window return the prior <code>ack_lsn</code> plus
 <code>idempotent_replay: true</code>. See <a href="/docs/wire-spec/"><code>docs/wire-spec.md</code></a> for the
@@ -1193,8 +1191,8 @@ full dedupe semantics.</li>
 <thead>
 <tr>
 <th></th>
-<th>Pre-13.4 (current code)</th>
-<th>Post-13.4 (this doc's target)</th>
+<th>Pre-v0 (current code)</th>
+<th>Post-v0 (this doc's target)</th>
 </tr>
 </thead>
 <tbody>
@@ -1215,7 +1213,7 @@ full dedupe semantics.</li>
 </tr>
 </tbody>
 </table>
-<p>Phase 13.4 ships the rename mechanically. The body shape changes from
+<p>The body shape changes from
 <code>{fields: {...}}</code> to <code>{event_name: &quot;...&quot;, fields: {...}}</code>. Other routes
 (<code>/register</code>, <code>/get</code>, <code>/batch_get</code>, <code>/reset</code>, <code>/ping</code>) are already verb-style
 in the current code; only <code>/push</code> (and its TCP analog) needs the rename.</p>
@@ -1228,35 +1226,42 @@ pushes, and resets all read identically.</li>
 <li><strong>One-to-one match with the wire opcode table.</strong> TCP carries <code>OP_PUSH</code> with
 the event name in the body; HTTP carries <code>POST /push</code> with the event name
 in the body. The two transports become a literal translation, which makes
-SDK porting trivial in 13.6 (the TCP framer is the only logic per opcode;
+SDK porting trivial in v0 (the TCP framer is the only logic per opcode;
 the HTTP transformation is <code>frame.body → request.body</code>).</li>
 <li><strong>No path-segment escaping.</strong> Event names with <code>/</code>, spaces, or non-ASCII
 characters require URL-encoding in the path-arg style; the body-arg style
 treats them as plain JSON strings.</li>
 </ul>
-<p>SDKs (Plan 13.5 Python, Plan 13.6 TS + Go) ship against the post-13.4 form
+<p>SDKs (an internal plan Python, an internal plan TS + Go) ship against the v0 form
 from day one. The Python SDK does NOT carry a deprecation-alias path for the
-old route — pre-13.0 dev users (small group, no production deploys yet) move
+old route — pre-v0 dev users (small group, no production deploys yet) move
 to the new form directly when they upgrade past v0.0.0. The deprecation
 window for the route rename is &quot;the gap between current code and v0.0.0
 release&quot;; once v0.0.0 ships, only the new form is supported.</p>
 <h2 id="plan-level-traceability" tabindex="-1"><a class="header-anchor" href="#plan-level-traceability" aria-hidden="true">#</a> Plan-level traceability</h2>
-<p>This document is authored by Plan 13.0-03 (Wave 1). It declares the
-post-13.4 target HTTP route table and is read by:</p>
+<p>This document is authored by an internal plan (Wave 1). It declares the
+v0 target HTTP route table and is read by:</p>
 <ul>
-<li><strong>Plan 13.0-04</strong> (<code>docs/sdk-api/{python,typescript,go}.md</code>) — per-language
-SDK API specs target the verb-style routes documented here.</li>
-<li><strong>Plan 13.0-12</strong> (<code>docs/error-codes.md</code>) — alphabetised structured-code list
-referenced by the <code>code</code> field in this doc's error tables.</li>
-<li><strong>Plan 13.0-13</strong> (<code>docs/architecture/observability.md</code>) — admin sidecar
-metric catalogue referenced by <a href="#get-metrics">GET /metrics</a> above.</li>
-<li><strong>Phase 13.4</strong> — engine implementation that mechanically renames push routes
-to the verb-style form documented here.</li>
-<li><strong>Phase 13.5 / 13.6</strong> — Python / TS / Go SDKs that send requests against
-these routes.</li>
+<li>
+<p><strong>an internal plan</strong> (<code>docs/sdk-api/{python,typescript,go}.md</code>) — per-language
+SDK API specs target the verb-style routes documented here.</p>
+</li>
+<li>
+<p><strong>an internal plan</strong> (<code>docs/error-codes.md</code>) — alphabetised structured-code list
+referenced by the <code>code</code> field in this doc's error tables.</p>
+</li>
+<li>
+<p><strong>an internal plan</strong> (<code>docs/architecture/observability.md</code>) — admin sidecar
+metric catalogue referenced by <a href="#get-metrics">GET /metrics</a> above.</p>
+<p>to the verb-style form documented here.</p>
+</li>
+<li>
+<p>Python / TS / Go SDKs that send requests against
+these routes.</p>
+</li>
 </ul>
-<p>For the full Phase 13.0 plan tree, see
-<a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/13.0-design-contract-spec-docs/13.0-PLAN.md"><code>.planning/phases/13.0-design-contract-spec-docs/13.0-PLAN.md</code></a>.</p>
+<p>For the planning history, see
+<a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/v0-design-contract-spec-docs/v0-PLAN.md"><code>.planning/phases/v0-design-contract-spec-docs/v0-PLAN.md</code></a>.</p>
 
 </article>
 </main>

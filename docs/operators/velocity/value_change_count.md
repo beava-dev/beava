@@ -74,7 +74,7 @@ import beava as bv
 @bv.event
 class Login:
     user_id: str
-    country_code: int  # ISO 3166 numeric code, e.g. 840 for US
+    country_code: int # ISO 3166 numeric code, e.g. 840 for US
 
 @bv.table(key="user_id")
 def UserCountryFlips(logins) -> bv.Table:
@@ -86,11 +86,11 @@ def UserCountryFlips(logins) -> bv.Table:
     )
 
 # Push events
-app.push("Login", {"user_id": "alice", "country_code": 840})  # flips = 0 (first event)
-app.push("Login", {"user_id": "alice", "country_code": 840})  # flips = 0 (same)
-app.push("Login", {"user_id": "alice", "country_code": 124})  # flips = 1 (US → CA)
-app.push("Login", {"user_id": "alice", "country_code": 826})  # flips = 2 (CA → UK)
-app.push("Login", {"user_id": "alice", "country_code": 826})  # flips = 2 (same)
+app.push("Login", {"user_id": "alice", "country_code": 840}) # flips = 0 (first event)
+app.push("Login", {"user_id": "alice", "country_code": 840}) # flips = 0 (same)
+app.push("Login", {"user_id": "alice", "country_code": 124}) # flips = 1 (US → CA)
+app.push("Login", {"user_id": "alice", "country_code": 826}) # flips = 2 (CA → UK)
+app.push("Login", {"user_id": "alice", "country_code": 826}) # flips = 2 (same)
 
 # Query
 result = app.get("UserCountryFlips", "alice")

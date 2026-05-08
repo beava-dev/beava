@@ -123,7 +123,7 @@ fan-out. Auxiliary threads exist (the WAL writer, the HTTP listener, the
 admin sidecar, the snapshot writer) but they sit beside the apply thread,
 not inside it. State mutations only happen on the apply thread.</p>
 <p>This is a permanent architectural commitment: the locked memory file is
-<code>project_no_sharded_apply</code>, last reaffirmed 2026-04-26 when Phase 13.3's
+<code>project_no_sharded_apply</code>, last reaffirmed 2026-04-26 when v0's
 <code>RefCell + LocalSet</code> lockless-apply proposal was REJECTED.</p>
 <h2 id="why-single-thread" tabindex="-1"><a class="header-anchor" href="#why-single-thread" aria-hidden="true">#</a> Why single-thread</h2>
 <p>The single-thread model is correctness-by-construction:</p>
@@ -145,7 +145,7 @@ function of the slowest single op, not of contention.</li>
 <p>For higher per-instance throughput, beava expects users to run multiple
 instances sharded at the entity-key level — the <strong>Redis-cluster pattern</strong>.
 Each instance owns a slice of the key space; the SDK or a thin proxy
-routes pushes/gets to the right instance. Phase 13.3's lockless-apply
+routes pushes/gets to the right instance. v0's lockless-apply
 proposal was rejected in favor of this — see
 <code>project_no_sharded_apply</code> for the full reasoning.</p>
 <p>Per-instance ceiling is workload-dependent but consistently in the 100k -
@@ -161,7 +161,7 @@ the HTTP listener (both data-plane). On each ready event:</p>
 <li><strong>Receive frame.</strong> mio reads the inbound frame from the socket.</li>
 <li><strong>Parse.</strong> TCP frames are <code>[u32 length][u16 op][u8 content_type][payload]</code>;
 HTTP requests are dispatched by route. The IoPool worker thread
-(Plan 18-04.8) eagerly deserialises push payloads into <code>Row</code> while
+(an internal plan.8) eagerly deserialises push payloads into <code>Row</code> while
 the bytes are hot in L1, then hands the parsed row to the apply
 thread via the <code>MioClient.parsed_rows</code> side-channel — saves ~190 ns
 per push at parallel=4.</li>
@@ -183,9 +183,9 @@ for TCP pushes it's an op-coded reply frame.</li>
 <h2 id="what-the-apply-loop-does-not-do" tabindex="-1"><a class="header-anchor" href="#what-the-apply-loop-does-not-do" aria-hidden="true">#</a> What the apply loop does NOT do</h2>
 <ul>
 <li><strong>No async / no tokio in the data plane.</strong> Per
-<code>project_phase18_no_dual_runtime</code> (locked Phase 12.6), the apply path
+<code>project_phase18_no_dual_runtime</code> (locked v0), the apply path
 is synchronous and runs on a hand-rolled mio event loop. The legacy
-axum data-plane was deleted in Phase 12.6 (~7,475 LOC removed). See
+axum data-plane was deleted in v0 (~7,475 LOC removed). See
 <a href="/docs/architecture/mio-data-plane/">mio-data-plane.md</a> for the full enforcement
 story.</li>
 <li><strong>No locks on hot path.</strong> Per-entity state lives in a <code>HashMap</code> owned
@@ -273,9 +273,9 @@ its slice of state until WAL replay completes. Recovery (RTO target &lt;
 <h2 id="cross-references" tabindex="-1"><a class="header-anchor" href="#cross-references" aria-hidden="true">#</a> Cross-references</h2>
 <ul>
 <li><a href="../../CLAUDE.md"><code>CLAUDE.md</code> § mio-only Hot-Path Invariant</a> — locked
-Phase 12.6 commitment; the architectural test that enforces it at CI.</li>
+v0 commitment; the architectural test that enforces it at CI.</li>
 <li><code>~/.claude/projects/-Users-petrpan26-work-tally/memory/project_no_sharded_apply.md</code>
-— the locked single-thread commitment + the rejected Phase 13.3
+— the locked single-thread commitment + the rejected v0
 proposal.</li>
 <li><a href="/docs/architecture/mio-data-plane/">mio-data-plane.md</a> — mio runtime details +
 admin sidecar separation.</li>

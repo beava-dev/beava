@@ -145,12 +145,12 @@ dropped</strong>; their events still increment <code>total</code>, matching SQL 
 collapse semantics. This means the proportions do not necessarily sum to
 <code>1.0</code> once the cap is hit — they sum to <code>(1 − dropped/total)</code> for the cap.
 v0 surfaces this via the per-source cap-hit metric introduced in
-<a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a>; the
+<a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a>; the
 metric increments whenever the cap-and-drop path runs.</p>
 <p>You can also supply <code>categories=[...]</code> to <strong>lock</strong> the allowlist at register
 time: events whose category falls outside the allowlist are dropped on the
 counting side (they still increment <code>total</code>, like the cap-and-drop path).
-Plan 19.2-05 (D-04b) backs the allowlist with an <code>AHashSet</code> for O(1)
+A backs the allowlist with an <code>AHashSet</code> for O(1)
 membership tests on the apply path; the serde-stable <code>Vec&lt;String&gt;</code> is kept
 for snapshot back-compat. Allowlist-mode is the recommended pattern when you
 know the category set in advance — it removes the cap-and-drop ambiguity.</p>
@@ -158,11 +158,11 @@ know the category set in advance — it removes the cap-and-drop ambiguity.</p>
 update is Tier 3 (~70 ns floor / ~150 ns measured per
 <a href="/docs/operators/cost-class/">cost-class.md</a>) — <code>BTreeMap</code> key insert is the
 irreducible cost (string-key allocation on cap-miss, <code>AHashSet::contains</code>
-when an allowlist is set). Phase 12.9 boxed <code>EventTypeMixState</code> so the
+when an allowlist is set). v0 boxed <code>EventTypeMixState</code> so the
 <code>AggOp::EventTypeMix</code> variant fits the 80-byte enum cap (the state itself
 lives on the heap behind a <code>Box</code>); see
 <code>crates/beava-core/src/agg_op.rs</code> line 483 and
-<a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md">Phase 12.9 SUMMARY</a>.
+<a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md">SUMMARY</a>.
 There is no <code>window=</code> kwarg in v0 — <code>bv.event_type_mix</code> is <strong>lifetime-only</strong>.
 For a &quot;category mix in the last 24 h&quot;, compose with
 <code>@bv.event(cold_after=&quot;24h&quot;)</code> per
@@ -230,7 +230,7 @@ detect this case.</p>
 </tr>
 <tr>
 <td>Memory per entity</td>
-<td><strong><code>BoundedByConfig(&quot;max_categories&quot;, 256)</code></strong> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a> — <code>BTreeMap</code> of size ≤ <code>max_categories</code> (or ≤ <code>len(categories)</code> when allowlisted). Boxed inside <code>AggOp</code> per Phase 12.9</td>
+<td><strong><code>BoundedByConfig(&quot;max_categories&quot;, 256)</code></strong> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a> — <code>BTreeMap</code> of size ≤ <code>max_categories</code> (or ≤ <code>len(categories)</code> when allowlisted). Boxed inside <code>AggOp</code> per v0</td>
 </tr>
 <tr>
 <td>Lifetime mode</td>
@@ -245,7 +245,7 @@ detect this case.</p>
 @bv.event
 class Txn:
     user_id: str
-    txn_type: str  # &quot;card&quot; | &quot;p2p&quot; | &quot;crypto&quot; | &quot;ach&quot; | ...
+    txn_type: str # &quot;card&quot; | &quot;p2p&quot; | &quot;crypto&quot; | &quot;ach&quot; | ...
 
 @bv.table(key=&quot;user_id&quot;)
 def UserTxnTypeMix(txn) -&gt; bv.Table:
@@ -292,7 +292,7 @@ def EndpointStatusMix(reqs) -&gt; bv.Table:
 <h2 id="edge-cases" tabindex="-1"><a class="header-anchor" href="#edge-cases" aria-hidden="true">#</a> Edge cases</h2>
 <ul>
 <li><strong>Empty stream / cold-start:</strong> result is <code>{}</code> (empty dict) — never <code>null</code>.</li>
-<li><strong><code>max_categories</code> cap reached:</strong> new categories are dropped silently from <code>counts</code> but still increment <code>total</code>. Proportions sum to <code>(1 − dropped/total)</code>, not to <code>1.0</code>. The Phase 12.8 cap-hit metric increments per drop — wire this to your alerting if the cap-hit rate is non-zero in production.</li>
+<li><strong><code>max_categories</code> cap reached:</strong> new categories are dropped silently from <code>counts</code> but still increment <code>total</code>. Proportions sum to <code>(1 − dropped/total)</code>, not to <code>1.0</code>. The v0 cap-hit metric increments per drop — wire this to your alerting if the cap-hit rate is non-zero in production.</li>
 <li><strong><code>categories=[...]</code> allowlist set:</strong> events outside the allowlist are dropped from <code>counts</code> but still increment <code>total</code>. Identical surfacing semantics to the cap-and-drop path; the allowlist removes the ambiguity by forcing a known schema.</li>
 <li><strong>Allowlist + cap interaction:</strong> when both <code>categories=</code> and <code>max_categories=</code> are set, the allowlist takes precedence — <code>len(categories)</code> is the effective cap (the cap-and-drop path is unreachable).</li>
 <li><strong>Non-string source field:</strong> <code>i64</code> and <code>bool</code> are coerced to their string form (<code>&quot;42&quot;</code>, <code>&quot;true&quot;</code>); other types (<code>f64</code>, <code>bytes</code>, <code>null</code>, <code>list</code>, <code>map</code>) are silently dropped (no <code>total</code> increment either, since <code>str_from_row</code> returns <code>None</code>).</li>

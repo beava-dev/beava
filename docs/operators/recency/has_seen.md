@@ -48,7 +48,7 @@ cold-start value (no events seen) is `false`.
 | Resource | Bound |
 |----------|-------|
 | CPU per event | **Tier 1** (~4 ns floor / ~25 ns measured — fastest recency op) — see [cost-class.md](../cost-class.md#tier-1-fast-40-nscall--38-ops) |
-| Memory per entity | `O(1)` — single `Option<i64>` slot in the shared `SeenState` per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
+| Memory per entity | `O(1)` — single `Option<i64>` slot in the shared `SeenState` per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
 | Lifetime mode | **Required** — `bv.has_seen` has no `window=` kwarg; lifetime is the only mode |
 
 ## Examples
@@ -77,7 +77,7 @@ app.push("Payment", {"user_id": "alice", "status": "failed"})
 
 # Query
 result = app.get("UserHasPaid", "alice")
-# result == {"has_paid": True}  # the second event flipped it; subsequent failures don't matter
+# result == {"has_paid": True} # the second event flipped it; subsequent failures don't matter
 ```
 
 ### Example 2: Has this card ever been used internationally?
@@ -120,7 +120,7 @@ See [examples/wire/register-fraud-team.request.json](../../../examples/wire/regi
 - **`where=` filter excludes everything:** result is `false` until a matching event arrives, then sticks at `true`.
 - **Once `true`, never reverts:** beava never decrements or clears `has_seen` based on events alone. The only reset path is full entity eviction via [`@bv.event(cold_after=...)`](../../../.planning/REQUIREMENTS.md), which deletes the underlying `SeenState`.
 - **`window=` kwarg attempted:** raises `TypeError` at SDK-helper-call time. For "ever matched in the last N ms?" semantics, see [`bv.first_seen_in_window`](./first_seen_in_window.md).
-- **Lifetime mode:** **the only mode.** Footprint is `O(1)` per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md).
+- **Lifetime mode:** **the only mode.** Footprint is `O(1)` per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md).
 
 ## See also
 

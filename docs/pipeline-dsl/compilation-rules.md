@@ -1,11 +1,11 @@
 # Pipeline DSL Compilation Rules
 
-> **Status:** Authoritative for v0. Documents the **post-13.5 target** Python
-> → JSON wire compilation contract. SDK porters in 13.6 (TypeScript + Go)
+> **Status:** Authoritative for v0. Documents the **v0 target** Python
+> → JSON wire compilation contract. SDK porters in v0 (TypeScript + Go)
 > consume this doc as the canonical reference for what their compilers MUST
 > emit. Where this doc and the current `python/beava/` source disagree, this
-> doc wins — Phase 13.5 implements the target shape.
-> **Last reviewed:** 2026-05-03 (Phase 13.0).
+> doc wins — v0 implements the target shape.
+> **Last reviewed:** 2026-05-03.
 
 ## How to read this doc
 
@@ -18,7 +18,7 @@ For each chain method (`events.filter()`, `events.group_by()`, etc.) we show:
 
 After all methods, the [Boolean-sum trick](#boolean-sum-trick-recommended-pattern-for-conditional-counts)
 section documents the v0-locked recommended pattern for conditional counts
-(per [Q1 Path B](../../.planning/phases/13.0-design-contract-spec-docs/13.0-CONTEXT.md)).
+(per [Q1 Path B](../../.planning/phases/v0-design-contract-spec-docs/v0-CONTEXT.md)).
 
 The [Ambiguity Matrix](#ambiguity-matrix) at the bottom rules out 20+ edge
 cases as ALLOWED / FORBIDDEN / UNDEFINED with a fixture link or structured
@@ -484,13 +484,13 @@ The `window=` kwarg controls per-entity state shape:
 
 - **Lifetime mode** (`window=None` or `window="forever"`): single state slot
   per entity. The op accumulates over all events for that entity. Memory
-  bound MUST be declared at register time per Phase 12.8 V0-MEM-GOV-02 — for
+  bound MUST be declared at register time per v0 V0-MEM-GOV-02 — for
   ops without an O(1) lifetime bound, the JSON-prelude shim
   `pre_check_unbounded_op_in_lifetime_mode` rejects with
   `unbounded_op_in_lifetime_mode`.
 - **Windowed mode** (`window="<duration>"`): up to 64 rolling buckets
   bucketed by server-side `now_ms()`. Bucket reclaim is per-event during
-  `update_at` (Phase 12.8 V0-MEM-GOV-03). Buckets older than `window` ms are
+  `update_at` (v0 V0-MEM-GOV-03). Buckets older than `window` ms are
   dropped from the result.
 - **Decay ops** (`ewma`, `ewvar`, `decayed_sum`, `decayed_count`,
   `ew_zscore`) take `half_life=` instead of `window=` and reject `forever`
@@ -561,9 +561,9 @@ Server-side state allocation matches `groupby.agg(...)` above: per-entity
 op state, lazy allocation on first event, queryable via
 `app.get("UserTxnFeatures", "alice")` returning the row-shape.
 
-The Phase 12.7 architectural test
+The v0 architectural test
 `crates/beava-server/tests/phase12_7_no_table_surface.rs` is amended in
-Phase 13.4 to permit `OpNode::Table*` ONLY when it appears as the
+v0 to permit `OpNode::Table*` ONLY when it appears as the
 `output_kind` of a derivation (per-AST-context check) — top-level
 `{"kind": "table", ...}` register payloads remain rejected with
 `unsupported_node_kind`.
@@ -608,9 +608,9 @@ The decorator emits the same derivation node as the per-entity form, with `key: 
 #### Three equivalent forms compile to the same wire payload:
 
 ```python
-clicks.agg(total=bv.count(window="forever"))                  # shortest
-clicks.group_by().agg(total=bv.count(window="forever"))       # explicit empty group_by
-@bv.table                                                     # decorator no key=
+clicks.agg(total=bv.count(window="forever")) # shortest
+clicks.group_by().agg(total=bv.count(window="forever")) # explicit empty group_by
+@bv.table # decorator no key=
 def Foo(c): return c.agg(total=bv.count(window="forever"))
 ```
 
@@ -622,7 +622,7 @@ Per ADR-003, the engine routes `entity_id = ""` (empty string) through the same 
 
 All 53 operators work in both per-entity and global modes — semantics identical, only the state-keying dimension differs. Standard memory governance applies: `cold_after=` doesn't affect global state (always-live); lifetime ops still subject to V0-MEM-GOV-02 lifetime-bound enforcement.
 
-Implementation deferred to Phase 13.4 (engine, ~30 LOC) + Phase 13.5 (Python SDK, ~110 LOC) + Phase 13.6 (TS + Go SDK overloads, ~150 LOC). Acceptance gate: `python/tests/v0/test_global.py` (Plan 13.0-16, 8 tests).
+Implementation deferred to v0 (engine, ~30 LOC) + v0 (Python SDK, ~110 LOC) + v0 (TS + Go SDK overloads, ~150 LOC). Acceptance gate: `python/tests/v0/test_global.py` (an internal plan, 8 tests).
 
 See [`docs/concepts/global-aggregation.md`](../concepts/global-aggregation.md) for the full conceptual treatment.
 
@@ -630,7 +630,7 @@ See [`docs/concepts/global-aggregation.md`](../concepts/global-aggregation.md) f
 
 ## Boolean-sum trick (recommended pattern for conditional counts)
 
-Per [Q1 Path B locked answer](../../.planning/phases/13.0-design-contract-spec-docs/13.0-CONTEXT.md),
+Per [Q1 Path B locked answer](../../.planning/phases/v0-design-contract-spec-docs/v0-CONTEXT.md),
 v0 keeps `bv.sum(field: str)` only — the `field` arg accepts a **string
 column name**, NOT an `_ExprAST`. To implement a "count where condition"
 semantic, use the two-stage `with_columns` + `sum` pattern:
@@ -691,7 +691,7 @@ v0.1+.
 ## Ambiguity Matrix
 
 Explicit ALLOWED / FORBIDDEN / UNDEFINED rulings on edge cases. SDK porters
-in 13.6 grep this matrix during their compiler work; each row links to a
+in v0 grep this matrix during their compiler work; each row links to a
 fixture (ALLOWED) or a structured error code (FORBIDDEN).
 
 | Pattern | Verdict | Rationale | Test fixture / Error code |

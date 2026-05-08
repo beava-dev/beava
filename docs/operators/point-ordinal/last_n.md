@@ -8,7 +8,7 @@
 bv.last_n(
     field: str,
     *,
-    n: int,                         # REQUIRED — register-time kwarg
+    n: int, # REQUIRED — register-time kwarg
     where: bv.Col | None = None,
 ) -> AggDescriptor
 ```
@@ -60,7 +60,7 @@ no `List` variant — Python SDK readers parse it back transparently.
 | Resource | Bound |
 |----------|-------|
 | CPU per event | **Tier 1** (~10 ns floor / ~32 ns measured) — see [cost-class.md](../cost-class.md#tier-1-fast-40-nscall--38-ops) |
-| Memory per entity | **`BoundedByRequiredKwarg("n")`** — `n × sizeof(field)` bytes per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
+| Memory per entity | **`BoundedByRequiredKwarg("n")`** — `n × sizeof(field)` bytes per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
 | Lifetime mode | **Required** — `bv.last_n` has no `window=` kwarg in v0; lifetime is the only mode |
 
 ## Examples
@@ -146,7 +146,7 @@ See [examples/wire/register-fraud-team.request.json](../../../examples/wire/regi
 - [cost-class.md](../cost-class.md) — performance tier (Tier 1)
 - [bv.first_n](./first_n.md) — symmetric companion: first N values (also `BoundedByRequiredKwarg("n")`)
 - [bv.last](./last.md) — degenerate `n=1` case (lighter — no `VecDeque` allocation)
-- [bv.most_recent_n](../buffer-geo/most_recent_n.md) — N most recent values within a window (Phase 11 buffer family)
+- [bv.most_recent_n](../buffer-geo/most_recent_n.md) — N most recent values within a window (v0 buffer family)
 - [bv.lag](./lag.md) — value `n` events ago (single value, not the rolling window)
 - [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) — BoundedByRequiredKwarg memory governance contract
 - [pipeline-dsl/compilation-rules.md](../../pipeline-dsl/compilation-rules.md) — chain compilation rules

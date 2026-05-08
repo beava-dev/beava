@@ -1,7 +1,7 @@
 # Comment Conventions (internal)
 
 Heuristic (CLAUDE.md): **default to no comments; only add when WHY is non-obvious.**
-Per D-01 of Phase 13.7.5 CONTEXT.md.
+Internal comment-style guidance.
 
 ## DELETE patterns
 
@@ -10,7 +10,7 @@ Per D-01 of Phase 13.7.5 CONTEXT.md.
 - Section markers (`// === Setup ===`, `// === Cleanup ===`, `// ───────────────`)
 - Self-narration sequences (`// First, we ... // Then, we ... // Finally, we ...`)
 - Restating type signatures in prose (`/// fn add(a: i32, b: i32) -> i32 — adds two integers`)
-- Phase / plan / task references in code (`// added in Phase 13.5 for ...`, `// Plan 12-09 …`)
+- Phase / plan / task references in code (`// added in v0 for ...`, `// an internal plan …`)
 - AI-tell phrases: "Note that ...", "Importantly, ...", "Here we ...", "We then ...", "It should be noted that ..."
 - Multi-paragraph docstrings on a 5-line function
 - Closing braces echoing the opening (`} // end of for`, `} // matches if x above`)
@@ -24,7 +24,7 @@ Per D-01 of Phase 13.7.5 CONTEXT.md.
 - Doc comments on PUBLIC lib/SDK exports (cargo doc / Sphinx render targets)
 - Hidden-state warnings (`// mutates self.state while iterating — careful`)
 - Single-line "why this isn't obvious" notes
-- **Architectural-invariant WHY-comments documenting Phase 12.6 mio-only / Phase 12.7 events-only / Phase 12.8 memory-governance / Phase 18 hand-rolled-runtime commitments — explicit KEEP.** (Rationale: these encode locked architectural commitments tracked in CLAUDE.md §"mio-only Hot-Path Invariant", §"Events-Only Invariant", and the project-memory items; a reader cannot infer from the code alone that e.g. "do not call from tokio context" is a permanent architectural decision, not a stale comment. The phase-number reference in such comments is allowed because it points to the canonical lock-source. This rule supersedes the generic DELETE-pattern "Phase / plan / task references in code" for these specific four invariants only.)
+- **Architectural-invariant WHY-comments documenting v0 mio-only / v0 events-only / memory-governance / v0 hand-rolled-runtime commitments — explicit KEEP.** (Rationale: these encode locked architectural commitments tracked in CLAUDE.md §"mio-only Hot-Path Invariant", §"Events-Only Invariant", and the project-memory items; a reader cannot infer from the code alone that e.g. "do not call from tokio context" is a permanent architectural decision, not a stale comment. The phase-number reference in such comments is allowed because it points to the canonical lock-source. This rule supersedes the generic DELETE-pattern "Phase / plan / task references in code" for these specific four invariants only.)
 
 ## Verification recipe per component (Wave 2 plans 02–08 use)
 

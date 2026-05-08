@@ -8,7 +8,7 @@
 bv.lag(
     field: str,
     *,
-    n: int,                         # REQUIRED — register-time kwarg
+    n: int, # REQUIRED — register-time kwarg
     where: bv.Col | None = None,
 ) -> AggDescriptor
 ```
@@ -61,7 +61,7 @@ the result is the field value from exactly `n` matching events back.
 | Resource | Bound |
 |----------|-------|
 | CPU per event | **Tier 1** (~10 ns floor / ~32 ns measured) — see [cost-class.md](../cost-class.md#tier-1-fast-40-nscall--38-ops) |
-| Memory per entity | **`BoundedByRequiredKwarg("n")`** — `(n+1) × sizeof(field)` bytes per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
+| Memory per entity | **`BoundedByRequiredKwarg("n")`** — `(n+1) × sizeof(field)` bytes per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
 | Lifetime mode | **Required** — `bv.lag` has no `window=` kwarg; lifetime is the only mode |
 
 ## Examples
@@ -90,7 +90,7 @@ app.push("Txn", {"card_id": "c1", "amount": 50.0})
 
 # Query
 result = app.get("CardPrevAmount", "c1")
-# result == {"prev_amount": 25.0}  # 1 event ago (the second one), not the most recent
+# result == {"prev_amount": 25.0} # 1 event ago (the second one), not the most recent
 ```
 
 ### Example 2: Previous status code 5 events ago (failed-cluster detection)

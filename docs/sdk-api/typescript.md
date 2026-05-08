@@ -2,9 +2,9 @@
 
 > **Communicate-only SDK.** This SDK pushes events, registers pre-compiled JSON descriptors, and reads features. Pipeline authoring (event sources, expression DSL, op helpers) lives in the **Python SDK only** — see [python.md](python.md). Use Python's `bv.App.register_json(...)` (or hand-write the JSON per [docs/wire-spec.md OP_REGISTER](../wire-spec.md#op_register-0x0001)) to produce descriptors, then ship that JSON to your TypeScript app.
 
-> **Status:** Authoritative for v0. Documents the post-13.6 TS SDK shape (rescoped 2026-05-03 to communicate-only). Cross-language semantics live in [shared.md](shared.md); wire-level body shapes live in [docs/wire-spec.md](../wire-spec.md). Python is the canonical authoring reference.
+> **Status:** Authoritative for v0. Documents the v0 TS SDK shape (rescoped 2026-05-03 to communicate-only). Cross-language semantics live in [shared.md](shared.md); wire-level body shapes live in [docs/wire-spec.md](../wire-spec.md). Python is the canonical authoring reference.
 >
-> **Last reviewed:** 2026-05-03 (Phase 13.6).
+> **Last reviewed:** 2026-05-03.
 
 ## Overview
 
@@ -21,15 +21,15 @@
 ```
 sdk/typescript/
 ├── src/
-│   ├── index.ts             # public exports: beavaApp, errors, types, wire, transports
-│   ├── app.ts               # beavaApp class with all 8 wire methods
-│   ├── wire.ts              # frame codec + opcode constants (CT_JSON only in v0)
-│   ├── transport.ts         # HttpTransport (uses global fetch)
-│   ├── transport-tcp.ts     # TcpTransport (node:net, Redis-style FIFO)
-│   ├── embed.ts             # spawnEmbeddedServer, teardownServer, discoverBinary
-│   ├── errors.ts            # RegistrationError, BinaryNotFoundError
-│   └── types.ts             # Descriptor (opaque), result interfaces
-└── test/                    # vitest specs
+│ ├── index.ts # public exports: beavaApp, errors, types, wire, transports
+│ ├── app.ts # beavaApp class with all 8 wire methods
+│ ├── wire.ts # frame codec + opcode constants (CT_JSON only in v0)
+│ ├── transport.ts # HttpTransport (uses global fetch)
+│ ├── transport-tcp.ts # TcpTransport (node:net, Redis-style FIFO)
+│ ├── embed.ts # spawnEmbeddedServer, teardownServer, discoverBinary
+│ ├── errors.ts # RegistrationError, BinaryNotFoundError
+│ └── types.ts # Descriptor (opaque), result interfaces
+└── test/ # vitest specs
 ```
 
 There are deliberately **no** `events.ts` / `col.ts` / `agg.ts` / `table.ts` files — the TS SDK has no authoring layer. See [shared.md § Authoring vs communicate](shared.md#authoring-vs-communicate).
@@ -46,12 +46,12 @@ class beavaApp {
   register(descriptors: Descriptor[], opts?: { force?: boolean; dry_run?: boolean }): Promise<RegisterResult>;
   push(eventName: string, fields: Record<string, unknown>): Promise<PushResult>;
   pushSync(eventName: string, fields: Record<string, unknown>): Promise<PushResult>;
-  get(table: string): Promise<FeatureRow>;                                          // 1-arg = global table per ADR-003
+  get(table: string): Promise<FeatureRow>; // 1-arg = global table per ADR-003
   get(table: string, key: string | (string | number | boolean)[]): Promise<FeatureRow>; // 2-arg = per-entity
   batchGet(requests: GetRequest[]): Promise<FeatureRow[]>;
-  reset(): Promise<void>;                                                            // server gates on test_mode
+  reset(): Promise<void>; // server gates on test_mode
   ping(): Promise<PingResult>;
-  close(): Promise<void>;                                                            // idempotent
+  close(): Promise<void>; // idempotent
 }
 ```
 
@@ -68,7 +68,7 @@ The first constructor argument selects the transport:
 `options`:
 
 - `timeout` — per-request I/O timeout in ms (default `30000`).
-- `test_mode` — passes `BEAVA_TEST_MODE=1` to the embed-mode subprocess (mirrors Python `bv.App(test_mode=True)` per Phase 13.5 D-05). Ignored in network mode.
+- `test_mode` — passes `BEAVA_TEST_MODE=1` to the embed-mode subprocess (mirrors Python `bv.App(test_mode=True)` per v0 D-05). Ignored in network mode.
 - `binary_path` — overrides the embed-mode binary discovery path.
 
 ### `register(descriptors, opts?)`
@@ -88,7 +88,7 @@ Returns `RegisterResult`:
 
 ```typescript
 interface RegisterResult {
-  status: string;          // "ok" on success
+  status: string; // "ok" on success
   registry_version: number;
   added?: string[];
   removed?: string[];
@@ -96,7 +96,7 @@ interface RegisterResult {
 }
 ```
 
-`opts.force`: pass-through to wire `force` flag (allows destructive schema changes per Phase 13.4 D-01).
+`opts.force`: pass-through to wire `force` flag (allows destructive schema changes per v0 D-01).
 `opts.dry_run`: pass-through to wire `dry_run` flag (validate without applying).
 
 ### `push(eventName, fields)` and `pushSync(eventName, fields)`
@@ -126,7 +126,7 @@ Posts to `POST /batch-get` with `{requests: [...]}`. Returns `FeatureRow[]` in r
 
 ### `reset()`
 
-Posts to `POST /reset`. The server returns `403` with `{error: {code: "reset_forbidden", ...}}` unless `test_mode` is enabled per Phase 13.4 D-03. The error surfaces verbatim as a `RegistrationError`.
+Posts to `POST /reset`. The server returns `403` with `{error: {code: "reset_forbidden", ...}}` unless `test_mode` is enabled per v0 D-03. The error surfaces verbatim as a `RegistrationError`.
 
 ### `ping()`
 
@@ -144,13 +144,13 @@ Idempotent. Closes the underlying transport. In embed mode, sends `SIGTERM` to t
 
 ```typescript
 class RegistrationError extends Error {
-  code: string;        // structured error code, e.g. "unsupported_node_kind", "invalid_registration"
-  path?: string;       // JSON pointer-ish path, e.g. "nodes[0].kind"
-  errors?: unknown[];  // sub-errors (multi-error responses)
+  code: string; // structured error code, e.g. "unsupported_node_kind", "invalid_registration"
+  path?: string; // JSON pointer-ish path, e.g. "nodes[0].kind"
+  errors?: unknown[]; // sub-errors (multi-error responses)
 }
 
 class BinaryNotFoundError extends Error {
-  searched: string[];  // paths that were probed during 4-step discovery
+  searched: string[]; // paths that were probed during 4-step discovery
 }
 ```
 
@@ -185,4 +185,4 @@ Use `beavaApp(undefined, { test_mode: true })` to spawn an embed-mode server in 
 - **Cross-language semantics:** [shared.md](shared.md)
 - **Authoring SDK (Python):** [python.md](python.md)
 - **Go SDK (sister communicate-only client):** [go.md](go.md)
-- **Phase 13.6 plan + summary:** `.planning/phases/13.6-typescript-go-sdks/`
+- **v0 plan + summary:** `.planning/phases/v0-typescript-go-sdks/`

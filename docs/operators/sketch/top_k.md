@@ -31,7 +31,7 @@ in the last hour", or `bv.top_k("ip_address", k=10, window="forever")` for
 "the 10 IP addresses this account has used most over its lifetime". The
 parameter `k` is the **required width** of the result list — the value
 governs both the result shape AND the per-entity memory ceiling under the
-[Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) lifetime
+[V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) lifetime
 contract (`BoundedByConfig("k", 10)`: defaults to 10 when omitted, but in
 the public Python signature `k` is required).
 
@@ -62,8 +62,8 @@ list).
 | Resource | Bound |
 |----------|-------|
 | CPU per event | **Tier 2** (Exact mode, ~95 ns measured) — see [cost-class.md](../cost-class.md#tier-2-moderate-30-100-nscall--6-ops) |
-|  | **Tier 3** (Hybrid mode, ~250 ns floor / ~300 ns measured) — see [cost-class.md](../cost-class.md#tier-3-algorithmic-floor-100-300-nscall--9-ops) |
-| Memory per entity | `BoundedByConfig("k", 10)` per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) — exact frequency table up to `exact_threshold` entries, then CMS (`hybrid_width × hybrid_depth × i64`) plus heap of capacity `k` |
+| | **Tier 3** (Hybrid mode, ~250 ns floor / ~300 ns measured) — see [cost-class.md](../cost-class.md#tier-3-algorithmic-floor-100-300-nscall--9-ops) |
+| Memory per entity | `BoundedByConfig("k", 10)` per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) — exact frequency table up to `exact_threshold` entries, then CMS (`hybrid_width × hybrid_depth × i64`) plus heap of capacity `k` |
 | Lifetime mode (`window=None`) | **Allowed** — `BoundedByConfig` declares the per-entity ceiling at register time |
 
 ## Examples

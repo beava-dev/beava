@@ -2,9 +2,9 @@
 
 > **Communicate-only SDK.** This SDK pushes events, registers pre-compiled JSON descriptors, and reads features. Pipeline authoring (event sources, expression DSL, op helpers) lives in the **Python SDK only** — see [python.md](python.md). Use Python's `bv.App.register_json(...)` to produce descriptors, then ship that JSON to your Go service. Or hand-write the JSON per [docs/wire-spec.md OP_REGISTER](../wire-spec.md#op_register-0x0001).
 
-> **Status:** Authoritative for v0. Documents the post-13.6 Go SDK shape (rescoped 2026-05-03 to communicate-only). Cross-language semantics live in [shared.md](shared.md); wire-level body shapes live in [docs/wire-spec.md](../wire-spec.md). Python is the canonical authoring reference.
+> **Status:** Authoritative for v0. Documents the v0 Go SDK shape (rescoped 2026-05-03 to communicate-only). Cross-language semantics live in [shared.md](shared.md); wire-level body shapes live in [docs/wire-spec.md](../wire-spec.md). Python is the canonical authoring reference.
 >
-> **Last reviewed:** 2026-05-03 (Phase 13.6).
+> **Last reviewed:** 2026-05-03.
 
 ## Overview
 
@@ -19,22 +19,22 @@ The beava Go SDK ships as `github.com/beava-dev/beava/sdk/go`. It is a wire-thin
 > `go get github.com/beava-dev/beava/sdk/go`. Import as
 > `import beava "github.com/beava-dev/beava/sdk/go"`. The SDK targets Go 1.22+.
 >
-> Source layout: monorepo at `github.com/beava-dev/beava/`, Go SDK lives at `sdk/go/` subdirectory (per Phase 13.6 D-02).
+> Source layout: monorepo at `github.com/beava-dev/beava/`, Go SDK lives at `sdk/go/` subdirectory (per v0 D-02).
 
 ## Module structure
 
 ```
 sdk/go/
 ├── go.mod
-├── beava.go               # App struct, NewApp, URL-scheme dispatch, transport interface, Close
-├── app.go                 # method receivers: Register/Push/PushSync/Get/GetGlobal/BatchGet/Reset/Ping
-├── wire.go                # frame codec + opcode constants (CT_JSON only in v0)
-├── transport_http.go      # httpTransport (net/http; structured error envelope decoding)
-├── transport_tcp.go       # tcpTransport (net.Conn, Redis-style FIFO queue)
-├── embed.go               # SpawnEmbeddedServer + Teardown + discoverBinary
-├── types.go               # Descriptor, FeatureResult, RegisterResult, PushResult, PingResult, GetRequest
-├── errors.go              # RegistrationError, ValidationError, BinaryNotFoundError
-└── *_test.go              # standard testing + httptest
+├── beava.go # App struct, NewApp, URL-scheme dispatch, transport interface, Close
+├── app.go # method receivers: Register/Push/PushSync/Get/GetGlobal/BatchGet/Reset/Ping
+├── wire.go # frame codec + opcode constants (CT_JSON only in v0)
+├── transport_http.go # httpTransport (net/http; structured error envelope decoding)
+├── transport_tcp.go # tcpTransport (net.Conn, Redis-style FIFO queue)
+├── embed.go # SpawnEmbeddedServer + Teardown + discoverBinary
+├── types.go # Descriptor, FeatureResult, RegisterResult, PushResult, PingResult, GetRequest
+├── errors.go # RegistrationError, ValidationError, BinaryNotFoundError
+└── *_test.go # standard testing + httptest
 ```
 
 There are deliberately **no** `events.go` / `col.go` / `agg.go` / `table.go` files — the Go SDK has no authoring layer. See [shared.md § Authoring vs communicate](shared.md#authoring-vs-communicate).
@@ -52,12 +52,12 @@ func NewApp(ctx context.Context, url string, opts ...AppOption) (*App, error)
 func (a *App) Register(ctx context.Context, descriptors []Descriptor, opts ...RegisterOption) (*RegisterResult, error)
 func (a *App) Push(ctx context.Context, eventName string, fields map[string]any) (*PushResult, error)
 func (a *App) PushSync(ctx context.Context, eventName string, fields map[string]any) (*PushResult, error)
-func (a *App) Get(ctx context.Context, table string, key any) (FeatureResult, error)        // per-entity
-func (a *App) GetGlobal(ctx context.Context, table string) (FeatureResult, error)           // global table per ADR-003
+func (a *App) Get(ctx context.Context, table string, key any) (FeatureResult, error) // per-entity
+func (a *App) GetGlobal(ctx context.Context, table string) (FeatureResult, error) // global table per ADR-003
 func (a *App) BatchGet(ctx context.Context, requests []GetRequest) ([]FeatureResult, error)
 func (a *App) Reset(ctx context.Context) error
 func (a *App) Ping(ctx context.Context) (*PingResult, error)
-func (a *App) Close(ctx context.Context) error                                              // idempotent
+func (a *App) Close(ctx context.Context) error // idempotent
 ```
 
 ### `NewApp(ctx, url, opts...)` + URL-scheme dispatch
@@ -95,11 +95,11 @@ Returns `*RegisterResult`:
 
 ```go
 type RegisterResult struct {
-    Status          string   `json:"status"`
-    RegistryVersion int64    `json:"registry_version"`
-    Added           []string `json:"added,omitempty"`
-    Removed         []string `json:"removed,omitempty"`
-    Changed         []string `json:"changed,omitempty"`
+    Status string `json:"status"`
+    RegistryVersion int64 `json:"registry_version"`
+    Added []string `json:"added,omitempty"`
+    Removed []string `json:"removed,omitempty"`
+    Changed []string `json:"changed,omitempty"`
 }
 ```
 
@@ -130,7 +130,7 @@ Posts to `POST /batch-get` with `{requests: [...]}`. Returns `[]FeatureResult` i
 
 ### `Reset(ctx)`
 
-Posts to `POST /reset`. The server returns `403` with `{error: {code: "reset_forbidden", ...}}` unless `test_mode` is enabled per Phase 13.4 D-03. Surfaces as `*RegistrationError`.
+Posts to `POST /reset`. The server returns `403` with `{error: {code: "reset_forbidden", ...}}` unless `test_mode` is enabled per v0 D-03. Surfaces as `*RegistrationError`.
 
 ### `Ping(ctx)`
 
@@ -138,8 +138,8 @@ Calls `GET /health`. Returns:
 
 ```go
 type PingResult struct {
-    ServerVersion   string `json:"server_version"`
-    RegistryVersion int64  `json:"registry_version"`
+    ServerVersion string `json:"server_version"`
+    RegistryVersion int64 `json:"registry_version"`
 }
 ```
 
@@ -151,23 +151,23 @@ Idempotent. Closes the underlying transport. In embed mode, sends `SIGTERM` and 
 
 ```go
 type RegistrationError struct {
-    Code    string            `json:"code"`     // e.g., "unsupported_node_kind"
-    Path    string            `json:"path,omitempty"`
-    Message string            `json:"message"`
-    Errors  []ValidationError `json:"errors,omitempty"`
+    Code string `json:"code"` // e.g., "unsupported_node_kind"
+    Path string `json:"path,omitempty"`
+    Message string `json:"message"`
+    Errors []ValidationError `json:"errors,omitempty"`
 }
 
 func (e *RegistrationError) Error() string
 
 type ValidationError struct {
-    Kind    string `json:"kind"`
-    Path    string `json:"path"`
+    Kind string `json:"kind"`
+    Path string `json:"path"`
     Message string `json:"message"`
 }
 
 type BinaryNotFoundError struct {
     Searched []string
-    Reason   string
+    Reason string
 }
 
 func (e *BinaryNotFoundError) Error() string
@@ -235,4 +235,4 @@ defer app.Close(ctx)
 - **Cross-language semantics:** [shared.md](shared.md)
 - **Authoring SDK (Python):** [python.md](python.md)
 - **TS SDK (sister communicate-only client):** [typescript.md](typescript.md)
-- **Phase 13.6 plan + summary:** `.planning/phases/13.6-typescript-go-sdks/`
+- **v0 plan + summary:** `.planning/phases/v0-typescript-go-sdks/`

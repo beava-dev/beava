@@ -7,8 +7,8 @@
 ```python
 bv.geo_velocity(
     *,
-    lat: str,                        # REQUIRED — name of the latitude field on the event
-    lon: str,                        # REQUIRED — name of the longitude field on the event
+    lat: str, # REQUIRED — name of the latitude field on the event
+    lon: str, # REQUIRED — name of the longitude field on the event
     where: bv.Col | None = None,
 ) -> AggDescriptor
 ```
@@ -38,9 +38,9 @@ signal-to-noise ratio of fraud-detection thresholds.
 `bv.geo_velocity` belongs to the **bounded-buffer + geo** family. State
 is `O(1)` per entity — three `f64` slots for the previous `(lat, lon, t)`
 plus one `f64` for the running max km/h, behind a `Box` for the
-`AggOp::GeoVelocity` variant per Phase 12.9 boxing (the variant fits the
+`AggOp::GeoVelocity` variant per v0 boxing (the variant fits the
 80-byte `AggOp` enum cap; see `crates/beava-core/src/agg_op.rs` line 486
-and [Phase 12.9 SUMMARY](../../../.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md)).
+and [SUMMARY](../../../.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md)).
 Per-event update is **Tier 2** (~20 ns floor / ~45 ns measured per
 [cost-class.md](../cost-class.md#tier-2-moderate-30-100-nscall--6-ops)) —
 two field reads + one haversine (`sin`/`cos`/`sqrt` identities) + one
@@ -54,7 +54,7 @@ next post-eviction matching event.
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `lat` | `str` | **Yes** | — | Name of the latitude field on the event (NOT a literal coordinate). Field value must be `f64` or `i64` decimal degrees in `[-90, 90]`. Resolved to a column index at register time per Plan 19.2-06 D-01 fast-path. |
+| `lat` | `str` | **Yes** | — | Name of the latitude field on the event (NOT a literal coordinate). Field value must be `f64` or `i64` decimal degrees in `[-90, 90]`. Resolved to a column index at register time. |
 | `lon` | `str` | **Yes** | — | Name of the longitude field on the event. Field value must be `f64` or `i64` decimal degrees in `[-180, 180]`. |
 | `where` | `bv.Col` | No | `None` | Boolean expression on event fields; only matching events update the prev-point and max km/h. |
 
@@ -71,7 +71,7 @@ is a non-negative `f64`.
 | Resource | Bound |
 |----------|-------|
 | CPU per event | **Tier 2** (~20 ns floor / ~45 ns measured — two field reads + haversine `sin`/`cos`/`sqrt` + divide + compare) — see [cost-class.md](../cost-class.md#tier-2-moderate-30-100-nscall--6-ops). The haversine is the irreducible Tier 2 cost. |
-| Memory per entity | **`O(1)`** — `Option<(f64, f64, i64)>` for the previous point + `f64` for max km/h. Boxed inside `AggOp` per Phase 12.9 (`crates/beava-core/src/agg_op.rs` line 486). |
+| Memory per entity | **`O(1)`** — `Option<(f64, f64, i64)>` for the previous point + `f64` for max km/h. Boxed inside `AggOp` per v0 (`crates/beava-core/src/agg_op.rs` line 486). |
 | Lifetime mode | **Required** — `bv.geo_velocity` has no `window=` kwarg in v0; lifetime is the only mode. |
 
 ## Examples
@@ -95,12 +95,12 @@ def CardMaxImpliedKmh(swipes) -> bv.Table:
     )
 
 # Push events
-app.push("CardSwipe", {"card_id": "abc", "latitude": 40.7128, "longitude": -74.0060})  # NYC
+app.push("CardSwipe", {"card_id": "abc", "latitude": 40.7128, "longitude": -74.0060}) # NYC
 # 30 seconds later
-app.push("CardSwipe", {"card_id": "abc", "latitude":  1.3521, "longitude": 103.8198})  # Singapore
+app.push("CardSwipe", {"card_id": "abc", "latitude": 1.3521, "longitude": 103.8198}) # Singapore
 
 result = app.get("CardMaxImpliedKmh", "abc")
-# result == {"max_kmh": 1_867_000.0}  # ~1.86 million km/h — physically impossible
+# result == {"max_kmh": 1_867_000.0} # ~1.86 million km/h — physically impossible
 ```
 
 ### Example 2: Per-user max km/h with a `where=` filter
@@ -161,5 +161,5 @@ See [examples/wire/register-fraud-team.request.json](../../../examples/wire/regi
 - [bv.geo_spread](./geo_spread.md) — RMS-dispersion sibling (how spread out are this entity's points around their mean centroid)
 - [bv.distance_from_home](./distance_from_home.md) — current-event distance from a centroid of recent locations
 - [V0-MEM-GOV-01](../../../.planning/REQUIREMENTS.md) — cold-entity eviction (`@bv.event(cold_after=...)`) for windowing the lifetime
-- [Phase 12.9 SUMMARY](../../../.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md) — `AggOp::GeoVelocity` boxing context
+- [SUMMARY](../../../.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md) — `AggOp::GeoVelocity` boxing context
 - [pipeline-dsl/compilation-rules.md](../../pipeline-dsl/compilation-rules.md) — chain compilation rules

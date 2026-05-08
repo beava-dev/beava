@@ -8,7 +8,7 @@
 bv.histogram(
     field: str,
     *,
-    buckets: list[float],            # REQUIRED — register-time kwarg
+    buckets: list[float], # REQUIRED — register-time kwarg
     where: bv.Col | None = None,
 ) -> AggDescriptor
 ```
@@ -65,7 +65,7 @@ events, the result is the dict with all counters at `0`.
 |----------|-------|
 | CPU per event | **Tier 1** (~10 ns floor / ~30 ns measured — linear scan over ≤ ~20 buckets + saturating add) — see [cost-class.md](../cost-class.md#tier-1-fast-40-nscall--38-ops) |
 | Query | **Tier 3** allocates a `BTreeMap` of `len(buckets) + 1` entries on each `app.get(...)` — see [cost-class.md](../cost-class.md#tier-3-algorithmic-floor-100-300-nscall--9-ops) — apply-thread cost is Tier 1; query-time cost is the asymmetry to flag when profiling |
-| Memory per entity | **`BoundedByRequiredKwarg("buckets")`** — `(len(buckets) + 1) × 8` bytes per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
+| Memory per entity | **`BoundedByRequiredKwarg("buckets")`** — `(len(buckets) + 1) × 8` bytes per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
 | Lifetime mode | **Required** — `bv.histogram` has no `window=` kwarg in v0; lifetime is the only mode |
 
 ## Examples

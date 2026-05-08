@@ -221,9 +221,9 @@ def UserBalanceJump(updates) -&gt; bv.Table:
     )
 
 # Push events
-app.push(&quot;BalanceUpdate&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;balance&quot;: 1000.0})  # last_jump = null
-app.push(&quot;BalanceUpdate&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;balance&quot;: 1250.0})  # last_jump = 250
-app.push(&quot;BalanceUpdate&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;balance&quot;: 1200.0})  # last_jump = -50
+app.push(&quot;BalanceUpdate&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;balance&quot;: 1000.0}) # last_jump = null
+app.push(&quot;BalanceUpdate&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;balance&quot;: 1250.0}) # last_jump = 250
+app.push(&quot;BalanceUpdate&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;balance&quot;: 1200.0}) # last_jump = -50
 
 # Query
 result = app.get(&quot;UserBalanceJump&quot;, &quot;alice&quot;)

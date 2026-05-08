@@ -38,28 +38,28 @@ beava quickstart · v0.1.0
       path: str
       dwell_ms: int
 
-  @bv.table   # no key= → one row, site-wide
+  @bv.table # no key= → one row, site-wide
   def SiteMetrics(e: PageView):
       return e.agg(
-          median_dwell_1h  = bv.quantile("dwell_ms", q=0.5, window="1h"),
+          median_dwell_1h = bv.quantile("dwell_ms", q=0.5, window="1h"),
           page_views_today = bv.count(window="24h"),
-          top_page_1h      = bv.top_k("path", k=1, window="1h"),
+          top_page_1h = bv.top_k("path", k=1, window="1h"),
       )
 
   POST /register → 201 (registry_version=1)
 
 [2/4] Push 5 events
 ───────────────────
-  POST /push  {event:"PageView", data:{session_id:"s_1", …}} → ack_lsn=…
+  POST /push {event:"PageView", data:{session_id:"s_1", …}} → ack_lsn=…
   …
 
 [3/4] Query the global row
 ──────────────────────────
-  POST /get  {table:"SiteMetrics", key:""}
+  POST /get {table:"SiteMetrics", key:""}
   → {
-      "median_dwell_1h":  2110.0,
+      "median_dwell_1h": 2110.0,
       "page_views_today": 5,
-      "top_page_1h":      [{"value": "/", "count": 2}]
+      "top_page_1h": [{"value": "/", "count": 2}]
     }
 
 [4/4] Now run it for real
@@ -118,7 +118,7 @@ Step 1 dropped a Python file in your shell's working directory:
 ```python
 # beava_quickstart.py — same pipeline as `beava quickstart`.
 # Run a real server in another terminal (`beava`) and run this file:
-#     $ python beava_quickstart.py
+# $ python beava_quickstart.py
 
 import beava as bv
 
@@ -130,12 +130,12 @@ class PageView:
     dwell_ms: int
 
 
-@bv.table   # no key= → one row, site-wide
+@bv.table # no key= → one row, site-wide
 def SiteMetrics(e: PageView):
     return e.agg(
-        median_dwell_1h  = bv.quantile("dwell_ms", q=0.5, window="1h"),
+        median_dwell_1h = bv.quantile("dwell_ms", q=0.5, window="1h"),
         page_views_today = bv.count(window="24h"),
-        top_page_1h      = bv.top_k("path", k=1, window="1h"),
+        top_page_1h = bv.top_k("path", k=1, window="1h"),
     )
 
 
@@ -143,11 +143,11 @@ app = bv.App("127.0.0.1:8080")
 app.register(PageView, SiteMetrics)
 
 for sid, path, dwell in [
-    ("s_1", "/",        1240),
+    ("s_1", "/", 1240),
     ("s_2", "/pricing", 3380),
-    ("s_3", "/docs",     890),
-    ("s_4", "/",        2110),
-    ("s_5", "/docs",    5620),
+    ("s_3", "/docs", 890),
+    ("s_4", "/", 2110),
+    ("s_5", "/docs", 5620),
 ]:
     app.push("PageView", {"session_id": sid, "path": path, "dwell_ms": dwell})
 
@@ -224,7 +224,7 @@ def CampaignStats(imp: Impression):
         bid_mean_1h=bv.mean("bid", window="1h"),
     )
 
-print(app.get("CampaignStats", "c1"))  # -> {"impressions_1h": 2, ...}
+print(app.get("CampaignStats", "c1")) # -> {"impressions_1h": 2, ...}
 ```
 
 Per [ADR-003](../.planning/decisions/ADR-003-global-aggregation-and-bv-lit.md),
@@ -239,9 +239,9 @@ A self-contained tour with realistic-shape data:
 ```python
 import beava as bv
 
-bv.demo("adtech")     # ad-impression / click-rate aggregations
-bv.demo("fraud")      # high-cardinality velocity + sketch
-bv.demo("ecommerce")  # purchase / basket aggregations
+bv.demo("adtech") # ad-impression / click-rate aggregations
+bv.demo("fraud") # high-cardinality velocity + sketch
+bv.demo("ecommerce") # purchase / basket aggregations
 ```
 
 Each demo registers descriptors, pushes ~10 events, and queries the

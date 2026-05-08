@@ -11,10 +11,10 @@ when to reach for which.
 
 ## Overview
 
-| Node       | What it is                              | How it changes                                         | How you read it                |
+| Node | What it is | How it changes | How you read it |
 | ---------- | --------------------------------------- | ------------------------------------------------------ | ------------------------------ |
-| `@bv.event` | Immutable, append-only event stream     | `app.push(EventName, fields)` adds one event           | Cannot be queried directly      |
-| `@bv.table` | Aggregation output, keyed by partition  | Updates implicitly when upstream events arrive          | `app.get(TableName, key)`      |
+| `@bv.event` | Immutable, append-only event stream | `app.push(EventName, fields)` adds one event | Cannot be queried directly |
+| `@bv.table` | Aggregation output, keyed by partition | Updates implicitly when upstream events arrive | `app.get(TableName, key)` |
 
 Events are facts that have happened; you push them. Tables are functions of
 those facts; you read them. beava holds both in memory; the apply loop
@@ -89,7 +89,7 @@ for the compiled wire form.
 
 ## What `@bv.table` is NOT in v0
 
-The pre-12.7 `@bv.table` surface was much wider. ADR-001 deliberately
+The pre-v0 `@bv.table` surface was much wider. ADR-001 deliberately
 revives only the aggregation-output use case. Everything else stays gone:
 
 - **NOT a mutable upserted store.** `app.upsert(table, key, fields)` does
@@ -98,7 +98,7 @@ revives only the aggregation-output use case. Everything else stays gone:
   exist. Rows live for as long as their backing aggregations hold state.
 - **NOT a temporal MVCC table.** `TemporalStore`, `MvccVersion`,
   `temporal_http`, and the WAL `RecordType::Table*` variants were stripped
-  in Phase 12.7 and stay stripped. There are no time-travel queries.
+  in v0 and stay stripped. There are no time-travel queries.
 - **NOT a retraction-aware aggregation.** Pushing a "retracting" event does
   not propagate undo through downstream aggregations. `app.retract(...)` is
   also gone.
@@ -116,14 +116,14 @@ for the deferred surface.
 
 ## When to use which
 
-| You want to                                  | Reach for                                 |
+| You want to | Reach for |
 | -------------------------------------------- | ----------------------------------------- |
-| Record a fact that just happened             | `@bv.event` + `app.push(Event, fields)`   |
-| Expose a per-entity feature for live scoring | `@bv.table` wrapping `group_by().agg()`   |
-| Look up that feature                         | `app.get(Table, key)` / `batch_get(...)`  |
-| "Insert a row" by hand                       | Not v0. Push an event; let aggregation update the table |
-| "Delete a row" by hand                       | Not v0. Use `cold_after=` on the source event for TTL eviction |
-| Compute a feature from another feature       | Not v0. Aggregating tables stays in v0.1+ |
+| Record a fact that just happened | `@bv.event` + `app.push(Event, fields)` |
+| Expose a per-entity feature for live scoring | `@bv.table` wrapping `group_by().agg()` |
+| Look up that feature | `app.get(Table, key)` / `batch_get(...)` |
+| "Insert a row" by hand | Not v0. Push an event; let aggregation update the table |
+| "Delete a row" by hand | Not v0. Use `cold_after=` on the source event for TTL eviction |
+| Compute a feature from another feature | Not v0. Aggregating tables stays in v0.1+ |
 
 ## Push vs read semantics
 
@@ -163,13 +163,13 @@ for the register-time memory contract.
   — the canonical record of the partial overturn that brought
   `@bv.table` back as an aggregation-output decorator only.
 - [`CLAUDE.md` § Events-Only Invariant](../../CLAUDE.md) — the locked
-  Phase 12.7 events-only commitment + ADR-001's amendment.
+  v0 events-only commitment + ADR-001's amendment.
 - [pipeline-dsl/overview.md](../pipeline-dsl/overview.md) — the
   `@bv.event` / `@bv.table` decorator surface in full.
 - [pipeline-dsl/compilation-rules.md](../pipeline-dsl/compilation-rules.md)
   — Python source → JSON wire compilation for aggregation chains.
 - `docs/concepts/global-aggregation.md` (forthcoming, owned by Plan
-  13.0-15 closure per ADR-003) — global-only aggregation surface
+  v0 closure per ADR-003) — global-only aggregation surface
   (no `key=`).
 - [error-codes.md](../error-codes.md) — `bv_table_class_form_not_supported`,
   `aggregation_on_table_not_supported`, `unsupported_node_kind`.

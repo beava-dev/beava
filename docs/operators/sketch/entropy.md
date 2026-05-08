@@ -20,7 +20,7 @@ bv.entropy(
 distribution of a field across events that match the optional `where=`
 predicate. State is a per-category frequency table capped at `max_categories`
 distinct keys; once full, the cap-and-drop policy keeps the most-frequent
-categories and discards the tail (Phase 19.2-06 D-05a).
+categories and discards the tail (v0-06 D-05a).
 
 Entropy ranges from `0.0` (degenerate distribution — every event has the
 same value) to `log₂(K)` for K equally-likely categories. It quantifies how
@@ -30,7 +30,7 @@ merchant mix today?" or `bv.entropy("user_agent")` for "how varied are the
 client UA strings ever seen for this account?".
 
 `bv.entropy` belongs to the **sketch** family. `BoundedByConfig("max_categories", 256)`
-per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) — the
+per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) — the
 per-entity memory ceiling is declared at register time via the
 `max_categories` kwarg. Per-event update is a BTreeMap key insert; Tier 3
 cost (~60 ns floor / ~160 ns measured) — string-key allocation is the
@@ -43,7 +43,7 @@ irreducible per-event cost.
 | `field` | `str` | Yes | — | Name of the categorical field to compute entropy over. Any hashable type (`str`, `i64`, `f64`). |
 | `window` | `str` | No | `None` (lifetime) | Duration string matching `\d+(ms\|s\|m\|h\|d)` or `"forever"`. |
 | `where` | `bv.Col` | No | `None` | Boolean expression on event fields; only matching events contribute. |
-| `max_categories` | `int` | No | `256` | Cap on distinct categories retained per entity. Memory bounded by `O(max_categories)` BTreeMap entries. Phase 12.8 `BoundedByConfig` ceiling. |
+| `max_categories` | `int` | No | `256` | Cap on distinct categories retained per entity. Memory bounded by `O(max_categories)` BTreeMap entries. v0 `BoundedByConfig` ceiling. |
 
 ## Returns
 
@@ -55,7 +55,7 @@ matching events, the result is `null` (Python `None`).
 | Resource | Bound |
 |----------|-------|
 | CPU per event | **Tier 3** (~60 ns algorithm floor / ~160 ns measured — BTreeMap key insert + cap-and-drop) — see [cost-class.md](../cost-class.md#tier-3-algorithmic-floor-100-300-nscall--9-ops) |
-| Memory per entity | `BoundedByConfig("max_categories", 256)` per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) — BTreeMap of size ≤ `max_categories` |
+| Memory per entity | `BoundedByConfig("max_categories", 256)` per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) — BTreeMap of size ≤ `max_categories` |
 | Lifetime mode (`window=None`) | **Allowed** — `BoundedByConfig` declares the per-entity ceiling at register time |
 
 ## Examples
@@ -86,7 +86,7 @@ app.push("Txn", {"user_id": "alice", "merchant": "uber", "amount": 12.0})
 
 # Query
 result = app.get("UserMerchantDiversity", "alice")
-# result == {"merchant_entropy_24h": ~1.5}  # 2/4 amazon, 1/4 starbucks, 1/4 uber
+# result == {"merchant_entropy_24h": ~1.5} # 2/4 amazon, 1/4 starbucks, 1/4 uber
 ```
 
 ### Example 2: Lifetime user-agent entropy with a tighter cap
@@ -134,7 +134,7 @@ See [examples/wire/register-fraud-team.request.json](../../../examples/wire/regi
 - **NaN inputs:** treated as a single distinct category (NaN equals itself in the BTreeMap key); for cleaner semantics filter with `where=~bv.col("field").isnull()`.
 - **`max_categories` set to 0:** rejected at register time with `aggregation_invalid_param`.
 - **Lifetime mode (`window=None`):** explicitly allowed — `BoundedByConfig("max_categories", 256)` declares the per-entity ceiling at register time per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md).
-- **Quadkey-for-geo recipe:** the recommended replacement for the deleted `bv.geo_entropy` op (Phase 19.2) is `bv.entropy(quadkey(lat, lon, zoom), max_categories=1024)` — the `quadkey(...)` expression at apply time produces a deterministic integer cell id for `entropy` to bin.
+- **Quadkey-for-geo recipe:** the recommended replacement for the deleted `bv.geo_entropy` op is `bv.entropy(quadkey(lat, lon, zoom), max_categories=1024)` — the `quadkey(...)` expression at apply time produces a deterministic integer cell id for `entropy` to bin.
 
 ## See also
 

@@ -48,7 +48,7 @@ A single `i64`. When the entity has seen zero matching events, the result is
 |----------|-------|
 | CPU per event | **Tier 1** (~5 ns algorithm floor / ~25 ns measured) — see [cost-class.md](../cost-class.md#tier-1-fast-40-nscall--38-ops) |
 | Memory per entity | `O(1)` — single counter (plus bucket array if `window` is set, capped at 64 buckets) |
-| Lifetime mode (`window=None`) | **Allowed** — `O(1)` footprint per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
+| Lifetime mode (`window=None`) | **Allowed** — `O(1)` footprint per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
 
 ## Examples
 

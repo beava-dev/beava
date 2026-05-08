@@ -84,8 +84,8 @@ def UserAmtRate(txns) -> bv.Table:
     )
 
 # Push events
-app.push("Txn", {"user_id": "alice", "amount": 100.0})  # rate = null (single event)
-app.push("Txn", {"user_id": "alice", "amount": 250.0})  # rate = (250-100)/Δt_ms
+app.push("Txn", {"user_id": "alice", "amount": 100.0}) # rate = null (single event)
+app.push("Txn", {"user_id": "alice", "amount": 250.0}) # rate = (250-100)/Δt_ms
 
 # Query
 result = app.get("UserAmtRate", "alice")

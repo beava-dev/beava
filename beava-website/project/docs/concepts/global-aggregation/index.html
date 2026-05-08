@@ -186,7 +186,7 @@
 </table>
 <p>The rule of thumb: if your downstream consumer queries &quot;for entity Z, what is X?&quot;, use per-entity. If your consumer queries &quot;for the platform as a whole, what is X?&quot;, use global. The two surfaces compose freely on the same source — you can have both <code>UserSpend</code> (per-entity) and <code>TotalSpend</code> (global) aggregations consuming the same <code>Purchase</code> events.</p>
 <h2 id="three-equivalent-forms" tabindex="-1"><a class="header-anchor" href="#three-equivalent-forms" aria-hidden="true">#</a> Three equivalent forms</h2>
-<p>In Python (per <a href="/docs/sdk-api/python/">Phase 13.0 Plan 04 + ADR-003</a>), three forms compile to the same wire payload:</p>
+<p>In Python (per <a href="/docs/sdk-api/python/">an internal plan + ADR-003</a>), three forms compile to the same wire payload:</p>
 <pre><code class="language-python"># Form 1: shortest — direct .agg() shorthand on the source
 clicks.agg(total=bv.count(window=&quot;forever&quot;))
 
@@ -194,7 +194,7 @@ clicks.agg(total=bv.count(window=&quot;forever&quot;))
 clicks.group_by().agg(total=bv.count(window=&quot;forever&quot;))
 
 # Form 3: full decorator declaration
-@bv.table   # no key= → global
+@bv.table # no key= → global
 def TotalClicks(clicks) -&gt; bv.Table:
     return clicks.agg(total=bv.count(window=&quot;forever&quot;))
 </code></pre>
@@ -204,7 +204,7 @@ def TotalClicks(clicks) -&gt; bv.Table:
 
 # Push events for many users:
 app.push(&quot;Click&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;page&quot;: &quot;/home&quot;})
-app.push(&quot;Click&quot;, {&quot;user_id&quot;: &quot;bob&quot;,   &quot;page&quot;: &quot;/home&quot;})
+app.push(&quot;Click&quot;, {&quot;user_id&quot;: &quot;bob&quot;, &quot;page&quot;: &quot;/home&quot;})
 app.push(&quot;Click&quot;, {&quot;user_id&quot;: &quot;carol&quot;, &quot;page&quot;: &quot;/products&quot;})
 
 # Query the global feature dict — no entity arg:
@@ -251,16 +251,16 @@ app.get(&quot;TotalClicks&quot;)
 <p><strong>Global tables are NOT subject to <code>cold_after=</code> eviction.</strong> The global state slot is always live (it's literally always one entity, with key = &quot;&quot;). Setting <code>cold_after=</code> on the source <code>@bv.event</code> decorator only affects per-entity tables consuming that source — global tables consuming the same source keep accumulating into their single slot indefinitely.</p>
 <p>This is intentional: global tables are typically used for monitoring / dashboards / anomaly detection where you want the running aggregate to never reset. If you need a windowed global aggregate (e.g., &quot;total clicks in the last hour&quot;), use the windowed form: <code>clicks.agg(total=bv.count(window=&quot;1h&quot;))</code> — bucket reclaim per <a href="/docs/architecture/memory-budget/">V0-MEM-GOV-03</a> handles the eviction within the global slot.</p>
 <p>If you need both — per-entity TTL eviction for personalization features AND global running aggregate — declare two derivations on the same source:</p>
-<pre><code class="language-python">@bv.event(cold_after=&quot;7d&quot;)   # per-entity TTL applies to UserSpend below
+<pre><code class="language-python">@bv.event(cold_after=&quot;7d&quot;) # per-entity TTL applies to UserSpend below
 class Purchase:
     user_id: str
     amount: float
 
 @bv.table(key=&quot;user_id&quot;)
-def UserSpend(p) -&gt; bv.Table:                       # cold_after evicts inactive users
+def UserSpend(p) -&gt; bv.Table: # cold_after evicts inactive users
     return p.group_by(&quot;user_id&quot;).agg(spend=bv.sum(&quot;amount&quot;, window=&quot;1h&quot;))
 
-@bv.table   # global — cold_after has no effect; state is always live
+@bv.table # global — cold_after has no effect; state is always live
 def TotalSpend(p) -&gt; bv.Table:
     return p.agg(spend=bv.sum(&quot;amount&quot;, window=&quot;1h&quot;))
 </code></pre>
@@ -275,7 +275,7 @@ def TotalSpend(p) -&gt; bv.Table:
 <p>Per <a href="/docs/architecture/memory-budget/">V0-MEM-GOV-02</a>, every lifetime aggregation operator declares a finite per-entity memory ceiling at register-time. The same enforcement applies to global tables — the single global state slot is bounded by the same op-class memory contract.</p>
 <h2 id="forward-link" tabindex="-1"><a class="header-anchor" href="#forward-link" aria-hidden="true">#</a> Forward link</h2>
 <p>For the full design rationale, alternatives considered, and implementation deferral plan, see <a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-003-global-aggregation-and-bv-lit.md">ADR-003: First-class global aggregation + public <code>bv.lit</code> export</a>.</p>
-<p>The acceptance test suite for global aggregation lives at <a href="https://github.com/beava-dev/beava/blob/main/python/tests/v0/test_global.py"><code>python/tests/v0/test_global.py</code></a> (Plan 13.0-16, 8 tests gated by <code>_engine_available()</code> SKIP until Phase 13.4 + 13.5 land the implementation).</p>
+<p>The acceptance test suite for global aggregation lives at <a href="https://github.com/beava-dev/beava/blob/main/python/tests/v0/test_global.py"><code>python/tests/v0/test_global.py</code></a> (an internal plan, 8 tests gated by <code>_engine_available()</code> SKIP until v0 + v0 land the implementation).</p>
 
 </article>
 </main>

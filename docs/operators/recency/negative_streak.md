@@ -50,7 +50,7 @@ returns an integer; cold-start (no events seen) returns `0`, never `null`.
 | Resource | Bound |
 |----------|-------|
 | CPU per event | **Tier 1** (~10 ns floor / ~30 ns measured) — see [cost-class.md](../cost-class.md#tier-1-fast-40-nscall--38-ops) |
-| Memory per entity | `O(1)` — single `u64` slot in `NegativeStreakState` per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
+| Memory per entity | `O(1)` — single `u64` slot in `NegativeStreakState` per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
 | Lifetime mode | **Required** — `bv.negative_streak` has no `window=` kwarg; lifetime is the only mode |
 
 ## Examples
@@ -127,7 +127,7 @@ See [examples/wire/register-fraud-team.request.json](../../../examples/wire/regi
 - **Out-of-order event-time:** **does not matter.** beava is processing-time-only per [`project_redis_shaped_no_event_time_ever`](../../../.planning/PROJECT.md); the streak follows server arrival order.
 - **Cold-entity eviction:** if [`@bv.event(cold_after=...)`](../../../.planning/REQUIREMENTS.md) evicts the entity, `NegativeStreakState` is dropped; the next event after eviction restarts the count.
 - **`window=` kwarg attempted:** raises `TypeError` at SDK-helper-call time. A windowed negative-streak would require a different state shape and is out of v0 scope.
-- **Lifetime mode:** **the only mode.** Footprint is `O(1)` per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md).
+- **Lifetime mode:** **the only mode.** Footprint is `O(1)` per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md).
 
 ## See also
 

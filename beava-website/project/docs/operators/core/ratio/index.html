@@ -193,7 +193,7 @@ or otherwise), the result is <code>null</code> (Python <code>None</code>) — no
 </tr>
 <tr>
 <td>Lifetime mode (<code>window=None</code>)</td>
-<td><strong>Allowed</strong> — <code>O(1)</code> footprint per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a></td>
+<td><strong>Allowed</strong> — <code>O(1)</code> footprint per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a></td>
 </tr>
 </tbody>
 </table>
@@ -220,7 +220,7 @@ app.push(&quot;Login&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;statu
 
 # Query
 result = app.get(&quot;UserFailRate&quot;, &quot;alice&quot;)
-# result == {&quot;fail_rate_lifetime&quot;: 0.6666666666666666}  # 2 / 3
+# result == {&quot;fail_rate_lifetime&quot;: 0.6666666666666666} # 2 / 3
 </code></pre>
 <h3 id="example-2-click-through-rate-this-hour" tabindex="-1"><a class="header-anchor" href="#example-2-click-through-rate-this-hour" aria-hidden="true">#</a> Example 2: Click-through rate this hour</h3>
 <pre><code class="language-python">@bv.table(key=&quot;user_id&quot;)

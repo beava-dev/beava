@@ -123,7 +123,7 @@
 <h2 id="signature" tabindex="-1"><a class="header-anchor" href="#signature" aria-hidden="true">#</a> Signature</h2>
 <pre><code class="language-python">bv.first_seen_in_window(
     *,
-    window: str,                    # REQUIRED — register-time kwarg
+    window: str, # REQUIRED — register-time kwarg
     where: bv.Col | None = None,
 ) -&gt; AggDescriptor
 </code></pre>
@@ -201,7 +201,7 @@ returns <code>false</code> (never <code>null</code>).</p>
 </tr>
 <tr>
 <td>Memory per entity</td>
-<td><code>O(1)</code> — single <code>Option&lt;i64&gt;</code> slot in <code>FirstSeenInWindowState</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a> (the <code>window_ms</code> parameter is shared with the descriptor, not per-entity state)</td>
+<td><code>O(1)</code> — single <code>Option&lt;i64&gt;</code> slot in <code>FirstSeenInWindowState</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a> (the <code>window_ms</code> parameter is shared with the descriptor, not per-entity state)</td>
 </tr>
 <tr>
 <td>Lifetime mode</td>
@@ -272,7 +272,7 @@ def CardRecentSuccess(txns) -&gt; bv.Table:
 <li><strong>Reads flip false → true and back without new events:</strong> the slot stays the same, but query-time <code>now_ms() - last_ms</code> grows; once it crosses the threshold, the read returns false. This is intentional — windowed-recency is the question being asked.</li>
 <li><strong>Server-time, NOT event-time:</strong> the captured value is server <code>now_ms()</code> at apply per <a href="https://github.com/beava-dev/beava/blob/main/.planning/PROJECT.md"><code>project_redis_shaped_no_event_time_ever</code></a>. Producers cannot influence the captured timestamp via the payload.</li>
 <li><strong>Cold-entity eviction:</strong> if <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md"><code>@bv.event(cold_after=...)</code></a> evicts the entity, the slot is dropped; the next event after eviction starts a fresh <code>last_ms</code> (Redis-TTL pattern, V0-MEM-GOV-01).</li>
-<li><strong>Lifetime state, windowed semantics:</strong> unlike Phase 5/10 windowed ops (which carry up to 64 buckets), <code>first_seen_in_window</code> is <code>O(1)</code> because it only needs the last arrival timestamp + a constant window threshold to decide.</li>
+<li><strong>Lifetime state, windowed semantics:</strong> unlike v0/10 windowed ops (which carry up to 64 buckets), <code>first_seen_in_window</code> is <code>O(1)</code> because it only needs the last arrival timestamp + a constant window threshold to decide.</li>
 </ul>
 <h2 id="see-also" tabindex="-1"><a class="header-anchor" href="#see-also" aria-hidden="true">#</a> See also</h2>
 <ul>

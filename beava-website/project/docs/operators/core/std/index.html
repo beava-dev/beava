@@ -201,7 +201,7 @@ result is <code>null</code> (Python <code>None</code>) — sample stddev is unde
 </tr>
 <tr>
 <td>Lifetime mode (<code>window=&quot;forever&quot;</code>)</td>
-<td><strong>Allowed</strong> — <code>O(1)</code> footprint per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a></td>
+<td><strong>Allowed</strong> — <code>O(1)</code> footprint per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a></td>
 </tr>
 </tbody>
 </table>
@@ -228,7 +228,7 @@ app.push(&quot;Txn&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;amount&
 
 # Query
 result = app.get(&quot;TxnSpread&quot;, &quot;alice&quot;)
-# result == {&quot;amount_std_1h&quot;: 20.0}  # sqrt of sample variance 400.0
+# result == {&quot;amount_std_1h&quot;: 20.0} # sqrt of sample variance 400.0
 </code></pre>
 <h3 id="example-2-latency-stddev-for-the-success-bucket" tabindex="-1"><a class="header-anchor" href="#example-2-latency-stddev-for-the-success-bucket" aria-hidden="true">#</a> Example 2: Latency-stddev for the success-bucket</h3>
 <pre><code class="language-python">@bv.table(key=&quot;user_id&quot;)

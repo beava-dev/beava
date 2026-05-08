@@ -143,11 +143,11 @@ qualifies as <code>O(1)</code> per entity under the
 <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a> lifetime-aggregation
 contract — no required register-time kwarg, no fallback default. State per
 entity is <code>[HourBucket; 24] + Option&lt;(f64, usize)&gt;</code> for the latest
-observation: 24 × 24 bytes + 16 bytes ≈ 600 bytes. Phase 12.9 boxed
+observation: 24 × 24 bytes + 16 bytes ≈ 600 bytes. v0 boxed
 <code>SeasonalDeviationState</code> so the <code>AggOp::SeasonalDeviation</code> variant fits the
 80-byte enum cap (the state itself lives on the heap behind a <code>Box</code>); see
 <code>crates/beava-core/src/agg_op.rs</code> line 482 and
-<a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md">Phase 12.9 SUMMARY</a>.</p>
+<a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md">SUMMARY</a>.</p>
 <p><code>bv.seasonal_deviation</code> belongs to the <strong>bounded-buffer</strong> family — it
 shares state-shape with <a href="/docs/operators/buffer-geo/hour_of_day_histogram/"><code>bv.hour_of_day_histogram</code></a>
 but tracks variance, not just counts. Per-event update is Tier 1 (~10 ns
@@ -217,7 +217,7 @@ observation in this hour was identical).</li>
 </tr>
 <tr>
 <td>Memory per entity</td>
-<td><strong><code>O(1)</code></strong> — <code>[HourBucket; 24] + Option&lt;(f64, usize)&gt;</code> ≈ 600 bytes per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a>. Boxed inside <code>AggOp</code> per Phase 12.9 to fit the 80-byte enum cap</td>
+<td><strong><code>O(1)</code></strong> — <code>[HourBucket; 24] + Option&lt;(f64, usize)&gt;</code> ≈ 600 bytes per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a>. Boxed inside <code>AggOp</code> per v0 to fit the 80-byte enum cap</td>
 </tr>
 <tr>
 <td>Lifetime mode</td>

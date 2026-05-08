@@ -200,7 +200,7 @@ any aggregation node — see
 <a href="/docs/pipeline-dsl/compilation-rules/">../pipeline-dsl/compilation-rules.md</a>
 for the compiled wire form.</p>
 <h2 id="what-bvtable-is-not-in-v0" tabindex="-1"><a class="header-anchor" href="#what-bvtable-is-not-in-v0" aria-hidden="true">#</a> What <code>@bv.table</code> is NOT in v0</h2>
-<p>The pre-12.7 <code>@bv.table</code> surface was much wider. ADR-001 deliberately
+<p>The pre-v0 <code>@bv.table</code> surface was much wider. ADR-001 deliberately
 revives only the aggregation-output use case. Everything else stays gone:</p>
 <ul>
 <li><strong>NOT a mutable upserted store.</strong> <code>app.upsert(table, key, fields)</code> does
@@ -209,7 +209,7 @@ not exist. There is no SDK verb to write a row directly into a table.</li>
 exist. Rows live for as long as their backing aggregations hold state.</li>
 <li><strong>NOT a temporal MVCC table.</strong> <code>TemporalStore</code>, <code>MvccVersion</code>,
 <code>temporal_http</code>, and the WAL <code>RecordType::Table*</code> variants were stripped
-in Phase 12.7 and stay stripped. There are no time-travel queries.</li>
+in v0 and stay stripped. There are no time-travel queries.</li>
 <li><strong>NOT a retraction-aware aggregation.</strong> Pushing a &quot;retracting&quot; event does
 not propagate undo through downstream aggregations. <code>app.retract(...)</code> is
 also gone.</li>
@@ -294,13 +294,13 @@ for the register-time memory contract.</p>
 — the canonical record of the partial overturn that brought
 <code>@bv.table</code> back as an aggregation-output decorator only.</li>
 <li><a href="../../CLAUDE.md"><code>CLAUDE.md</code> § Events-Only Invariant</a> — the locked
-Phase 12.7 events-only commitment + ADR-001's amendment.</li>
+v0 events-only commitment + ADR-001's amendment.</li>
 <li><a href="/docs/pipeline-dsl/overview/">pipeline-dsl/overview.md</a> — the
 <code>@bv.event</code> / <code>@bv.table</code> decorator surface in full.</li>
 <li><a href="/docs/pipeline-dsl/compilation-rules/">pipeline-dsl/compilation-rules.md</a>
 — Python source → JSON wire compilation for aggregation chains.</li>
 <li><code>docs/concepts/global-aggregation.md</code> (forthcoming, owned by Plan
-13.0-15 closure per ADR-003) — global-only aggregation surface
+v0 closure per ADR-003) — global-only aggregation surface
 (no <code>key=</code>).</li>
 <li><a href="/docs/error-codes/">error-codes.md</a> — <code>bv_table_class_form_not_supported</code>,
 <code>aggregation_on_table_not_supported</code>, <code>unsupported_node_kind</code>.</li>

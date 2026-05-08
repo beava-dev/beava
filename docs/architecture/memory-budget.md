@@ -7,28 +7,28 @@ exceeds RAM, beava refuses new entities. The budget for v0 is
 12.9 — which gives **~700 GB for 100 M entities**, fitting on a 1 TB
 NVMe box with headroom.
 
-This page walks the per-entity memory math, the verified Phase 12.9
+This page walks the per-entity memory math, the verified v0
 numbers, what can blow the budget, and the three V0-MEM-GOV invariants
 that keep it honest.
 
-## Verified Phase 12.9 numbers (cite explicitly)
+## Verified v0 numbers (cite explicitly)
 
-Phase 12.9 (closed 2026-05-03 PASS) boxed 7 fat AggOp variants
+v0 (closed 2026-05-03 PASS) boxed 7 fat AggOp variants
 (`SeasonalDeviation`, `HourOfDayHistogram`, `EventTypeMix`,
 `GeoVelocity`, `GeoSpread`, `GeoDistance`, `DistanceFromHome`) so they
 store as `Box<State>` (8 B inline + heap state) instead of inline. The
 result:
 
-| Metric                                       | Pre-12.9 | Post-12.9 | Delta            |
+| Metric | Pre-12.9 | Post-12.9 | Delta |
 | -------------------------------------------- | -------: | --------: | ---------------- |
-| `size_of::<AggOp>()`                         | 600 B    | **80 B**  | **-87% (7.5×)**  |
-| user_id entity inline cost (78 features)     | 46.8 KB  | 6.2 KB    | -86%             |
-| card_fp entity inline cost (8 features)      | 4.8 KB   | 640 B     | -87%             |
-| device_id entity inline cost (9 features)    | 5.4 KB   | 720 B     | -87%             |
-| ip_address entity inline cost (12 features)  | 7.2 KB   | 960 B     | -87%             |
-| merchant_id entity inline cost (4 features)  | 2.4 KB   | 320 B     | -87%             |
+| `size_of::<AggOp>()` | 600 B | **80 B** | **-87% (7.5×)** |
+| user_id entity inline cost (78 features) | 46.8 KB | 6.2 KB | -86% |
+| card_fp entity inline cost (8 features) | 4.8 KB | 640 B | -87% |
+| device_id entity inline cost (9 features) | 5.4 KB | 720 B | -87% |
+| ip_address entity inline cost (12 features) | 7.2 KB | 960 B | -87% |
+| merchant_id entity inline cost (4 features) | 2.4 KB | 320 B | -87% |
 
-Per the Phase 12.9 SUMMARY, fraud-team weighted-average per-entity
+Per the v0 SUMMARY, fraud-team weighted-average per-entity
 dropped from **~22 KB → ~6 KB** post-boxing — clearing the 7 KB budget
 with headroom.
 
@@ -51,27 +51,27 @@ Future operator additions that exceed the cap force a deliberate review
 decision: either Box the new variant (preferred — preserves the cap) or
 explicitly raise `AGGOP_SIZE_CAP_BYTES` with a documented rationale.
 80 B accommodates `TrendResidualState` (72 B; the largest unboxed variant
-post-12.9) plus discriminant + alignment headroom.
+v0) plus discriminant + alignment headroom.
 
 This is **not** an aspirational target — it's a CI gate. PRs that
 add a new fat variant inline get caught before merge.
 
 See [`crates/beava-core/tests/per_entity_size_dump.rs`](../../crates/beava-core/tests/per_entity_size_dump.rs)
-and the Phase 12.9 SUMMARY at
+and the v0 SUMMARY at
 [`.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md`](../../.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md).
 
 ## Per-entity memory math
 
 For a representative 30-feature aggregation pack on a single entity:
 
-| Component                                | Bytes (typical)                       |
+| Component | Bytes (typical) |
 | ---------------------------------------- | ------------------------------------- |
-| 30 × `size_of::<AggOp>()` slots          | 30 × 80 B = **2.4 KB**                |
-| Heap state for boxed variants            | 0.5-3 KB (depends on op mix)          |
-| Heap state for unboxed bounded ops       | 0.2-0.8 KB (sketches, ring buffers)    |
-| Entity-key overhead (`SmallVec<[u8;16]>`) | ~16 B inline (or heap if longer)     |
-| HashMap bucket overhead (hashbrown)      | ~24 B per entry                       |
-| **Total**                                | **~3-7 KB depending on op mix**       |
+| 30 × `size_of::<AggOp>()` slots | 30 × 80 B = **2.4 KB** |
+| Heap state for boxed variants | 0.5-3 KB (depends on op mix) |
+| Heap state for unboxed bounded ops | 0.2-0.8 KB (sketches, ring buffers) |
+| Entity-key overhead (`SmallVec<[u8;16]>`) | ~16 B inline (or heap if longer) |
+| HashMap bucket overhead (hashbrown) | ~24 B per entry |
+| **Total** | **~3-7 KB depending on op mix** |
 
 For the **fraud-team primary tuning shape** (14-node pipeline, 110
 features distributed across multiple per-entity tables, weighted by
@@ -115,7 +115,7 @@ Three failure modes the budget assumes you've handled:
 
 ## V0-MEM-GOV invariants
 
-The three V0-MEM-GOV invariants (locked Phase 12.8) collectively bound
+The three V0-MEM-GOV invariants (locked v0) collectively bound
 `entities × per-entity bytes` — the only memory dimension beava ships
 with:
 
@@ -159,7 +159,7 @@ per-windowed-op trims trailing buckets that have rolled past the
 [`crates/beava-core/src/agg_windowed.rs`](../../crates/beava-core/src/agg_windowed.rs)
 fires on every eviction so operators can observe the rate.
 
-No new mechanism in Phase 12.8 — Tier 2 was already shipping; this
+No new mechanism in v0 — Tier 2 was already shipping; this
 REQ-ID locks the contract: idle entities continue holding state until
 either (a) Tier 1 cold-TTL evicts them or (b) the next event triggers
 normal `update_at()` cleanup.
@@ -168,10 +168,10 @@ Metric: `beava_bucket_reclaim_total`.
 
 ## /metrics observable
 
-Five Prometheus metric families ship from Phase 12.8 Plan 06 to make
+Five Prometheus metric families ship from v0 an internal plan to make
 the budget observable in production:
 
-- `beava_cold_entity_evictions_total` (counter) — Plan 03 cold-TTL
+- `beava_cold_entity_evictions_total` (counter) — an internal plan cold-TTL
   evictions fired.
 - `beava_lifetime_op_cap_hit_total` (counter) — entropy-categories
   capped + future top_k / histogram cap-hit events.
@@ -180,8 +180,8 @@ the budget observable in production:
 - `beava_bucket_reclaim_total` (counter) —
   `WindowedOp::evict_oldest_bucket` firings.
 - `beava_bytes_per_entity_p99` (gauge) — currently a static 7000
-  placeholder per Phase 12.8 PLANNER-SURFACED CONCERN; dynamic
-  sampling deferred to Phase 13.4 / v0.0.x. Phase 12.9's actual
+  placeholder per v0 PLANNER-SURFACED CONCERN; dynamic
+  sampling deferred to v0 / v0.0.x. v0's actual
   fraud-team weighted-avg is ~6 KB so the static value is no longer
   misleading, just not informative; replacement is ~30 LOC in
   `agg_state.rs::EntityCountResidentSnapshot`.
@@ -195,7 +195,7 @@ The 7 KB / entity number covers per-entity aggregation state. Other
 memory consumers exist but don't scale per-entity:
 
 - **Registry** — once per process (not per entity); typically <100 KB.
-- **WAL ring buffer** — fixed 16 MiB × 3 buffers (Phase 18); 48 MiB
+- **WAL ring buffer** — fixed 16 MiB × 3 buffers (v0); 48 MiB
   total regardless of entity count.
 - **HTTP listener / TCP listener** — per-connection buffers; small.
 - **Snapshot working memory** — peaks during snapshot serialization
@@ -207,7 +207,7 @@ others are noise.
 ## Cross-references
 
 - [`CLAUDE.md` § Constraints](../../CLAUDE.md) — the canonical 7 KB /
-  entity number + the citation chain into Phase 12.9 SUMMARY +
+  entity number + the citation chain into v0 SUMMARY +
   `aggop_size_within_cap` CI tripwire.
 - [`CLAUDE.md` § Memory Governance Invariant](../../CLAUDE.md) — the
   three V0-MEM-GOV invariants in full.
@@ -227,4 +227,4 @@ others are noise.
 - [observability.md](./observability.md) — Prometheus metrics for
   observing the budget in production.
 - [`.planning/ideas/per-entity-memory-budget.md`](../../.planning/ideas/per-entity-memory-budget.md)
-  — historical analysis that drove Phase 12.9 boxing.
+  — historical analysis that drove v0 boxing.

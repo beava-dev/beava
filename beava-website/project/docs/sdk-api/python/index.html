@@ -118,11 +118,11 @@
 <article class="docs-prose">
 <h1>beava Python SDK</h1>
 <blockquote>
-<p><strong>Status:</strong> Authoritative for v0. Documents the <strong>post-13.5 target</strong> Python
-SDK shape — Phase 13.5 implements the rewrite. Cross-language semantics
+<p><strong>Status:</strong> Authoritative for v0. Documents the <strong>v0 target</strong> Python
+SDK shape — v0 implements the rewrite. Cross-language semantics
 live in <a href="/docs/sdk-api/shared/">shared.md</a>; wire-level body shapes live in
 <a href="/docs/wire-spec/">docs/wire-spec.md</a>.
-<strong>Last reviewed:</strong> 2026-05-03 (Phase 13.0).</p>
+<strong>Last reviewed:</strong> 2026-05-03.</p>
 </blockquote>
 <h2 id="overview" tabindex="-1"><a class="header-anchor" href="#overview" aria-hidden="true">#</a> Overview</h2>
 <p>Python is the <strong>canonical authoring UX</strong> for beava (per project memory
@@ -139,34 +139,34 @@ demands them.</p>
 <li>53 op helper functions in the <code>bv.*</code> namespace, named per Polars conventions per <a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-002-polars-op-rename.md">ADR-002</a> — <code>bv.mean</code> / <code>bv.var</code> / <code>bv.std</code> / <code>bv.n_unique</code> / <code>bv.quantile</code> (NOT <code>bv.avg</code> / <code>bv.variance</code> / etc.).</li>
 <li><code>beava.test</code> fixtures for pytest integration.</li>
 </ul>
-<p>This doc describes the <strong>v0-target</strong> shape that Phase 13.5 will land. The
+<p>This doc describes the <strong>v0-target</strong> shape that v0 will land. The
 current <code>python/beava/_agg.py</code> is incomplete (<code>@bv.table</code> is stubbed out
-per Plan 12.7-06; only 32 of the 53 op helpers are present; <code>app.batch_get</code>
+per an internal plan; only 32 of the 53 op helpers are present; <code>app.batch_get</code>
 and <code>app.reset</code> are not yet wired). The forward-looking shape documented
 here is what the SDK rewrite ships.</p>
 <blockquote>
 <p><strong>Module name:</strong> install via <code>pip install &quot;git+https://github.com/beava-dev/beava.git#subdirectory=python&quot;</code> until v0.0.0 GA (when <code>beava</code> publishes to PyPI). Import as <code>import beava as bv</code>.</p>
 </blockquote>
 <h2 id="module-structure" tabindex="-1"><a class="header-anchor" href="#module-structure" aria-hidden="true">#</a> Module structure</h2>
-<pre><code>beava/                     # core flat namespace
-├── __init__.py            # public exports: App, event, table, col, lit, count, sum, mean, ...
-├── _app.py                # App class + transport dispatch
-├── _events.py             # @bv.event decorator (class + function form)
-├── _table.py              # @bv.table decorator (function form, per ADR-001)
-├── _agg.py                # 53 op helpers (count / sum / mean / ... / z_score)
-├── _col.py                # bv.col(...) + bv.lit(...) + operator overloading
-├── _errors.py             # exceptions (RegistrationError, BinaryNotFoundError)
-├── _types.py              # bv.Optional[T], bv.Field(...), type vocab
-├── _wire.py               # frame codec, opcodes
-├── _transport.py          # HTTP / TCP / Embed transports + URL-scheme dispatch
-└── _embed.py              # binary discovery + spawn
+<pre><code>beava/ # core flat namespace
+├── __init__.py # public exports: App, event, table, col, lit, count, sum, mean, ...
+├── _app.py # App class + transport dispatch
+├── _events.py # @bv.event decorator (class + function form)
+├── _table.py # @bv.table decorator (function form, per ADR-001)
+├── _agg.py # 53 op helpers (count / sum / mean / ... / z_score)
+├── _col.py # bv.col(...) + bv.lit(...) + operator overloading
+├── _errors.py # exceptions (RegistrationError, BinaryNotFoundError)
+├── _types.py # bv.Optional[T], bv.Field(...), type vocab
+├── _wire.py # frame codec, opcodes
+├── _transport.py # HTTP / TCP / Embed transports + URL-scheme dispatch
+└── _embed.py # binary discovery + spawn
 
-beava/test/                # test fixtures (separate submodule)
-├── fixture                # pytest fixture factory
-├── replay                 # replay events for deterministic tests
-└── assert_features_eq     # assertion helper
+beava/test/ # test fixtures (separate submodule)
+├── fixture # pytest fixture factory
+├── replay # replay events for deterministic tests
+└── assert_features_eq # assertion helper
 
-beava/cli/                 # CLI subcommands (Redis-style: beava bench, beava demo, etc.)
+beava/cli/ # CLI subcommands (Redis-style: beava bench, beava demo, etc.)
 </code></pre>
 <h2 id="app-class" tabindex="-1"><a class="header-anchor" href="#app-class" aria-hidden="true">#</a> App class</h2>
 <pre><code class="language-python">import beava as bv
@@ -259,7 +259,7 @@ per <a href="/docs/sdk-api/shared/#wire-transports">shared.md § Wire transports
 </ul>
 <p><code>timeout</code> is a transport-level I/O timeout in seconds (default 30.0).</p>
 <p><strong>Embed mode requires the context manager:</strong></p>
-<pre><code class="language-python">with bv.App() as app:                    # spawns the binary, binds to ephemeral ports
+<pre><code class="language-python">with bv.App() as app: # spawns the binary, binds to ephemeral ports
     app.register(Txn, UserFeatures)
     app.push(&quot;Txn&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;amount&quot;: 42.50})
     print(app.get(&quot;UserFeatures&quot;, &quot;alice&quot;))
@@ -323,7 +323,7 @@ Sequence Number) and <code>registry_version</code>. Idempotent re-pushes (matchi
 <ul>
 <li><code>ValidationError</code> (push variant) — <code>schema_mismatch</code>, <code>missing_field</code>,
 <code>unknown_event</code>. See <a href="/docs/error-codes/">docs/error-codes.md</a> (forward-ref
-Plan 13.0-12) for the full list.</li>
+an internal plan) for the full list.</li>
 <li><code>RuntimeError</code> — App is closed, or embed-mode used without context manager.</li>
 </ul>
 <h3 id="appgettable-key" tabindex="-1"><a class="header-anchor" href="#appgettable-key" aria-hidden="true">#</a> <code>app.get(table, key)</code></h3>
@@ -398,7 +398,7 @@ class Txn:
     user_id: str
     amount: float
     merchant: str
-    ip: bv.Optional[str]              # nullable per shared.md § Field types
+    ip: bv.Optional[str] # nullable per shared.md § Field types
 </code></pre>
 <p>The class body declares the event's <strong>schema</strong> via Python type annotations.
 Supported field types are the 6-element vocabulary from
@@ -406,10 +406,10 @@ Supported field types are the 6-element vocabulary from
 <code>typing.Optional[T]</code>) for nullable fields.</p>
 <p><strong>Per-source kwargs:</strong></p>
 <pre><code class="language-python">@bv.event(
-    keep_events_for=&quot;30d&quot;,        # event retention; default None (unbounded)
-    cold_after=&quot;1d&quot;,              # cold-entity TTL per V0-MEM-GOV-01; default None
-    dedupe_key=&quot;trace_id&quot;,        # field name for idempotent replay
-    dedupe_window=&quot;5m&quot;,           # dedup TTL
+    keep_events_for=&quot;30d&quot;, # event retention; default None (unbounded)
+    cold_after=&quot;1d&quot;, # cold-entity TTL per V0-MEM-GOV-01; default None
+    dedupe_key=&quot;trace_id&quot;, # field name for idempotent replay
+    dedupe_window=&quot;5m&quot;, # dedup TTL
 )
 class Login:
     user_id: str
@@ -436,7 +436,7 @@ class Login:
 <td><code>cold_after</code></td>
 <td>duration string</td>
 <td><code>None</code></td>
-<td>Per-source cold-entity TTL per V0-MEM-GOV-01 (Phase 12.8). Range: <code>[1s, 365d]</code>; <code>&quot;forever&quot;</code> is REJECTED — use <code>cold_after=None</code> for unbounded retention.</td>
+<td>Per-source cold-entity TTL per V0-MEM-GOV-01. Range: <code>[1s, 365d]</code>; <code>&quot;forever&quot;</code> is REJECTED — use <code>cold_after=None</code> for unbounded retention.</td>
 </tr>
 <tr>
 <td><code>dedupe_key</code></td>
@@ -563,7 +563,7 @@ def UserClicks(c: Click):
 <p><strong>Function-local (priority 3, pytest-fixture pattern):</strong></p>
 <pre><code class="language-python">def test_user_clicks():
     @bv.event
-    class Click:                 # local to this fn — never reaches module scope
+    class Click: # local to this fn — never reaches module scope
         user_id: str
 
     @bv.table(key=&quot;user_id&quot;)
@@ -582,7 +582,7 @@ class Click:
 
 def make_user_clicks_table():
     @bv.table(key=&quot;user_id&quot;)
-    def UserClicks(c: Click):    # Click captured as a free variable
+    def UserClicks(c: Click): # Click captured as a free variable
         return c.group_by(&quot;user_id&quot;).agg(n=bv.count(window=&quot;forever&quot;))
 
     return UserClicks
@@ -620,14 +620,14 @@ can't be found.</li>
 <pre><code class="language-python">def sum(field: str, *, window: str | None = None, where: bv.Col | None = None) -&gt; AggDescriptor: ...
 </code></pre>
 <blockquote>
-<p><strong>Locked per Q1 Path B</strong> (<a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/13.0-design-contract-spec-docs/13.0-CONTEXT.md">13.0-CONTEXT.md</a>).
+<p><strong>Locked per Q1 Path B</strong> (<a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/v0-design-contract-spec-docs/v0-CONTEXT.md">v0-CONTEXT.md</a>).
 The Python <code>bv.sum(field: str, ...)</code> signature accepts a string column name
 <strong>only</strong>. Inline expressions are <strong>FORBIDDEN</strong>.</p>
 </blockquote>
 <h3 id="what-is-forbidden" tabindex="-1"><a class="header-anchor" href="#what-is-forbidden" aria-hidden="true">#</a> What is FORBIDDEN</h3>
 <pre><code class="language-python"># FORBIDDEN — inline boolean-cast expression as the field arg.
-bv.sum(bv.col(&quot;is_fraud&quot;).cast(int), window=&quot;1h&quot;)     # ✗ raises RegistrationError
-bv.sum(bv.col(&quot;amount&quot;) * 2, window=&quot;1h&quot;)             # ✗ same
+bv.sum(bv.col(&quot;is_fraud&quot;).cast(int), window=&quot;1h&quot;) # ✗ raises RegistrationError
+bv.sum(bv.col(&quot;amount&quot;) * 2, window=&quot;1h&quot;) # ✗ same
 </code></pre>
 <p>Why: v0 keeps the <code>bv.sum(field: str)</code> shape stable across all 3 SDKs (TS
 <code>bv.sum(&quot;field&quot;, { window: &quot;1h&quot; })</code>, Go <code>beava.Sum(&quot;field&quot;, beava.Window(&quot;1h&quot;))</code>).
@@ -644,9 +644,9 @@ with <code>with_columns(...)</code> first, then sum the typed column:</p>
 <pre><code class="language-python">@bv.table(key=&quot;user_id&quot;)
 def UserFraudCounts(txn: Txn):
     return (
-        txn.with_columns(flag_int=bv.col(&quot;is_fraud&quot;).cast(int))   # stage 1: derive int column
+        txn.with_columns(flag_int=bv.col(&quot;is_fraud&quot;).cast(int)) # stage 1: derive int column
            .group_by(&quot;user_id&quot;)
-           .agg(c=bv.sum(&quot;flag_int&quot;, window=&quot;1h&quot;))                # stage 2: sum the int column
+           .agg(c=bv.sum(&quot;flag_int&quot;, window=&quot;1h&quot;)) # stage 2: sum the int column
     )
 </code></pre>
 <p>The <code>with_columns</code> call writes a derived field (<code>flag_int</code> here) into the
@@ -654,7 +654,7 @@ event row before the <code>group_by(...)</code> keys it. The aggregation then su
 plain <code>i64</code> field, exactly as the wire shape expects.</p>
 <blockquote>
 <p><strong>See:</strong> <a href="/docs/pipeline-dsl/compilation-rules/"><code>docs/pipeline-dsl/compilation-rules.md</code></a>
-§ Boolean-sum recipe (Plan 13.0-12 — forward reference) for the canonical
+§ Boolean-sum recipe (forthcoming) for the canonical
 worked example, the corresponding wire JSON, and the ambiguity-matrix
 FORBIDDEN row that locks this rule across all 3 SDKs.</p>
 </blockquote>
@@ -689,7 +689,7 @@ the same rule with idiomatic syntax:</p>
 </table>
 <h2 id="pipeline-dsl-chained-methods-on-eventtable" tabindex="-1"><a class="header-anchor" href="#pipeline-dsl-chained-methods-on-eventtable" aria-hidden="true">#</a> Pipeline DSL (chained methods on Event/Table)</h2>
 <p>Per <a href="/docs/pipeline-dsl/overview/">docs/pipeline-dsl/overview.md</a> (Plan
-13.0-12 — forward reference), the v0-supported chain methods on event
+v0 — forward reference), the v0-supported chain methods on event
 descriptors and event derivations are Polars-style:</p>
 <table>
 <thead>
@@ -756,15 +756,15 @@ descriptors and event derivations are Polars-style:</p>
 multi-agg, FORBIDDEN patterns like <code>with_columns AFTER group_by</code>) lives at
 <a href="/docs/pipeline-dsl/compilation-rules/"><code>docs/pipeline-dsl/compilation-rules.md</code></a>.</p>
 <h2 id="expression-dsl-bvcol" tabindex="-1"><a class="header-anchor" href="#expression-dsl-bvcol" aria-hidden="true">#</a> Expression DSL (bv.col)</h2>
-<pre><code class="language-python">bv.col(&quot;amount&quot;) &gt; 100                               # comparison: amount &gt; 100
-bv.col(&quot;user_id&quot;) == &quot;alice&quot;                         # equality: user_id == 'alice'
-(bv.col(&quot;amount&quot;) &gt; 100) &amp; (bv.col(&quot;status&quot;) == &quot;ok&quot;)  # conjunction (use &amp; for and)
-(bv.col(&quot;amount&quot;) &gt; 100) | (bv.col(&quot;status&quot;) == &quot;ok&quot;)  # disjunction (use | for or)
-~(bv.col(&quot;flag&quot;))                                    # negation (use ~ for not)
-bv.col(&quot;amount&quot;).isnull()                            # null check
-bv.col(&quot;status&quot;).cast(&quot;int&quot;)                         # type cast
-bv.col(&quot;a&quot;) + bv.col(&quot;b&quot;) * 2                        # arithmetic
-bv.lit(42)                                           # literal value
+<pre><code class="language-python">bv.col(&quot;amount&quot;) &gt; 100 # comparison: amount &gt; 100
+bv.col(&quot;user_id&quot;) == &quot;alice&quot; # equality: user_id == 'alice'
+(bv.col(&quot;amount&quot;) &gt; 100) &amp; (bv.col(&quot;status&quot;) == &quot;ok&quot;) # conjunction (use &amp; for and)
+(bv.col(&quot;amount&quot;) &gt; 100) | (bv.col(&quot;status&quot;) == &quot;ok&quot;) # disjunction (use | for or)
+~(bv.col(&quot;flag&quot;)) # negation (use ~ for not)
+bv.col(&quot;amount&quot;).isnull() # null check
+bv.col(&quot;status&quot;).cast(&quot;int&quot;) # type cast
+bv.col(&quot;a&quot;) + bv.col(&quot;b&quot;) * 2 # arithmetic
+bv.lit(42) # literal value
 </code></pre>
 <p>Operator overloading details:</p>
 <ul>
@@ -778,7 +778,7 @@ symbols.</li>
 as a bare identifier (validated against <code>{&quot;str&quot;, &quot;int&quot;, &quot;float&quot;, &quot;bool&quot;}</code>).</li>
 </ul>
 <p>Cross-link: <a href="/docs/pipeline-dsl/expressions/"><code>docs/pipeline-dsl/expressions.md</code></a>
-(Plan 13.0-12) for the full grammar and edge cases.</p>
+(an internal plan) for the full grammar and edge cases.</p>
 <p><code>bv.lit(value)</code> wraps a Python value as a literal AST node, useful for
 explicit literal coercion or for the rare case where Python operator
 precedence requires it.</p>
@@ -797,7 +797,7 @@ events.with_columns(rate=bv.col(&quot;count&quot;) / bv.lit(60.0))
 events.filter(bv.col(&quot;amount&quot;) &gt; bv.lit(100))
 </code></pre>
 <p>The implicit operator-overloading coercion (<code>bv.col(&quot;x&quot;) &gt; 100</code>) still works — <code>bv.lit</code> is for cases where explicit construction matters (constant columns, type-coercion patterns, cross-language parity with TS/Go SDKs that lack Python's flexible operator overloading).</p>
-<p><code>bv.lit</code> lands in Phase 13.5 (<code>python/beava/__init__.py</code>, ~5 LOC). Acceptance gate: <code>python/tests/v0/test_lit.py</code> (Plan 13.0-16, 5 tests).</p>
+<p><code>bv.lit</code> lands in v0 (<code>python/beava/__init__.py</code>, ~5 LOC). Acceptance gate: <code>python/tests/v0/test_lit.py</code> (an internal plan, 5 tests).</p>
 <h2 id="global-aggregation-per-adr-003" tabindex="-1"><a class="header-anchor" href="#global-aggregation-per-adr-003" aria-hidden="true">#</a> Global aggregation — per ADR-003</h2>
 <p>Per <a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-003-global-aggregation-and-bv-lit.md">ADR-003</a>, beava ships first-class <strong>global aggregation</strong> alongside the per-entity surface. Declare a global table by omitting the <code>key=</code> kwarg on <code>@bv.table</code>:</p>
 <pre><code class="language-python">@bv.event
@@ -805,21 +805,21 @@ class Click:
     user_id: str
     page: str
 
-@bv.table   # no key= → global table
+@bv.table # no key= → global table
 def TotalClicks(clicks) -&gt; bv.Table:
     return clicks.agg(total=bv.count(window=&quot;forever&quot;))
 
 app = bv.App()
 app.register(Click, TotalClicks)
 app.push(&quot;Click&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;page&quot;: &quot;/home&quot;})
-app.push(&quot;Click&quot;, {&quot;user_id&quot;: &quot;bob&quot;,   &quot;page&quot;: &quot;/home&quot;})
+app.push(&quot;Click&quot;, {&quot;user_id&quot;: &quot;bob&quot;, &quot;page&quot;: &quot;/home&quot;})
 
-app.get(&quot;TotalClicks&quot;)  # → {&quot;total&quot;: 2}, no entity arg
+app.get(&quot;TotalClicks&quot;) # → {&quot;total&quot;: 2}, no entity arg
 </code></pre>
 <p><strong>Three equivalent forms</strong> compile to the same wire payload (all use <code>key: []</code>):</p>
-<pre><code class="language-python">clicks.agg(total=bv.count(...))                 # shortest — direct .agg() shorthand
-clicks.group_by().agg(total=bv.count(...))      # explicit empty group_by
-@bv.table                                       # decorator with no key=
+<pre><code class="language-python">clicks.agg(total=bv.count(...)) # shortest — direct .agg() shorthand
+clicks.group_by().agg(total=bv.count(...)) # explicit empty group_by
+@bv.table # decorator with no key=
 def Foo(c): return c.agg(total=bv.count(...))
 </code></pre>
 <p>All 53 operators work with both per-entity and global aggregation — same op semantics, different state-keying dimension. See <a href="/docs/concepts/global-aggregation/"><code>docs/concepts/global-aggregation.md</code></a> for the full conceptual treatment (when to use global vs per-entity, performance characteristics, composition with <code>cold_after=</code>).</p>
@@ -853,7 +853,7 @@ def Foo(c): return c.agg(total=bv.count(...))
 <li>Top-K-globally features (&quot;top 10 hottest pages on the platform&quot;)</li>
 <li>Cross-entity aggregations (&quot;total spend across all users in last hour&quot;)</li>
 </ul>
-<p><strong>Implementation deferred</strong> to Phase 13.5 (~110 LOC: <code>bv.lit</code> export + <code>events.group_by()</code> empty allowance + <code>events.agg(**aggs)</code> shorthand + <code>@bv.table</code> no-<code>key=</code> form + <code>App.get(table_name)</code> 1-arg overload). The wire-level signal is <code>key: []</code> (empty array) on the register payload + sentinel <code>key: &quot;&quot;</code> (empty string) on the GET request — see <a href="/docs/wire-spec/"><code>docs/wire-spec.md</code></a> § Global tables. Acceptance gate: <code>python/tests/v0/test_global.py</code> (Plan 13.0-16, 8 tests).</p>
+<p><strong>Implementation deferred</strong> to v0 (~110 LOC: <code>bv.lit</code> export + <code>events.group_by()</code> empty allowance + <code>events.agg(**aggs)</code> shorthand + <code>@bv.table</code> no-<code>key=</code> form + <code>App.get(table_name)</code> 1-arg overload). The wire-level signal is <code>key: []</code> (empty array) on the register payload + sentinel <code>key: &quot;&quot;</code> (empty string) on the GET request — see <a href="/docs/wire-spec/"><code>docs/wire-spec.md</code></a> § Global tables. Acceptance gate: <code>python/tests/v0/test_global.py</code> (an internal plan, 8 tests).</p>
 <h2 id="operator-catalog" tabindex="-1"><a class="header-anchor" href="#operator-catalog" aria-hidden="true">#</a> Operator catalog</h2>
 <p>The <code>bv.*</code> namespace exposes 53 op helper functions, organised into 8
 families. Each helper returns an <code>AggDescriptor</code>; <code>groupby.agg(...)</code>
@@ -948,28 +948,28 @@ named per <a href="https://github.com/beava-dev/beava/blob/main/.planning/decisi
 <p>Old names ship as deprecation aliases in v0.0.x and are <strong>removed in v0.1</strong>.</p>
 <p>Per-op signatures, semantics, and worked examples live on each per-op
 page under <a href="../operators/"><code>docs/operators/&lt;family&gt;/&lt;op&gt;.md</code></a> (Plans
-13.0-05 through 13.0-11 — forward references).</p>
+v0 through v0 — forward references).</p>
 <h2 id="exceptions" tabindex="-1"><a class="header-anchor" href="#exceptions" aria-hidden="true">#</a> Exceptions</h2>
 <p>The public exception hierarchy (from <code>python/beava/_errors.py</code>):</p>
 <pre><code class="language-python">class RegistrationError(Exception):
-    code: str                          # structured error code (one of 9 ValidationError kinds)
-    path: str                          # JSON-pointer-style path to offending field
-    message: str                       # human-readable message
-    errors: list[ValidationError]      # all errors when server returns multiple
+    code: str # structured error code (one of 9 ValidationError kinds)
+    path: str # JSON-pointer-style path to offending field
+    message: str # human-readable message
+    errors: list[ValidationError] # all errors when server returns multiple
 
 class BinaryNotFoundError(Exception):
-    pass                               # raised by embed mode when binary not on PATH
+    pass # raised by embed mode when binary not on PATH
 
 @dataclass(frozen=True)
 class ValidationError:
-    kind: str                          # one of VALIDATION_ERROR_KINDS
+    kind: str # one of VALIDATION_ERROR_KINDS
     path: str
     message: str
 </code></pre>
 <p>The 9 valid <code>ValidationError.kind</code> values are documented in
 <a href="/docs/sdk-api/shared/#validationerror-envelope">shared.md § ValidationError envelope</a>.
 The full alphabetised structured-code list with HTTP status mapping lives
-at <a href="/docs/error-codes/"><code>docs/error-codes.md</code></a> (Plan 13.0-12 — forward
+at <a href="/docs/error-codes/"><code>docs/error-codes.md</code></a> (an internal plan — forward
 reference).</p>
 <h2 id="bvtest-fixtures" tabindex="-1"><a class="header-anchor" href="#bvtest-fixtures" aria-hidden="true">#</a> bv.test fixtures</h2>
 <pre><code class="language-python">import pytest
@@ -1021,17 +1021,17 @@ in v0.0.x and are removed in v0.1. The <code>DeprecationWarning</code> includes
 the new name.</li>
 </ul>
 <h2 id="plan-level-traceability" tabindex="-1"><a class="header-anchor" href="#plan-level-traceability" aria-hidden="true">#</a> Plan-level traceability</h2>
-<p>This document is authored by Plan 13.0-04 (Wave 1). Downstream consumers:</p>
+<p>This document is authored by an internal plan (Wave 1). Downstream consumers:</p>
 <ul>
 <li><a href="/docs/sdk-api/typescript/"><code>docs/sdk-api/typescript.md</code></a> — TS SDK port mirrors this surface.</li>
 <li><a href="/docs/sdk-api/go/"><code>docs/sdk-api/go.md</code></a> — Go SDK port mirrors this surface.</li>
-<li><strong>Phase 13.5</strong> — Python SDK rewrite reads this doc as the canonical
+<li><strong>v0</strong> — Python SDK rewrite reads this doc as the canonical
 surface; lands the v0-target shape (full <code>_agg.py</code> 53 helpers, full
 <code>_app.py</code> with <code>batch_get</code> / <code>reset</code>, <code>@bv.table</code> revival).</li>
-<li><strong>Phase 13.6</strong> — TS + Go SDK ports use this doc as the parity reference.</li>
+<li><strong>v0</strong> — TS + Go SDK ports use this doc as the parity reference.</li>
 </ul>
-<p>For the full Phase 13.0 plan tree, see
-<a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/13.0-design-contract-spec-docs/13.0-PLAN.md"><code>.planning/phases/13.0-design-contract-spec-docs/13.0-PLAN.md</code></a>.</p>
+<p>For the planning history, see
+<a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/v0-design-contract-spec-docs/v0-PLAN.md"><code>.planning/phases/v0-design-contract-spec-docs/v0-PLAN.md</code></a>.</p>
 
 </article>
 </main>

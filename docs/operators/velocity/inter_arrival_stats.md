@@ -81,10 +81,10 @@ def IpCadence(clicks) -> bv.Table:
     )
 
 # Push events in arrival order
-app.push("Click", {"ip": "1.2.3.4", "user_agent": "bot/1.0"})  # mean = null
-app.push("Click", {"ip": "1.2.3.4", "user_agent": "bot/1.0"})  # mean = Δ1
-app.push("Click", {"ip": "1.2.3.4", "user_agent": "bot/1.0"})  # mean = avg(Δ1, Δ2)
-app.push("Click", {"ip": "1.2.3.4", "user_agent": "bot/1.0"})  # mean = avg(Δ1, Δ2, Δ3)
+app.push("Click", {"ip": "1.2.3.4", "user_agent": "bot/1.0"}) # mean = null
+app.push("Click", {"ip": "1.2.3.4", "user_agent": "bot/1.0"}) # mean = Δ1
+app.push("Click", {"ip": "1.2.3.4", "user_agent": "bot/1.0"}) # mean = avg(Δ1, Δ2)
+app.push("Click", {"ip": "1.2.3.4", "user_agent": "bot/1.0"}) # mean = avg(Δ1, Δ2, Δ3)
 
 # Query
 result = app.get("IpCadence", "1.2.3.4")

@@ -5,7 +5,7 @@
 > and dry-run validation (`dry_run=true`). The contract is shared across all 3
 > SDKs (Python / TypeScript / Go) per
 > [shared.md § Schema evolution](sdk-api/shared.md#schema-evolution).
-> **Last reviewed:** 2026-05-03 (Phase 13.0).
+> **Last reviewed:** 2026-05-03.
 
 ## Overview
 
@@ -201,10 +201,10 @@ Validation runs through a layered pipeline in
    - `pre_check_unsupported_node_kind` — rejects payloads with
      `kind="upsert"` / `kind="delete"` / `kind="retract"` etc. with
      `unsupported_node_kind`. Per ADR-001, `kind="table"` is now PERMITTED
-     for aggregation-output (the v0 amendment lands in Phase 13.4).
+     for aggregation-output (the v0 amendment landed in v0).
    - `pre_check_unbounded_op_in_lifetime_mode` — rejects lifetime-mode ops
      without a finite memory bound with `unbounded_op_in_lifetime_mode`
-     (per V0-MEM-GOV-02 from Phase 12.8).
+     (per V0-MEM-GOV-02).
 
 2. **Strict serde deserialise** — `RegisterPayload` enforces structural
    shape; `serde` errors map to `schema_invalid` (HTTP 400).
@@ -224,8 +224,8 @@ Validation runs through a layered pipeline in
    classification per the matrix above. Destructive paths without `force=true`
    raise `registration_conflict` (HTTP 409) carrying the full diff envelope.
 
-The JSON-prelude shim pattern (steps 1) was introduced in Phase 12.6 Plan 04
-and extended through Phase 12.7 + 12.8 to keep structured error codes stable
+The JSON-prelude shim pattern (steps 1) was introduced in v0
+and extended through v0 to keep structured error codes stable
 across schema/code changes — when the corresponding Rust struct fields or enum
 variants are removed, the shim catches the legacy payload BEFORE strict serde
 returns a generic "unknown variant" / "unknown field" message.
@@ -251,6 +251,6 @@ returns a generic "unknown variant" / "unknown field" message.
   — the FORBIDDEN rows enumerate which structural changes the validator
   rejects unconditionally (`force=true` does NOT bypass them).
 - [ADR-001](../.planning/decisions/ADR-001-bv-table-partial-overturn.md) —
-  `@bv.table` aggregation-output revival; pre-13.4 the JSON-prelude shim
-  rejects `kind="table"`, post-13.4 it permits the aggregation-output form
+  `@bv.table` aggregation-output revival; pre-v0 the JSON-prelude shim
+  rejects `kind="table"`, v0 it permits the aggregation-output form
   and continues rejecting other table surfaces.

@@ -53,7 +53,7 @@ entity (`n` plus four `f64` sums plus the `initialized` flag). The
 
 ## Returns
 
-A single `f64` — the OLS slope of `(now_ms, field)`, in **field-units per millisecond**. Multiply by `1000.0` for units-per-second; by `60_000.0` for units-per-minute. Cold-start and one-event start (`n < 2`) both return `null` (Python `None`); a degenerate denominator `n·Σx² − (Σx)²  == 0` (which only happens when every point shares the same `now_ms`) also returns `null`.
+A single `f64` — the OLS slope of `(now_ms, field)`, in **field-units per millisecond**. Multiply by `1000.0` for units-per-second; by `60_000.0` for units-per-minute. Cold-start and one-event start (`n < 2`) both return `null` (Python `None`); a degenerate denominator `n·Σx² − (Σx)² == 0` (which only happens when every point shares the same `now_ms`) also returns `null`.
 
 ## Complexity
 

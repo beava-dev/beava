@@ -8,7 +8,7 @@
 bv.reservoir_sample(
     field: str,
     *,
-    samples: int,                    # REQUIRED — register-time kwarg
+    samples: int, # REQUIRED — register-time kwarg
     where: bv.Col | None = None,
 ) -> AggDescriptor
 ```
@@ -83,7 +83,7 @@ never `null`.
 | Resource | Bound |
 |----------|-------|
 | CPU per event | **Tier 3** (~14 ns floor / ~35 ns measured — xorshift PRNG + modulo + one `Value::clone()`) — see [cost-class.md](../cost-class.md#tier-3-algorithmic-floor-100-300-nscall--9-ops). Clone-path variance: `Value::Str` is `Arc::clone` (cheap); `Value::Bytes` of large payloads can dominate |
-| Memory per entity | **`BoundedByRequiredKwarg("samples")`** — `samples × sizeof(Value)` bytes + 1 `u64` (items_seen) per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
+| Memory per entity | **`BoundedByRequiredKwarg("samples")`** — `samples × sizeof(Value)` bytes + 1 `u64` (items_seen) per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
 | Lifetime mode | **Required** — `bv.reservoir_sample` has no `window=` kwarg in v0; lifetime is the only mode (the algorithm samples from the entire history by design) |
 
 ## Examples
@@ -107,7 +107,7 @@ def UserAmountSample(txn) -> bv.Table:
 
 # After 50,000 transactions for "alice":
 result = app.get("UserAmountSample", "alice")
-# result == {"amount_sample": [12.5, 87.0, 240.0, ...]}  # 100 values uniformly chosen
+# result == {"amount_sample": [12.5, 87.0, 240.0, ...]} # 100 values uniformly chosen
 ```
 
 ### Example 2: 50-sample of failed login IPs

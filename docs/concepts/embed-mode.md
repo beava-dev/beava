@@ -14,7 +14,7 @@ Embed mode exists for notebooks, scripts, pytest fixtures, and the
 ```python
 import beava as bv
 
-app = bv.App()  # no URL → embed mode
+app = bv.App() # no URL → embed mode
 app.register(...)
 app.push(...)
 features = app.get(...)
@@ -101,7 +101,7 @@ discovery order; no shell interpolation; no arbitrary-command execution.
 - **Persistent state across restarts.** Embed mode resets on shutdown by
   default. For persistence pass `bv.App(persist_dir="/path/to/state")` —
   beava writes WAL + snapshots there and replays them on the next embed
-  start. (Persist-dir support lands fully in Phase 13.4; v0 partial.)
+  start. (Persist-dir support lands fully in v0; v0 partial.)
 - **High-throughput benchmarking.** Embed adds subprocess + transport
   setup cost on `App.__init__`. Use `crates/beava-bench` against a
   long-running server for accurate throughput numbers.
@@ -120,11 +120,11 @@ class Click:
 def UserClickCount(click) -> bv.Table:
     return click.group_by("user_id").agg(clicks=bv.count())
 
-with bv.App() as app:                         # spawn embed
+with bv.App() as app: # spawn embed
     app.register(Click, UserClickCount)
     for i in range(10):
         app.push(Click, {"user_id": "u_1", "ad_id": f"ad_{i}"})
-    print(app.get(UserClickCount, "u_1"))      # {"clicks": 10}
+    print(app.get(UserClickCount, "u_1")) # {"clicks": 10}
 # app.close() runs here; subprocess is reaped
 ```
 
@@ -141,5 +141,5 @@ The whole flow — discover binary, spawn, register, push, query, tear down
   scheme `tcp://` vs `http://` vs no-URL = embed).
 - [error-codes.md](../error-codes.md) — `BinaryNotFoundError` error
   envelope.
-- `docs/quickstart.md` (forthcoming, Plan 13.0-14) — `bv.demo()` flow
+- `docs/quickstart.md` (forthcoming, an internal plan) — `bv.demo()` flow
   that uses embed mode.

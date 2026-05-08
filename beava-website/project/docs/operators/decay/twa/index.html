@@ -216,7 +216,7 @@ event the value is the gauge sample itself (no held-time integral yet).</p>
 </tr>
 <tr>
 <td>Lifetime mode (<code>window=&quot;forever&quot;</code>)</td>
-<td><strong>Allowed</strong> — TWA classified as <code>O1</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a></td>
+<td><strong>Allowed</strong> — TWA classified as <code>O1</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a></td>
 </tr>
 </tbody>
 </table>
@@ -246,7 +246,7 @@ app.push(&quot;HostMetric&quot;, {&quot;host_id&quot;: &quot;node-01&quot;, &quo
 
 result = app.get(&quot;HostCpuTwa&quot;, &quot;node-01&quot;)
 # result == {&quot;cpu_twa_5m&quot;: &lt;weighted toward 0.95 because that sample was
-#                            held for 4× longer than the trailing samples&gt;}
+# held for 4× longer than the trailing samples&gt;}
 </code></pre>
 <h3 id="example-2-lifetime-twa-of-account-balance-only-after-activation" tabindex="-1"><a class="header-anchor" href="#example-2-lifetime-twa-of-account-balance-only-after-activation" aria-hidden="true">#</a> Example 2: Lifetime TWA of account balance, only after activation</h3>
 <pre><code class="language-python">@bv.table(key=&quot;account_id&quot;)
@@ -285,7 +285,7 @@ def AccountAvgBalance(snapshots) -&gt; bv.Table:
 <li><strong>Missing or non-numeric <code>field</code>:</strong> the event is silently skipped.</li>
 <li><strong><code>where=</code> filter excludes the event:</strong> no update.</li>
 <li><strong>Missing <code>window=</code>:</strong> raises <code>ValueError</code> at SDK-helper-call time. <code>_validate_window(window, &quot;twa&quot;, requires_window=True)</code> enforces it.</li>
-<li><strong><code>window=&quot;forever&quot;</code>:</strong> explicitly allowed; the helper integrates over the full lifetime of the entity. Footprint stays <code>O(1)</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a>.</li>
+<li><strong><code>window=&quot;forever&quot;</code>:</strong> explicitly allowed; the helper integrates over the full lifetime of the entity. Footprint stays <code>O(1)</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a>.</li>
 <li><strong>No new events for a long time:</strong> the held-time integral stops accumulating at <code>last_t</code> and only resumes on the next matching event. (Like <code>bv.decayed_sum</code>, querying does not mutate state — there is no &quot;decay forward to now&quot; behaviour.)</li>
 <li><strong>Cold-entity eviction (<code>@bv.event(cold_after=...)</code>):</strong> drops the underlying state.</li>
 </ul>

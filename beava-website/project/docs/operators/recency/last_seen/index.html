@@ -187,7 +187,7 @@ the entity has seen zero matching events, the result is <code>null</code> (Pytho
 </tr>
 <tr>
 <td>Memory per entity</td>
-<td><code>O(1)</code> — single <code>Option&lt;i64&gt;</code> slot in the shared <code>SeenState</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a></td>
+<td><code>O(1)</code> — single <code>Option&lt;i64&gt;</code> slot in the shared <code>SeenState</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a></td>
 </tr>
 <tr>
 <td>Lifetime mode</td>
@@ -212,8 +212,8 @@ def UserLastActive(activity) -&gt; bv.Table:
     )
 
 # Push events
-app.push(&quot;Activity&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;action&quot;: &quot;view&quot;})    # t=1700000000000
-app.push(&quot;Activity&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;action&quot;: &quot;click&quot;})  # t=1700000007500
+app.push(&quot;Activity&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;action&quot;: &quot;view&quot;}) # t=1700000000000
+app.push(&quot;Activity&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;action&quot;: &quot;click&quot;}) # t=1700000007500
 
 # Query
 result = app.get(&quot;UserLastActive&quot;, &quot;alice&quot;)
@@ -250,7 +250,7 @@ def UserLastFailMs(logins) -&gt; bv.Table:
 <li><strong>Server-time, NOT event-time:</strong> the captured value is the server's <code>now_ms()</code> at apply, not any payload field. Per <a href="https://github.com/beava-dev/beava/blob/main/.planning/PROJECT.md"><code>project_redis_shaped_no_event_time_ever</code></a>, beava intentionally has no event-time concept. Out-of-order arrivals are recorded in arrival order, not event-payload order.</li>
 <li><strong>Cold-entity eviction:</strong> if <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md"><code>@bv.event(cold_after=...)</code></a> evicts the entity, the next event after eviction starts a fresh <code>SeenState</code>; <code>last_seen</code> reflects only post-eviction arrivals.</li>
 <li><strong><code>window=</code> kwarg attempted:</strong> raises <code>TypeError</code> at SDK-helper-call time. For windowed semantics use <a href="/docs/operators/recency/first_seen_in_window/"><code>bv.first_seen_in_window</code></a>.</li>
-<li><strong>Lifetime mode:</strong> <strong>the only mode.</strong> Footprint is <code>O(1)</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a>.</li>
+<li><strong>Lifetime mode:</strong> <strong>the only mode.</strong> Footprint is <code>O(1)</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a>.</li>
 </ul>
 <h2 id="see-also" tabindex="-1"><a class="header-anchor" href="#see-also" aria-hidden="true">#</a> See also</h2>
 <ul>

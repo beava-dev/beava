@@ -30,7 +30,7 @@ All six are `O(1)` memory per entity and Tier 1 CPU per [cost-class.md](../cost-
 - **Recency-weighted activity rate** → [`bv.decayed_count`](./decayed_count.md). Steady-state ≈ `rate * half_life / ln(2)`.
 - **True time-weighted average** for gauges sampled at irregular intervals → [`bv.twa`](./twa.md).
 
-> Note: `bv.rate_of_change` is **not** in the decay family — it lives under [velocity/rate_of_change.md](../velocity/rate_of_change.md) per the Phase 9 op classification (it computes a slope across two adjacent windows, not an exponentially-weighted statistic). Polished by [Plan 13.0-09](../../../.planning/phases/13.0-design-contract-spec-docs/).
+> Note: `bv.rate_of_change` is **not** in the decay family — it lives under [velocity/rate_of_change.md](../velocity/rate_of_change.md) per the op classification (it computes a slope across two adjacent windows, not an exponentially-weighted statistic). Polished by [an internal plan](../../../.planning/phases/v0-design-contract-spec-docs/).
 
 ## See also
 

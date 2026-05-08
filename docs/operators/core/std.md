@@ -51,7 +51,7 @@ result is `null` (Python `None`) — sample stddev is undefined for n<2.
 |----------|-------|
 | CPU per event | **Tier 1** (~12 ns algorithm floor / ~32 ns measured — Welford apply, `sqrt` deferred to query) — see [cost-class.md](../cost-class.md#tier-1-fast-40-nscall--38-ops) |
 | Memory per entity | `O(1)` — `(count, mean, M2)` per bucket (≤64 buckets) |
-| Lifetime mode (`window="forever"`) | **Allowed** — `O(1)` footprint per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
+| Lifetime mode (`window="forever"`) | **Allowed** — `O(1)` footprint per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
 
 ## Examples
 
@@ -79,7 +79,7 @@ app.push("Txn", {"user_id": "alice", "amount": 50.0})
 
 # Query
 result = app.get("TxnSpread", "alice")
-# result == {"amount_std_1h": 20.0}  # sqrt of sample variance 400.0
+# result == {"amount_std_1h": 20.0} # sqrt of sample variance 400.0
 ```
 
 ### Example 2: Latency-stddev for the success-bucket

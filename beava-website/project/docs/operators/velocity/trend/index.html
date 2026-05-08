@@ -190,7 +190,7 @@ entity (<code>n</code> plus four <code>f64</code> sums plus the <code>initialize
 </tbody>
 </table>
 <h2 id="returns" tabindex="-1"><a class="header-anchor" href="#returns" aria-hidden="true">#</a> Returns</h2>
-<p>A single <code>f64</code> — the OLS slope of <code>(now_ms, field)</code>, in <strong>field-units per millisecond</strong>. Multiply by <code>1000.0</code> for units-per-second; by <code>60_000.0</code> for units-per-minute. Cold-start and one-event start (<code>n &lt; 2</code>) both return <code>null</code> (Python <code>None</code>); a degenerate denominator <code>n·Σx² − (Σx)²  == 0</code> (which only happens when every point shares the same <code>now_ms</code>) also returns <code>null</code>.</p>
+<p>A single <code>f64</code> — the OLS slope of <code>(now_ms, field)</code>, in <strong>field-units per millisecond</strong>. Multiply by <code>1000.0</code> for units-per-second; by <code>60_000.0</code> for units-per-minute. Cold-start and one-event start (<code>n &lt; 2</code>) both return <code>null</code> (Python <code>None</code>); a degenerate denominator <code>n·Σx² − (Σx)² == 0</code> (which only happens when every point shares the same <code>now_ms</code>) also returns <code>null</code>.</p>
 <h2 id="complexity" tabindex="-1"><a class="header-anchor" href="#complexity" aria-hidden="true">#</a> Complexity</h2>
 <table>
 <thead>

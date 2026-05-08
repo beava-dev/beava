@@ -193,7 +193,7 @@ matching events with a non-null <code>field</code>, the result is <code>null</co
 </tr>
 <tr>
 <td>Memory per entity</td>
-<td><code>O(1)</code> — single <code>Option&lt;Value&gt;</code> slot per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a></td>
+<td><code>O(1)</code> — single <code>Option&lt;Value&gt;</code> slot per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a></td>
 </tr>
 <tr>
 <td>Lifetime mode</td>
@@ -223,7 +223,7 @@ app.push(&quot;Login&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;devic
 
 # Query
 result = app.get(&quot;UserFirstDevice&quot;, &quot;alice&quot;)
-# result == {&quot;first_device&quot;: &quot;iphone-12&quot;}  # the second event is a no-op
+# result == {&quot;first_device&quot;: &quot;iphone-12&quot;} # the second event is a no-op
 </code></pre>
 <h3 id="example-2-first-successful-payment-amount-per-user" tabindex="-1"><a class="header-anchor" href="#example-2-first-successful-payment-amount-per-user" aria-hidden="true">#</a> Example 2: First successful payment amount per user</h3>
 <pre><code class="language-python">@bv.table(key=&quot;user_id&quot;)
@@ -259,7 +259,7 @@ def UserFirstPayment(payments) -&gt; bv.Table:
 <li><strong><code>where=</code> filter excludes everything:</strong> result is <code>null</code>; once a matching event eventually arrives, the value is captured and sticks for the entity's lifetime.</li>
 <li><strong>Field missing from event:</strong> treated identically to null — skipped.</li>
 <li><strong><code>window=</code> kwarg attempted:</strong> raises <code>TypeError</code> at SDK-helper-call time. There is no windowed <code>first</code>; compose with <a href="/docs/operators/buffer-geo/most_recent_n/"><code>bv.last_n(n=1, window=&quot;...&quot;)</code></a> for a windowed &quot;earliest in this window&quot; approximation, or use <a href="/docs/operators/recency/first_seen/"><code>bv.first_seen</code></a> if only the arrival time matters.</li>
-<li><strong>Lifetime mode:</strong> <strong>the only mode.</strong> Footprint is <code>O(1)</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a> — a single <code>Option&lt;Value&gt;</code> slot.</li>
+<li><strong>Lifetime mode:</strong> <strong>the only mode.</strong> Footprint is <code>O(1)</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a> — a single <code>Option&lt;Value&gt;</code> slot.</li>
 </ul>
 <h2 id="see-also" tabindex="-1"><a class="header-anchor" href="#see-also" aria-hidden="true">#</a> See also</h2>
 <ul>

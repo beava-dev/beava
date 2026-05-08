@@ -127,7 +127,7 @@ remote infrastructure, no port allocation, and no setup. You go from
 <h2 id="how-it-works" tabindex="-1"><a class="header-anchor" href="#how-it-works" aria-hidden="true">#</a> How it works</h2>
 <pre><code class="language-python">import beava as bv
 
-app = bv.App()  # no URL → embed mode
+app = bv.App() # no URL → embed mode
 app.register(...)
 app.push(...)
 features = app.get(...)
@@ -215,7 +215,7 @@ remotely.</li>
 <li><strong>Persistent state across restarts.</strong> Embed mode resets on shutdown by
 default. For persistence pass <code>bv.App(persist_dir=&quot;/path/to/state&quot;)</code> —
 beava writes WAL + snapshots there and replays them on the next embed
-start. (Persist-dir support lands fully in Phase 13.4; v0 partial.)</li>
+start. (Persist-dir support lands fully in v0; v0 partial.)</li>
 <li><strong>High-throughput benchmarking.</strong> Embed adds subprocess + transport
 setup cost on <code>App.__init__</code>. Use <code>crates/beava-bench</code> against a
 long-running server for accurate throughput numbers.</li>
@@ -232,11 +232,11 @@ class Click:
 def UserClickCount(click) -&gt; bv.Table:
     return click.group_by(&quot;user_id&quot;).agg(clicks=bv.count())
 
-with bv.App() as app:                         # spawn embed
+with bv.App() as app: # spawn embed
     app.register(Click, UserClickCount)
     for i in range(10):
         app.push(Click, {&quot;user_id&quot;: &quot;u_1&quot;, &quot;ad_id&quot;: f&quot;ad_{i}&quot;})
-    print(app.get(UserClickCount, &quot;u_1&quot;))      # {&quot;clicks&quot;: 10}
+    print(app.get(UserClickCount, &quot;u_1&quot;)) # {&quot;clicks&quot;: 10}
 # app.close() runs here; subprocess is reaped
 </code></pre>
 <p>The whole flow — discover binary, spawn, register, push, query, tear down
@@ -251,7 +251,7 @@ discovery + spawn / teardown implementation.</li>
 scheme <code>tcp://</code> vs <code>http://</code> vs no-URL = embed).</li>
 <li><a href="/docs/error-codes/">error-codes.md</a> — <code>BinaryNotFoundError</code> error
 envelope.</li>
-<li><code>docs/quickstart.md</code> (forthcoming, Plan 13.0-14) — <code>bv.demo()</code> flow
+<li><code>docs/quickstart.md</code> (forthcoming, an internal plan) — <code>bv.demo()</code> flow
 that uses embed mode.</li>
 </ul>
 

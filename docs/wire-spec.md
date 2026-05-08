@@ -2,7 +2,7 @@
 
 > **Status:** Authoritative for v0. Engine and all SDKs (Python, TypeScript, Go) MUST conform to this spec.
 > **JSON Schema dialect:** [Draft 2020-12](https://json-schema.org/draft/2020-12/schema).
-> **Last reviewed:** 2026-05-03 (Phase 13.0).
+> **Last reviewed:** 2026-05-03.
 
 ## Overview
 
@@ -10,7 +10,7 @@ beava speaks two transports — **HTTP/1.1 + JSON** for compatibility with curl,
 
 Correlation on the TCP transport follows **Redis-style strict-FIFO**: the order of responses on a connection matches the order of requests, and there is no `request_id` or `correlation_id` field anywhere in the wire format. This keeps the protocol simple, eliminates an entire class of header-bookkeeping bugs in client implementations, and makes the framed envelope as small as possible.
 
-This document is **authoritative**. Where prose and JSON Schema disagree, the JSON Schema in [`examples/wire/schemas/`](../examples/wire/schemas/) wins — schemas are machine-validatable contracts, prose is explanatory. Phase 13.4 ships a CI test (`crates/beava-server/tests/wire_spec_validates.rs`) that loads every schema and asserts every fixture under [`examples/wire/`](../examples/wire/) validates against its corresponding schema. SDK ports in 13.5 (Python) and 13.6 (TypeScript + Go) consume the same fixtures via language-native validators.
+This document is **authoritative**. Where prose and JSON Schema disagree, the JSON Schema in [`examples/wire/schemas/`](../examples/wire/schemas/) wins — schemas are machine-validatable contracts, prose is explanatory. A CI test in the engine (`crates/beava-server/tests/wire_spec_validates.rs`) loads every schema and asserts every fixture under [`examples/wire/`](../examples/wire/) validates against its corresponding schema. The Python, TypeScript, and Go SDKs consume the same fixtures via language-native validators.
 
 The opcode-discovery question — "which family of body shape do I parse?" — is answered by the **opcode** in the TCP frame header (or the URL path on HTTP). Within a body, polymorphic shapes are disambiguated by a JSON **`kind`** discriminator. Specifically, `OP_REGISTER` carries a `kind=event|table|derivation` discriminator that selects between three sub-shapes; all other opcodes have a single body shape per direction.
 
@@ -20,9 +20,9 @@ The TCP transport frames every request and every response identically:
 
 ```
 +---------------+---------------+----------------------+--------------------------------+
-| length (u32)  | op (u16)      | content_type (u8)    | payload                        |
-| big-endian    | big-endian    |                      | length - 3 bytes               |
-| 4 bytes       | 2 bytes       | 1 byte               | 0..(length-3) bytes            |
+| length (u32) | op (u16) | content_type (u8) | payload |
+| big-endian | big-endian | | length - 3 bytes |
+| 4 bytes | 2 bytes | 1 byte | 0..(length-3) bytes |
 +---------------+---------------+----------------------+--------------------------------+
 ```
 
@@ -38,7 +38,7 @@ Notes:
 - **Correlation:** Redis-style strict-FIFO on a connection. Clients send N requests, then read N responses in the same order. There is **no `request_id`** field in either request or response bodies. Pipelining is supported (multiple in-flight requests on one connection).
 - **Errors** use the dedicated opcode `OP_ERROR_RESPONSE = 0xFFFF`. The payload is a JSON object matching [`error.schema.json`](../examples/wire/schemas/error.schema.json). The connection stays open after a single-frame error (only that frame is rejected); fatal protocol errors close the connection.
 
-The HTTP transport mirrors this opcode set: each opcode has a corresponding verb-style POST route (e.g., `POST /push/<event_name>` for `OP_PUSH`). The full HTTP route table lives in [`docs/http-api.md`](http-api.md) (Plan 13.0-03).
+The HTTP transport mirrors this opcode set: each opcode has a corresponding verb-style POST route (e.g., `POST /push/<event_name>` for `OP_PUSH`). The full HTTP route table lives in [`docs/http-api.md`](http-api.md) (an internal plan).
 
 ## Opcode Table
 
@@ -51,9 +51,9 @@ The HTTP transport mirrors this opcode set: each opcode has a corresponding verb
 | `0x0012` | `OP_PUSH_MANY` | RESERVED | — | Reserved for batch push in v0.1+. v0 servers reply with `op_not_implemented`. |
 | `0x0020` | `OP_GET` | client → server | `{table, key, features?}` | Single-row read. Returns row-shape (dict of feature → value). Cold-start returns `{}`. |
 | `0x0023` | `OP_GET_RESPONSE` | server → client | row-shape body | Response opcode for `OP_GET` and `OP_BATCH_GET`. |
-| `0x0024` | `OP_BATCH_GET` | client → server | `{requests: [{table, key, features?}, ...]}` | Heterogeneous batch lookup. Response order matches request order. NEW in v0 (post-12.7) per ROADMAP §13.4. |
+| `0x0024` | `OP_BATCH_GET` | client → server | `{requests: [{table, key, features?}, ...]}` | Heterogeneous batch lookup. Response order matches request order. |
 | `0x0030` – `0x003F` | (reserved) | — | — | Reserved range for future direct-feature-write opcodes (`set` / `mset` / similar). v0 servers reply with `op_not_implemented`. |
-| `0x0040` | `OP_RESET` | client → server | `{}` | Wipes all in-memory state and truncates WAL. Useful for tests and `bv.test.fixture`. Destructive — only call on a beava instance bound to test data. Per Phase 13.0 Q7. |
+| `0x0040` | `OP_RESET` | client → server | `{}` | Wipes all in-memory state and truncates WAL. Useful for tests and `bv.test.fixture`. Destructive — only call on a beava instance bound to test data. Gated on `test_mode`. |
 | `0xFFFF` | `OP_ERROR_RESPONSE` | server → client | error envelope | Universal error reply. Payload schema: [`error.schema.json`](../examples/wire/schemas/error.schema.json). |
 
 The 6 v0 client-initiated opcodes (`OP_PING`, `OP_REGISTER`, `OP_PUSH`, `OP_GET`, `OP_BATCH_GET`, `OP_RESET`) are documented per-opcode in the sections below.
@@ -65,7 +65,7 @@ Two content type bytes are defined for the TCP transport:
 | Byte | Constant | Encoding | Status |
 |------|----------|----------|--------|
 | `0x01` | `CT_JSON` | UTF-8 JSON | **Implemented in v0.** Required. Both transports. |
-| `0x02` | `CT_MSGPACK` | MessagePack | **Reserved for v0.1+** on the TCP transport. v0 servers MAY accept it (Phase 18-09 wired the codec); clients MUST NOT depend on it. |
+| `0x02` | `CT_MSGPACK` | MessagePack | **Reserved for v0.1+** on the TCP transport. v0 servers MAY accept it (v0-09 wired the codec); clients MUST NOT depend on it. |
 
 The HTTP transport in v0 accepts only `application/json` request bodies and emits `application/json` responses. `Content-Type` other than JSON is rejected with `unsupported_content_type`.
 
@@ -160,7 +160,7 @@ Worked example: [`examples/wire/register-fraud-team.response.json`](../examples/
 
 | Code | When | HTTP status |
 |------|------|-------------|
-| `unsupported_node_kind` | Body has `kind="table"` (pre-12.7 form) or `kind="upsert"`/`"delete"`/`"retract"` etc. — handled at the JSON-prelude validator. | 400 |
+| `unsupported_node_kind` | Body has `kind="table"` (pre-v0 form) or `kind="upsert"`/`"delete"`/`"retract"` etc. — handled at the JSON-prelude validator. | 400 |
 | `registration_conflict` | A descriptor changes a field type or removes a field without `force=true`. | 409 |
 | `schema_invalid` | Descriptor structure does not conform to its schema (missing required field, wrong type). | 400 |
 | `unknown_op` | `agg.<feature>.op` references an op name not in the operator catalogue. | 400 |
@@ -207,15 +207,15 @@ Use cases: monitoring dashboards (total throughput, current entity count, global
 
 See [`examples/wire/register-global-counter.request.json`](../examples/wire/register-global-counter.request.json), [`examples/wire/get-global.request.json`](../examples/wire/get-global.request.json), and [`examples/wire/get-global.response.json`](../examples/wire/get-global.response.json) for the full fixture set. The `examples/wire/schemas/register.request.schema.json` JSON Schema accepts `key: []` (the `minItems: 1` constraint is relaxed to `minItems: 0` per ADR-003); `examples/wire/schemas/get.request.schema.json` accepts the empty-string `key: ""` sentinel for global GET.
 
-**Validation contract:** `key` MUST be either non-empty (per-entity table) or empty array (global table) — never null. The server rejects null `key` at the JSON-prelude validator with `schema_invalid`. The corresponding GET MUST send `key: ""` for a global table; sending a non-empty key against a global table raises `KeyError`-style rejection (or returns `{}` cold-start, depending on the SDK convention; per Phase 13.5 the Python SDK raises). Symmetric: sending `key: ""` against a per-entity table is a misuse and the server returns `{}` cold-start (no error — the empty entity simply has no state).
+**Validation contract:** `key` MUST be either non-empty (per-entity table) or empty array (global table) — never null. The server rejects null `key` at the JSON-prelude validator with `schema_invalid`. The corresponding GET MUST send `key: ""` for a global table; sending a non-empty key against a global table raises `KeyError`-style rejection (or returns `{}` cold-start, depending on the SDK convention; per v0 the Python SDK raises). Symmetric: sending `key: ""` against a per-entity table is a misuse and the server returns `{}` cold-start (no error — the empty entity simply has no state).
 
 `OP_BATCH_GET` accepts mixed per-entity + global lookups in the same batch (heterogeneous batches can include both shapes — global lookups simply set `key` to `""`). See `examples/wire/batch_get-heterogeneous.request.json` for the per-entity variant; the global variant inside the same batch is `{"table": "GlobalCounter", "key": ""}`.
 
-**Implementation deferred** to Phase 13.4 (engine sentinel routing — ~30 LOC; the existing `&str` key path handles `""` natively, so this is mostly the absence of a special-case rejection) + Phase 13.5 (Python SDK no-key form: `@bv.table` no `key=`, `events.group_by()` empty, `events.agg(**aggs)` shorthand, `App.get(table_name)` 1-arg overload) + Phase 13.6 (TS + Go SDK overloads). Acceptance gate: `python/tests/v0/test_global.py` (Plan 13.0-16, 8 tests gated by `_engine_available()` SKIP until 13.4 + 13.5 land together).
+**Surface in v0:** `@bv.table` with no `key=` declares a global table; `events.group_by()` with no keys + `events.agg(**aggs)` produces global aggregations; `App.get(table_name)` (1-arg overload) reads the global row. The TS and Go SDKs expose equivalent overloads. Acceptance gate: `python/tests/v0/test_global.py` (8 tests).
 
 ### OP_PUSH (0x0010)
 
-Push a single event into a registered event source. Default ack semantics is `acks=1` — the server returns success after the event is durably written to the local WAL (per the active sync mode; default is periodic fsync per Phase 6.1 `SyncMode::Periodic`).
+Push a single event into a registered event source. Default ack semantics is `acks=1` — the server returns success after the event is durably written to the local WAL (per the active sync mode; default is periodic fsync per v0 `SyncMode::Periodic`).
 
 The **event name** comes from the URL path on HTTP (`POST /push/<event_name>`) or from a routing prefix on the TCP transport. The wire body itself carries only the **fields** dict.
 
@@ -321,7 +321,7 @@ Worked examples:
 
 ### OP_BATCH_GET (0x0024)
 
-Heterogeneous batch lookup. NEW in v0 (post-12.7) per ROADMAP §13.4. Equivalent to N parallel `OP_GET` calls in a single round-trip; the server processes them in order, and the response array preserves request-order.
+Heterogeneous batch lookup. Equivalent to N parallel `OP_GET` calls in a single round-trip; the server processes them in order, and the response array preserves request-order.
 
 Different `table` values can appear within the same batch. This is what makes the opcode **heterogeneous** — it is not a same-table-different-keys batch; it is a fully general batch.
 
@@ -363,7 +363,7 @@ Worked example: [`examples/wire/batch_get-heterogeneous.response.json`](../examp
 
 ### OP_RESET (0x0040)
 
-Wipe all in-memory state and truncate the WAL. **Destructive.** Per Phase 13.0 Q7 the value is `0x0040`, leaving `0x0030`–`0x003F` reserved for future direct-feature-write opcodes (`set`, `mset`, etc.).
+Wipe all in-memory state and truncate the WAL. **Destructive.** The opcode value is `0x0040`, leaving `0x0030`–`0x003F` reserved for future direct-feature-write opcodes (`set`, `mset`, etc.).
 
 Use case: testing fixtures. `bv.test.fixture` and the `beavaTestServer` harness reset between tests so the next test sees a clean slate. Production operators MUST NOT call `OP_RESET` on a beava instance bound to live data.
 
@@ -408,9 +408,9 @@ Every `OP_ERROR_RESPONSE` (and every HTTP non-2xx response) carries a JSON body 
 }
 ```
 
-- **`code`** is a structured machine-readable identifier. Stable across releases. The canonical alphabetised list lives at [`docs/error-codes.md`](error-codes.md) (Plan 13.0-12).
+- **`code`** is a structured machine-readable identifier. Stable across releases. The canonical alphabetised list lives at [`docs/error-codes.md`](error-codes.md) (an internal plan).
 - **`path`** is an optional JSON path or DAG path locating the offending element. Examples: `"descriptors[1].schema.amount"` (during register validation), `"fields.amount"` (during push), `"requests[2].table"` (during batch_get). Optional.
-- **`message`** is a human-readable explanation. **Forward-looking framing per Phase 12.7 D-02** — messages say "X is not supported in v0", **not** "X has been removed" or "X was deprecated". The framing avoids implying a previous-version reference for users who never saw older revisions.
+- **`message`** is a human-readable explanation. **Forward-looking framing per the events-only error framing** — messages say "X is not supported in v0", **not** "X has been removed" or "X was deprecated". The framing avoids implying a previous-version reference for users who never saw older revisions.
 
 The error envelope is the SAME on both transports — TCP wraps it in a frame with `op = 0x000A...` no actually `op = 0xFFFF` (`OP_ERROR_RESPONSE`) and `content_type = 0x01`; HTTP returns it as the response body with the appropriate status code.
 
@@ -422,21 +422,21 @@ This wire spec is shaped by the following Architecture Decision Records:
 
 - **[ADR-001](../.planning/decisions/ADR-001-bv-table-partial-overturn.md)** — `@bv.table` aggregation-output revival (partial overturn of v0 events-only scope). The wire-spec uses `kind=table` in register payloads per ADR-001. Mutation paths (`upsert` / `delete` / `retract`) and MVCC remain killed.
 
-- **[ADR-002](../.planning/decisions/ADR-002-polars-op-rename.md)** — Polars op renames. Register payloads use the **new** op-string names (`mean`, `var`, `std`, `n_unique`, `quantile`). The Rust engine's internal `AggKind` enum variant names (`AggKind::Avg`, `AggKind::Variance`, etc.) are unchanged — only the public string mapping changes. SDKs in 13.5 (Python deprecation aliases) and 13.6 (TS + Go, no aliases) implement the full rename.
+- **[ADR-002](../.planning/decisions/ADR-002-polars-op-rename.md)** — Polars op renames. Register payloads use the **new** op-string names (`mean`, `var`, `std`, `n_unique`, `quantile`). The Rust engine's internal `AggKind` enum variant names (`AggKind::Avg`, `AggKind::Variance`, etc.) are unchanged — only the public string mapping changes. The Python SDK ships deprecation aliases for the old names; the TS and Go SDKs ship no aliases.
 
-## Validation harness (Phase 13.4)
+## Validation harness.
 
-The schemas under [`examples/wire/schemas/`](../examples/wire/schemas/) and the worked examples under [`examples/wire/`](../examples/wire/) are validated by a CI test that ships in Phase 13.4. Specifically:
+The schemas under [`examples/wire/schemas/`](../examples/wire/schemas/) and the worked examples under [`examples/wire/`](../examples/wire/) are validated by a CI test that ships in v0. Specifically:
 
-- **Engine-side (Rust):** `crates/beava-server/tests/wire_spec_validates.rs` (lands in 13.4) loads every `examples/wire/schemas/*.schema.json` and asserts every `examples/wire/*.json` (excluding the `schemas/` subdirectory) validates against its corresponding schema. The Rust validator crate is **`boon`** — chosen because it has full Draft 2020-12 support; the older `jsonschema` Rust crate has only partial 2020-12 coverage.
+- **Engine-side (Rust):** `crates/beava-server/tests/wire_spec_validates.rs` (lands in v0) loads every `examples/wire/schemas/*.schema.json` and asserts every `examples/wire/*.json` (excluding the `schemas/` subdirectory) validates against its corresponding schema. The Rust validator crate is **`boon`** — chosen because it has full Draft 2020-12 support; the older `jsonschema` Rust crate has only partial 2020-12 coverage.
 
-- **Python SDK (Phase 13.5):** the SDK test suite runs the same fixtures through Python's [`jsonschema`](https://pypi.org/project/jsonschema/) library (`Draft202012Validator`) as part of its unit tests. The harness lives at [`examples/wire/_validate_examples.py`](../examples/wire/_validate_examples.py) and is the authoritative cross-language validation reference.
+- **Python SDK:** the SDK test suite runs the same fixtures through Python's [`jsonschema`](https://pypi.org/project/jsonschema/) library (`Draft202012Validator`) as part of its unit tests. The harness lives at [`examples/wire/_validate_examples.py`](../examples/wire/_validate_examples.py) and is the authoritative cross-language validation reference.
 
-- **TypeScript SDK (Phase 13.6):** uses [Ajv](https://ajv.js.org/) v8+ via `import Ajv2020 from "ajv/dist/2020"` (Ajv splits Draft 2020-12 into a separate import to avoid bundling bloat).
+- **TypeScript SDK:** uses [Ajv](https://ajv.js.org/) v8+ via `import Ajv2020 from "ajv/dist/2020"` (Ajv splits Draft 2020-12 into a separate import to avoid bundling bloat).
 
-- **Go SDK (Phase 13.6):** uses [`santhosh-tekuri/jsonschema/v6`](https://github.com/santhosh-tekuri/jsonschema), which supports Draft 2020-12.
+- **Go SDK:** uses [`santhosh-tekuri/jsonschema/v6`](https://github.com/santhosh-tekuri/jsonschema), which supports Draft 2020-12.
 
-Phase 13.0 (this phase) ships the schemas + examples + Python validator. The Rust engine harness ships in 13.4. The TS + Go validators ship in 13.6 alongside the SDK ports themselves.
+this doc ships the schemas + examples + Python validator. The Rust engine harness ships in v0. The TS + Go validators ship in v0 alongside the SDK ports themselves.
 
 ## Stable contract guarantees
 
@@ -454,13 +454,13 @@ What is **not** part of the stable contract:
 
 ## Plan-level traceability
 
-This document is authored by Plan 13.0-02 (Wave 1). Downstream plans consume it:
+This document is authored by an internal plan (Wave 1). Downstream plans consume it:
 
-- **Plan 13.0-03** (`docs/http-api.md`) writes the verb-style HTTP route table that mirrors this opcode set.
-- **Plan 13.0-04** (`docs/sdk-api/*.md`) writes per-language SDK API specs that target this wire format.
-- **Plan 13.0-12** (`docs/error-codes.md`) writes the alphabetised structured-code list referenced by the `code` field above.
-- **Plan 13.0-14** (vertical examples) reuses the fixtures here as mock-backend response data.
-- **Phase 13.4** ships the engine and the Rust validator that asserts every fixture validates.
-- **Phase 13.5 / 13.6** ship the SDKs that send / receive frames matching this spec.
+- **an internal plan** (`docs/http-api.md`) writes the verb-style HTTP route table that mirrors this opcode set.
+- **an internal plan** (`docs/sdk-api/*.md`) writes per-language SDK API specs that target this wire format.
+- **an internal plan** (`docs/error-codes.md`) writes the alphabetised structured-code list referenced by the `code` field above.
+- **an internal plan** (vertical examples) reuses the fixtures here as mock-backend response data.
+- **v0** ships the engine and the Rust validator that asserts every fixture validates.
+- **v0 / v0** ship the SDKs that send / receive frames matching this spec.
 
-For the full Phase 13.0 plan tree, see [`.planning/phases/13.0-design-contract-spec-docs/13.0-PLAN.md`](../.planning/phases/13.0-design-contract-spec-docs/13.0-PLAN.md).
+For the planning history, see [`.planning/phases/v0-design-contract-spec-docs/v0-PLAN.md`](../.planning/phases/v0-design-contract-spec-docs/v0-PLAN.md).

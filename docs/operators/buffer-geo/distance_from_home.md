@@ -7,9 +7,9 @@
 ```python
 bv.distance_from_home(
     *,
-    lat: str,                        # REQUIRED — name of the latitude field on the event
-    lon: str,                        # REQUIRED — name of the longitude field on the event
-    samples: int = 100,              # SOFT default — BoundedByConfig per V0-MEM-GOV-02
+    lat: str, # REQUIRED — name of the latitude field on the event
+    lon: str, # REQUIRED — name of the longitude field on the event
+    samples: int = 100, # SOFT default — BoundedByConfig per V0-MEM-GOV-02
     where: bv.Col | None = None,
 ) -> AggDescriptor
 ```
@@ -53,10 +53,10 @@ QUERY iterates the ring for the centroid (O(samples) — at most 100
 points by default, cold-path on `app.get(...)`). Update cost is
 effectively Tier 1; the cost class lists this op in Tier 3 because the
 query path can dominate in query-heavy pipelines. State is behind a
-`Box` for the `AggOp::DistanceFromHome` variant per Phase 12.9 boxing
+`Box` for the `AggOp::DistanceFromHome` variant per v0 boxing
 (the variant fits the 80-byte `AggOp` enum cap; see
 `crates/beava-core/src/agg_op.rs` line 489 and
-[Phase 12.9 SUMMARY](../../../.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md)).
+[SUMMARY](../../../.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md)).
 There is no `window=` kwarg in v0 — `bv.distance_from_home` is
 **lifetime-only**. The "home" is implicitly bounded by the ring's
 `samples` capacity (newest event displaces oldest after ring fills);
@@ -67,7 +67,7 @@ per [V0-MEM-GOV-01](../../../.planning/REQUIREMENTS.md).
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `lat` | `str` | **Yes** | — | Name of the latitude field on the event (NOT a literal coordinate). Field value must be `f64` or `i64` decimal degrees in `[-90, 90]`. Resolved to a column index at register time per Plan 19.2-06 D-01 fast-path. |
+| `lat` | `str` | **Yes** | — | Name of the latitude field on the event (NOT a literal coordinate). Field value must be `f64` or `i64` decimal degrees in `[-90, 90]`. Resolved to a column index at register time. |
 | `lon` | `str` | **Yes** | — | Name of the longitude field on the event. Field value must be `f64` or `i64` decimal degrees in `[-180, 180]`. |
 | `samples` | `int` | No | `100` | Capacity of the circular buffer of recent locations whose mean defines "home". Soft-defaulted per [V0-MEM-GOV-02 BoundedByConfig("samples", 100)](../../../.planning/REQUIREMENTS.md). Clamped to `≥ 1` at state construction. Per-entity memory: `samples × 16` bytes. |
 | `where` | `bv.Col` | No | `None` | Boolean expression on event fields; only matching events update the ring + last. |
@@ -87,7 +87,7 @@ the first query returns `0.0`.
 |----------|-------|
 | CPU per event (UPDATE) | **Tier 3** (~12 ns floor / ~32 ns measured — ring-buffer write at head index, O(1)) — see [cost-class.md](../cost-class.md#tier-3-algorithmic-floor-100-300-nscall--9-ops). Update cost is effectively Tier 1; classified Tier 3 because of the query-time iteration cost (see next row). |
 | CPU per query | **O(`samples`)** centroid iteration — at most `samples` × (2 f64 reads + 1 add) per `app.get(...)`. ~100 ns at `samples=100`. Cold-path; doesn't dominate apply-thread budget but flag if your pipeline is query-heavy. |
-| Memory per entity | **`BoundedByConfig("samples", 100)`** — `samples × 16` bytes per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md). At default `samples=100`: 1600 bytes for the ring + ~16 bytes for the last-point memo. Boxed inside `AggOp` per Phase 12.9 (`crates/beava-core/src/agg_op.rs` line 489). |
+| Memory per entity | **`BoundedByConfig("samples", 100)`** — `samples × 16` bytes per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md). At default `samples=100`: 1600 bytes for the ring + ~16 bytes for the last-point memo. Boxed inside `AggOp` per v0 (`crates/beava-core/src/agg_op.rs` line 489). |
 | Lifetime mode | **Required** — `bv.distance_from_home` has no `window=` kwarg in v0; lifetime is the only mode. |
 
 ## Examples
@@ -116,7 +116,7 @@ def CardDistanceFromHome(txns) -> bv.Table:
 
 # After 100+ Boston-area transactions, then a Las Vegas swipe
 result = app.get("CardDistanceFromHome", "card_xyz")
-# result == {"km_from_home": 4128.5}  # ~4100 km from the Boston centroid
+# result == {"km_from_home": 4128.5} # ~4100 km from the Boston centroid
 ```
 
 ### Example 2: Smaller ring for memory-sensitive deployments
@@ -129,7 +129,7 @@ def UserDistanceFromHomeSmall(events) -> bv.Table:
               .agg(km_from_home=bv.distance_from_home(
                   lat="lat",
                   lon="lon",
-                  samples=50,         # 800 bytes/entity; more volatile centroid
+                  samples=50, # 800 bytes/entity; more volatile centroid
               ))
     )
 ```
@@ -185,5 +185,5 @@ See [examples/wire/register-fraud-team.request.json](../../../examples/wire/regi
 - [bv.most_recent_n](./most_recent_n.md) — generic last-N-values sibling (this op is the geo-specific specialisation that computes a centroid + distance)
 - [V0-MEM-GOV-01](../../../.planning/REQUIREMENTS.md) — cold-entity eviction (`@bv.event(cold_after=...)`) for time-bounded "home"
 - [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) — `BoundedByConfig` lifetime-aggregation contract
-- [Phase 12.9 SUMMARY](../../../.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md) — `AggOp::DistanceFromHome` boxing context
+- [SUMMARY](../../../.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md) — `AggOp::DistanceFromHome` boxing context
 - [pipeline-dsl/compilation-rules.md](../../pipeline-dsl/compilation-rules.md) — chain compilation rules

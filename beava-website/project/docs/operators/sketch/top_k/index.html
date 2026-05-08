@@ -144,7 +144,7 @@ in the last hour&quot;, or <code>bv.top_k(&quot;ip_address&quot;, k=10, window=&
 &quot;the 10 IP addresses this account has used most over its lifetime&quot;. The
 parameter <code>k</code> is the <strong>required width</strong> of the result list — the value
 governs both the result shape AND the per-entity memory ceiling under the
-<a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a> lifetime
+<a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a> lifetime
 contract (<code>BoundedByConfig(&quot;k&quot;, 10)</code>: defaults to 10 when omitted, but in
 the public Python signature <code>k</code> is required).</p>
 <p><code>bv.top_k</code> belongs to the <strong>sketch</strong> family. Per-event update is the most
@@ -236,7 +236,7 @@ list).</p>
 </tr>
 <tr>
 <td>Memory per entity</td>
-<td><code>BoundedByConfig(&quot;k&quot;, 10)</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a> — exact frequency table up to <code>exact_threshold</code> entries, then CMS (<code>hybrid_width × hybrid_depth × i64</code>) plus heap of capacity <code>k</code></td>
+<td><code>BoundedByConfig(&quot;k&quot;, 10)</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a> — exact frequency table up to <code>exact_threshold</code> entries, then CMS (<code>hybrid_width × hybrid_depth × i64</code>) plus heap of capacity <code>k</code></td>
 </tr>
 <tr>
 <td>Lifetime mode (<code>window=None</code>)</td>

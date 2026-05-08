@@ -57,7 +57,7 @@ range — clock skew that would produce a negative age returns 0 instead.
 | Resource | Bound |
 |----------|-------|
 | CPU per event | **Tier 1** (~8 ns floor / ~30 ns measured) — see [cost-class.md](../cost-class.md#tier-1-fast-40-nscall--38-ops) |
-| Memory per entity | `O(1)` — single `Option<i64>` slot in the shared `SeenState` per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
+| Memory per entity | `O(1)` — single `Option<i64>` slot in the shared `SeenState` per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
 | Lifetime mode | **Required** — `bv.age` has no `window=` kwarg; lifetime is the only mode |
 
 ## Examples
@@ -131,7 +131,7 @@ See [examples/wire/register-fraud-team.request.json](../../../examples/wire/regi
 - **Server-time, NOT event-time:** both endpoints are server-side per [`project_redis_shaped_no_event_time_ever`](../../../.planning/PROJECT.md). Producers cannot influence the captured `first_ms` or the read-time `now_ms()` via payload fields.
 - **Cold-entity eviction:** if [`@bv.event(cold_after=...)`](../../../.planning/REQUIREMENTS.md) evicts the entity, `age` resets to "ms since the next post-eviction arrival" — the entity is treated as fresh per the Redis-TTL pattern (V0-MEM-GOV-01).
 - **`window=` kwarg attempted:** raises `TypeError` at SDK-helper-call time. `age` is "since first observation", which is inherently lifetime; for windowed-recency see [`bv.first_seen_in_window`](./first_seen_in_window.md).
-- **Lifetime mode:** **the only mode.** Footprint is `O(1)` per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md).
+- **Lifetime mode:** **the only mode.** Footprint is `O(1)` per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md).
 
 ## See also
 

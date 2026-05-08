@@ -67,7 +67,7 @@ event the value is the gauge sample itself (no held-time integral yet).
 |----------|-------|
 | CPU per event | **Tier 1** (~15 ns floor / ~35 ns measured) — see [cost-class.md](../cost-class.md#tier-1-fast-40-nscall--38-ops) |
 | Memory per entity | `O(1)` — `(sum_v_dt, sum_dt, last_v, last_t, initialized)` ≈ 40 B |
-| Lifetime mode (`window="forever"`) | **Allowed** — TWA classified as `O1` per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
+| Lifetime mode (`window="forever"`) | **Allowed** — TWA classified as `O1` per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
 
 ## Examples
 
@@ -98,7 +98,7 @@ app.push("HostMetric", {"host_id": "node-01", "cpu_util": 0.05})
 
 result = app.get("HostCpuTwa", "node-01")
 # result == {"cpu_twa_5m": <weighted toward 0.95 because that sample was
-#                            held for 4× longer than the trailing samples>}
+# held for 4× longer than the trailing samples>}
 ```
 
 ### Example 2: Lifetime TWA of account balance, only after activation
@@ -146,7 +146,7 @@ See [examples/wire/register-fraud-team.request.json](../../../examples/wire/regi
 - **Missing or non-numeric `field`:** the event is silently skipped.
 - **`where=` filter excludes the event:** no update.
 - **Missing `window=`:** raises `ValueError` at SDK-helper-call time. `_validate_window(window, "twa", requires_window=True)` enforces it.
-- **`window="forever"`:** explicitly allowed; the helper integrates over the full lifetime of the entity. Footprint stays `O(1)` per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md).
+- **`window="forever"`:** explicitly allowed; the helper integrates over the full lifetime of the entity. Footprint stays `O(1)` per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md).
 - **No new events for a long time:** the held-time integral stops accumulating at `last_t` and only resumes on the next matching event. (Like `bv.decayed_sum`, querying does not mutate state — there is no "decay forward to now" behaviour.)
 - **Cold-entity eviction (`@bv.event(cold_after=...)`):** drops the underlying state.
 

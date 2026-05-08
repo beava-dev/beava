@@ -134,7 +134,7 @@
 distribution of a field across events that match the optional <code>where=</code>
 predicate. State is a per-category frequency table capped at <code>max_categories</code>
 distinct keys; once full, the cap-and-drop policy keeps the most-frequent
-categories and discards the tail (Phase 19.2-06 D-05a).</p>
+categories and discards the tail (v0-06 D-05a).</p>
 <p>Entropy ranges from <code>0.0</code> (degenerate distribution — every event has the
 same value) to <code>log₂(K)</code> for K equally-likely categories. It quantifies how
 diverse / unpredictable the field's values are for this entity. Use
@@ -142,7 +142,7 @@ diverse / unpredictable the field's values are for this entity. Use
 merchant mix today?&quot; or <code>bv.entropy(&quot;user_agent&quot;)</code> for &quot;how varied are the
 client UA strings ever seen for this account?&quot;.</p>
 <p><code>bv.entropy</code> belongs to the <strong>sketch</strong> family. <code>BoundedByConfig(&quot;max_categories&quot;, 256)</code>
-per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a> — the
+per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a> — the
 per-entity memory ceiling is declared at register time via the
 <code>max_categories</code> kwarg. Per-event update is a BTreeMap key insert; Tier 3
 cost (~60 ns floor / ~160 ns measured) — string-key allocation is the
@@ -185,7 +185,7 @@ irreducible per-event cost.</p>
 <td><code>int</code></td>
 <td>No</td>
 <td><code>256</code></td>
-<td>Cap on distinct categories retained per entity. Memory bounded by <code>O(max_categories)</code> BTreeMap entries. Phase 12.8 <code>BoundedByConfig</code> ceiling.</td>
+<td>Cap on distinct categories retained per entity. Memory bounded by <code>O(max_categories)</code> BTreeMap entries. v0 <code>BoundedByConfig</code> ceiling.</td>
 </tr>
 </tbody>
 </table>
@@ -207,7 +207,7 @@ matching events, the result is <code>null</code> (Python <code>None</code>).</p>
 </tr>
 <tr>
 <td>Memory per entity</td>
-<td><code>BoundedByConfig(&quot;max_categories&quot;, 256)</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a> — BTreeMap of size ≤ <code>max_categories</code></td>
+<td><code>BoundedByConfig(&quot;max_categories&quot;, 256)</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a> — BTreeMap of size ≤ <code>max_categories</code></td>
 </tr>
 <tr>
 <td>Lifetime mode (<code>window=None</code>)</td>
@@ -240,7 +240,7 @@ app.push(&quot;Txn&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;merchan
 
 # Query
 result = app.get(&quot;UserMerchantDiversity&quot;, &quot;alice&quot;)
-# result == {&quot;merchant_entropy_24h&quot;: ~1.5}  # 2/4 amazon, 1/4 starbucks, 1/4 uber
+# result == {&quot;merchant_entropy_24h&quot;: ~1.5} # 2/4 amazon, 1/4 starbucks, 1/4 uber
 </code></pre>
 <h3 id="example-2-lifetime-user-agent-entropy-with-a-tighter-cap" tabindex="-1"><a class="header-anchor" href="#example-2-lifetime-user-agent-entropy-with-a-tighter-cap" aria-hidden="true">#</a> Example 2: Lifetime user-agent entropy with a tighter cap</h3>
 <pre><code class="language-python">@bv.table(key=&quot;account_id&quot;)
@@ -279,7 +279,7 @@ def UaDiversity(reqs) -&gt; bv.Table:
 <li><strong>NaN inputs:</strong> treated as a single distinct category (NaN equals itself in the BTreeMap key); for cleaner semantics filter with <code>where=~bv.col(&quot;field&quot;).isnull()</code>.</li>
 <li><strong><code>max_categories</code> set to 0:</strong> rejected at register time with <code>aggregation_invalid_param</code>.</li>
 <li><strong>Lifetime mode (<code>window=None</code>):</strong> explicitly allowed — <code>BoundedByConfig(&quot;max_categories&quot;, 256)</code> declares the per-entity ceiling at register time per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a>.</li>
-<li><strong>Quadkey-for-geo recipe:</strong> the recommended replacement for the deleted <code>bv.geo_entropy</code> op (Phase 19.2) is <code>bv.entropy(quadkey(lat, lon, zoom), max_categories=1024)</code> — the <code>quadkey(...)</code> expression at apply time produces a deterministic integer cell id for <code>entropy</code> to bin.</li>
+<li><strong>Quadkey-for-geo recipe:</strong> the recommended replacement for the deleted <code>bv.geo_entropy</code> op is <code>bv.entropy(quadkey(lat, lon, zoom), max_categories=1024)</code> — the <code>quadkey(...)</code> expression at apply time produces a deterministic integer cell id for <code>entropy</code> to bin.</li>
 </ul>
 <h2 id="see-also" tabindex="-1"><a class="header-anchor" href="#see-also" aria-hidden="true">#</a> See also</h2>
 <ul>

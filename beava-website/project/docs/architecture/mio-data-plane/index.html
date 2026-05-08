@@ -122,7 +122,7 @@ batch_get, register, and ping flows through a single mio reactor on a
 single OS thread. There is no tokio in the data path; tokio is restricted
 to the admin sidecar on a separate port.</p>
 <p>This is locked architecture, not provisional. The memory commitment is
-<code>project_phase18_no_dual_runtime</code>, locked 2026-04-23 with Phase 18-01.
+<code>project_phase18_no_dual_runtime</code>, locked 2026-04-23 with v0-01.
 The companion locks (<code>project_redis_shaped_no_event_time_ever</code>,
 <code>project_no_sharded_apply</code>) reinforce the single-runtime, single-thread,
 single-keyspace shape. Reviving a second data-plane runtime requires an
@@ -143,7 +143,7 @@ live in stack frames. No <code>Arc&lt;Mutex&lt;T&gt;&gt;</code> to satisfy a <co
 Latency is bounded by the syscall + parse + apply path; there's no
 tokio task wakeup, no scheduler queue, no work-stealing.</li>
 </ol>
-<p>Phase 12.6 deleted the legacy axum data plane (~7,475 LOC). The
+<p>v0 deleted the legacy axum data plane (~7,475 LOC). The
 architectural test
 <a href="https://github.com/beava-dev/beava/blob/main/crates/beava-server/tests/phase12_6_mio_only_dataplane.rs"><code>crates/beava-server/tests/phase12_6_mio_only_dataplane.rs</code></a>
 walks the entire workspace at test runtime and fails CI if any forbidden
@@ -163,7 +163,7 @@ files stay deleted.</p>
 <li><strong>distribute_reads</strong> — read available bytes off ready sockets into
 per-client buffers; wake any client with a complete frame.</li>
 <li><strong>join</strong> — wait for IoPool worker threads to finish parsing
-push-frame bodies (Plan 18-04.8 fast path; saves ~190 ns/push at
+push-frame bodies (an internal plan.8 fast path; saves ~190 ns/push at
 parallel=4 by overlapping parse with read).</li>
 <li><strong>apply</strong> — for each parsed <code>WireRequest</code>, call
 <code>apply_shard.rs::dispatch_one</code> synchronously. The dispatch matches
@@ -233,7 +233,7 @@ symbol appears outside <code>http_admin.rs</code>, OR if any new caller of
 <code>apply_event_to_aggregations</code> appears outside <code>apply_shard.rs</code> or
 <code>recovery.rs</code>.</li>
 <li><strong><a href="https://github.com/beava-dev/beava/blob/main/crates/beava-server/tests/phase12_6_legacy_axum_killed.rs"><code>crates/beava-server/tests/phase12_6_legacy_axum_killed.rs</code></a></strong> —
-asserts the legacy axum data-plane files (deleted in Phase 12.6)
+asserts the legacy axum data-plane files (deleted in v0)
 stay deleted; new files matching the legacy paths fail CI.</li>
 </ol>
 <p>Both tests run on every PR via <code>cargo test --workspace</code>.</p>
@@ -250,7 +250,7 @@ allowlisted call sites. CI catches this too.</li>
 </ul>
 <h2 id="cross-references" tabindex="-1"><a class="header-anchor" href="#cross-references" aria-hidden="true">#</a> Cross-references</h2>
 <ul>
-<li><a href="../../CLAUDE.md"><code>CLAUDE.md</code> § mio-only Hot-Path Invariant (locked Phase 12.6)</a>
+<li><a href="../../CLAUDE.md"><code>CLAUDE.md</code> § mio-only Hot-Path Invariant (locked v0)</a>
 — the canonical invariant block.</li>
 <li><code>~/.claude/projects/-Users-petrpan26-work-tally/memory/project_phase18_no_dual_runtime.md</code>
 — the locked architectural commitment.</li>

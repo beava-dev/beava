@@ -210,7 +210,7 @@
 </tr>
 </tbody>
 </table>
-<p>All 4 geo ops use <strong>haversine</strong> great-circle distance on the <code>(lat, lon)</code> field pair (mean Earth radius 6371 km per <code>agg_geo.rs::haversine_km</code>). <code>lat=</code> and <code>lon=</code> are <strong>field-name strings</strong> (e.g. <code>lat=&quot;latitude&quot;</code>, <code>lon=&quot;longitude&quot;</code>) — they reference event columns, NOT literal coordinates. Note: <code>bv.unique_cells</code> and <code>bv.geo_entropy</code> were <strong>removed in Phase 19.2 D-05</strong> per <code>project_v2_devex_first</code> simplification — users compose them via the <code>count_distinct(quadkey(lat, lon, zoom))</code> and <code>entropy(quadkey(lat, lon, zoom))</code> recipes; see <a href="/docs/operators/cost-class/#recipe-replacements-post-phase-192">cost-class.md &quot;Recipe Replacements&quot;</a>.</p>
+<p>All 4 geo ops use <strong>haversine</strong> great-circle distance on the <code>(lat, lon)</code> field pair (mean Earth radius 6371 km per <code>agg_geo.rs::haversine_km</code>). <code>lat=</code> and <code>lon=</code> are <strong>field-name strings</strong> (e.g. <code>lat=&quot;latitude&quot;</code>, <code>lon=&quot;longitude&quot;</code>) — they reference event columns, NOT literal coordinates. Note: <code>bv.unique_cells</code> and <code>bv.geo_entropy</code> were <strong>removed in v0 D-05</strong> per <code>project_v2_devex_first</code> simplification — users compose them via the <code>count_distinct(quadkey(lat, lon, zoom))</code> and <code>entropy(quadkey(lat, lon, zoom))</code> recipes; see <a href="/docs/operators/cost-class/#recipe-replacements-post-phase-192">cost-class.md &quot;Recipe Replacements&quot;</a>.</p>
 <h2 id="v0-mem-gov-02-compliance-summary" tabindex="-1"><a class="header-anchor" href="#v0-mem-gov-02-compliance-summary" aria-hidden="true">#</a> V0-MEM-GOV-02 compliance summary</h2>
 <p>All 11 ops in this subdirectory have a <strong>finite per-entity memory ceiling declared at register time</strong>. Three classes:</p>
 <ul>
@@ -220,20 +220,20 @@
 </ul>
 <h2 id="lifetime-only-family-invariant" tabindex="-1"><a class="header-anchor" href="#lifetime-only-family-invariant" aria-hidden="true">#</a> Lifetime-only family invariant</h2>
 <p><strong>All 11 ops are lifetime-only in v0</strong> — none accept a <code>window=</code> kwarg. For windowed analogues, compose with <code>@bv.event(cold_after=&quot;...&quot;)</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-01</a>: the per-entity state is dropped on TTL expiry and rebuilds fresh from the next post-eviction matching event. This is the canonical windowing workaround across the entire <code>buffer-geo/</code> family. (Compare with the <code>velocity/</code> family where 7 of 9 ops accept and require <code>window=</code>.)</p>
-<h2 id="phase-129-boxing-summary" tabindex="-1"><a class="header-anchor" href="#phase-129-boxing-summary" aria-hidden="true">#</a> Phase 12.9 boxing summary</h2>
+<h2 id="v0-boxing-summary" tabindex="-1"><a class="header-anchor" href="#v0-boxing-summary" aria-hidden="true">#</a> v0 boxing summary</h2>
 <p>7 of 11 ops in this subdirectory have <code>Box</code>-wrapped state in the <code>AggOp</code> enum to fit the <strong>80-byte <code>size_of::&lt;AggOp&gt;()</code> cap</strong> enforced by <code>crates/beava-core/tests/per_entity_size_dump.rs::aggop_size_within_cap</code>:</p>
 <ul>
 <li><strong>Boxed (7):</strong> <code>hour_of_day_histogram</code>, <code>seasonal_deviation</code>, <code>event_type_mix</code>, <code>geo_velocity</code>, <code>geo_distance</code>, <code>geo_spread</code>, <code>distance_from_home</code>.</li>
 <li><strong>Inline (4):</strong> <code>histogram</code>, <code>dow_hour_histogram</code> (Vec&lt;u64&gt; 24-byte header), <code>most_recent_n</code>, <code>reservoir_sample</code> (Vec&lt;Value&gt; 24-byte headers).</li>
 </ul>
-<p>See <a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md">Phase 12.9 SUMMARY</a> for the boxing rationale and per-variant breakdown.</p>
+<p>See <a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md">SUMMARY</a> for the boxing rationale and per-variant breakdown.</p>
 <h2 id="see-also" tabindex="-1"><a class="header-anchor" href="#see-also" aria-hidden="true">#</a> See also</h2>
 <ul>
 <li><a href="/docs/operators/">Operator catalog index</a> — master 54-page operator catalog</li>
-<li><a href="/docs/operators/cost-class/">cost-class.md</a> — per-op CPU tier (Tier 1 / 2 / 3) — alive Phase 19.2 metadata</li>
+<li><a href="/docs/operators/cost-class/">cost-class.md</a> — per-op CPU tier (Tier 1 / 2 / 3) — alive v0 metadata</li>
 <li><a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-01</a> — cold-entity eviction (<code>@bv.event(cold_after=...)</code>) pattern</li>
 <li><a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a> — lifetime-aggregation memory governance contract</li>
-<li><a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md">Phase 12.9 SUMMARY</a> — <code>AggOp</code> boxing context</li>
+<li><a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md">SUMMARY</a> — <code>AggOp</code> boxing context</li>
 </ul>
 
 </article>
@@ -245,7 +245,7 @@
       <li><a href="#geo-4">Geo (4)</a></li>
       <li><a href="#v0-mem-gov-02-compliance-summary">V0-MEM-GOV-02 compliance summary</a></li>
       <li><a href="#lifetime-only-family-invariant">Lifetime-only family invariant</a></li>
-      <li><a href="#phase-129-boxing-summary">Phase 12.9 boxing summary</a></li>
+      <li><a href="#v0-boxing-summary">v0 boxing summary</a></li>
       <li><a href="#see-also">See also</a></li>
   </ul>
 </aside>

@@ -53,7 +53,7 @@ the entity has seen zero matching events, the result is `null` (Python
 | Resource | Bound |
 |----------|-------|
 | CPU per event | **Tier 1** (~8 ns floor / ~30 ns measured) — see [cost-class.md](../cost-class.md#tier-1-fast-40-nscall--38-ops) |
-| Memory per entity | `O(1)` — single `Option<i64>` slot in the shared `SeenState` per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
+| Memory per entity | `O(1)` — single `Option<i64>` slot in the shared `SeenState` per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
 | Lifetime mode | **Required** — `bv.last_seen` has no `window=` kwarg; lifetime is the only mode |
 
 ## Examples
@@ -76,8 +76,8 @@ def UserLastActive(activity) -> bv.Table:
     )
 
 # Push events
-app.push("Activity", {"user_id": "alice", "action": "view"})    # t=1700000000000
-app.push("Activity", {"user_id": "alice", "action": "click"})  # t=1700000007500
+app.push("Activity", {"user_id": "alice", "action": "view"}) # t=1700000000000
+app.push("Activity", {"user_id": "alice", "action": "click"}) # t=1700000007500
 
 # Query
 result = app.get("UserLastActive", "alice")
@@ -123,7 +123,7 @@ See [examples/wire/register-fraud-team.request.json](../../../examples/wire/regi
 - **Server-time, NOT event-time:** the captured value is the server's `now_ms()` at apply, not any payload field. Per [`project_redis_shaped_no_event_time_ever`](../../../.planning/PROJECT.md), beava intentionally has no event-time concept. Out-of-order arrivals are recorded in arrival order, not event-payload order.
 - **Cold-entity eviction:** if [`@bv.event(cold_after=...)`](../../../.planning/REQUIREMENTS.md) evicts the entity, the next event after eviction starts a fresh `SeenState`; `last_seen` reflects only post-eviction arrivals.
 - **`window=` kwarg attempted:** raises `TypeError` at SDK-helper-call time. For windowed semantics use [`bv.first_seen_in_window`](./first_seen_in_window.md).
-- **Lifetime mode:** **the only mode.** Footprint is `O(1)` per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md).
+- **Lifetime mode:** **the only mode.** Footprint is `O(1)` per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md).
 
 ## See also
 

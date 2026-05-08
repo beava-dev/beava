@@ -161,7 +161,7 @@
 </tbody>
 </table>
 <p>Three of five (<code>first_n</code>, <code>last_n</code>, <code>lag</code>) require an explicit <code>n</code> kwarg per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02 BoundedByRequiredKwarg(&quot;n&quot;)</a> — the lifetime-aggregation memory contract. Without <code>n</code> the register-time JSON-prelude shim (<code>pre_check_unbounded_op_in_lifetime_mode</code>) rejects the payload with the structured code <code>unbounded_op_in_lifetime_mode</code>.</p>
-<p>All 5 ops are <strong>lifetime-only</strong> in v0 (no <code>window=</code> kwarg). For sliding-window &quot;values in the last N ms&quot; semantics, see <a href="/docs/operators/buffer-geo/most_recent_n/"><code>bv.most_recent_n</code></a> (Phase 11 buffer family). For arrival-timestamp variants instead of values, see the <a href="../recency/">recency family</a>.</p>
+<p>All 5 ops are <strong>lifetime-only</strong> in v0 (no <code>window=</code> kwarg). For sliding-window &quot;values in the last N ms&quot; semantics, see <a href="/docs/operators/buffer-geo/most_recent_n/"><code>bv.most_recent_n</code></a> (v0 buffer family). For arrival-timestamp variants instead of values, see the <a href="../recency/">recency family</a>.</p>
 <h2 id="see-also" tabindex="-1"><a class="header-anchor" href="#see-also" aria-hidden="true">#</a> See also</h2>
 <ul>
 <li><a href="/docs/operators/">Operator catalog index</a> — full 53-op catalogue</li>

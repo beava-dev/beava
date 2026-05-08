@@ -8,7 +8,7 @@
 bv.first_n(
     field: str,
     *,
-    n: int,                         # REQUIRED — register-time kwarg
+    n: int, # REQUIRED — register-time kwarg
     where: bv.Col | None = None,
 ) -> AggDescriptor
 ```
@@ -60,7 +60,7 @@ a Python list transparently.
 | Resource | Bound |
 |----------|-------|
 | CPU per event | **Tier 1** (~8 ns floor / ~30 ns measured) — see [cost-class.md](../cost-class.md#tier-1-fast-40-nscall--38-ops) |
-| Memory per entity | **`BoundedByRequiredKwarg("n")`** — `n × sizeof(field)` bytes per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
+| Memory per entity | **`BoundedByRequiredKwarg("n")`** — `n × sizeof(field)` bytes per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
 | Lifetime mode | **Required** — `bv.first_n` has no `window=` kwarg; lifetime is the only mode |
 
 ## Examples

@@ -25,7 +25,7 @@ The rule of thumb: if your downstream consumer queries "for entity Z, what is X?
 
 ## Three equivalent forms
 
-In Python (per [Phase 13.0 Plan 04 + ADR-003](../sdk-api/python.md)), three forms compile to the same wire payload:
+In Python (per [an internal plan + ADR-003](../sdk-api/python.md)), three forms compile to the same wire payload:
 
 ```python
 # Form 1: shortest — direct .agg() shorthand on the source
@@ -35,7 +35,7 @@ clicks.agg(total=bv.count(window="forever"))
 clicks.group_by().agg(total=bv.count(window="forever"))
 
 # Form 3: full decorator declaration
-@bv.table   # no key= → global
+@bv.table # no key= → global
 def TotalClicks(clicks) -> bv.Table:
     return clicks.agg(total=bv.count(window="forever"))
 ```
@@ -49,7 +49,7 @@ app.register(Click, TotalClicks)
 
 # Push events for many users:
 app.push("Click", {"user_id": "alice", "page": "/home"})
-app.push("Click", {"user_id": "bob",   "page": "/home"})
+app.push("Click", {"user_id": "bob", "page": "/home"})
 app.push("Click", {"user_id": "carol", "page": "/products"})
 
 # Query the global feature dict — no entity arg:
@@ -95,16 +95,16 @@ This is intentional: global tables are typically used for monitoring / dashboard
 If you need both — per-entity TTL eviction for personalization features AND global running aggregate — declare two derivations on the same source:
 
 ```python
-@bv.event(cold_after="7d")   # per-entity TTL applies to UserSpend below
+@bv.event(cold_after="7d") # per-entity TTL applies to UserSpend below
 class Purchase:
     user_id: str
     amount: float
 
 @bv.table(key="user_id")
-def UserSpend(p) -> bv.Table:                       # cold_after evicts inactive users
+def UserSpend(p) -> bv.Table: # cold_after evicts inactive users
     return p.group_by("user_id").agg(spend=bv.sum("amount", window="1h"))
 
-@bv.table   # global — cold_after has no effect; state is always live
+@bv.table # global — cold_after has no effect; state is always live
 def TotalSpend(p) -> bv.Table:
     return p.agg(spend=bv.sum("amount", window="1h"))
 ```
@@ -124,4 +124,4 @@ Per [V0-MEM-GOV-02](../architecture/memory-budget.md), every lifetime aggregatio
 
 For the full design rationale, alternatives considered, and implementation deferral plan, see [ADR-003: First-class global aggregation + public `bv.lit` export](../../.planning/decisions/ADR-003-global-aggregation-and-bv-lit.md).
 
-The acceptance test suite for global aggregation lives at [`python/tests/v0/test_global.py`](../../python/tests/v0/test_global.py) (Plan 13.0-16, 8 tests gated by `_engine_available()` SKIP until Phase 13.4 + 13.5 land the implementation).
+The acceptance test suite for global aggregation lives at [`python/tests/v0/test_global.py`](../../python/tests/v0/test_global.py) (an internal plan, 8 tests gated by `_engine_available()` SKIP until v0 + v0 land the implementation).

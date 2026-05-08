@@ -6,7 +6,7 @@ single OS thread. There is no tokio in the data path; tokio is restricted
 to the admin sidecar on a separate port.
 
 This is locked architecture, not provisional. The memory commitment is
-`project_phase18_no_dual_runtime`, locked 2026-04-23 with Phase 18-01.
+`project_phase18_no_dual_runtime`, locked 2026-04-23 with v0-01.
 The companion locks (`project_redis_shaped_no_event_time_ever`,
 `project_no_sharded_apply`) reinforce the single-runtime, single-thread,
 single-keyspace shape. Reviving a second data-plane runtime requires an
@@ -29,7 +29,7 @@ Three reasons it's mio, not tokio:
    Latency is bounded by the syscall + parse + apply path; there's no
    tokio task wakeup, no scheduler queue, no work-stealing.
 
-Phase 12.6 deleted the legacy axum data plane (~7,475 LOC). The
+v0 deleted the legacy axum data plane (~7,475 LOC). The
 architectural test
 [`crates/beava-server/tests/phase12_6_mio_only_dataplane.rs`](../../crates/beava-server/tests/phase12_6_mio_only_dataplane.rs)
 walks the entire workspace at test runtime and fails CI if any forbidden
@@ -51,7 +51,7 @@ The reactor lives in
 2. **distribute_reads** — read available bytes off ready sockets into
    per-client buffers; wake any client with a complete frame.
 3. **join** — wait for IoPool worker threads to finish parsing
-   push-frame bodies (Plan 18-04.8 fast path; saves ~190 ns/push at
+   push-frame bodies (an internal plan.8 fast path; saves ~190 ns/push at
    parallel=4 by overlapping parse with read).
 4. **apply** — for each parsed `WireRequest`, call
    `apply_shard.rs::dispatch_one` synchronously. The dispatch matches
@@ -134,7 +134,7 @@ Two CI tests lock this architecture in place:
    `apply_event_to_aggregations` appears outside `apply_shard.rs` or
    `recovery.rs`.
 2. **[`crates/beava-server/tests/phase12_6_legacy_axum_killed.rs`](../../crates/beava-server/tests/phase12_6_legacy_axum_killed.rs)** —
-   asserts the legacy axum data-plane files (deleted in Phase 12.6)
+   asserts the legacy axum data-plane files (deleted in v0)
    stay deleted; new files matching the legacy paths fail CI.
 
 Both tests run on every PR via `cargo test --workspace`.
@@ -152,7 +152,7 @@ Both tests run on every PR via `cargo test --workspace`.
 
 ## Cross-references
 
-- [`CLAUDE.md` § mio-only Hot-Path Invariant (locked Phase 12.6)](../../CLAUDE.md)
+- [`CLAUDE.md` § mio-only Hot-Path Invariant (locked v0)](../../CLAUDE.md)
   — the canonical invariant block.
 - `~/.claude/projects/-Users-petrpan26-work-tally/memory/project_phase18_no_dual_runtime.md`
   — the locked architectural commitment.

@@ -215,7 +215,7 @@
 <li><strong>&quot;How often does this value flip?&quot;</strong> → <a href="/docs/operators/velocity/value_change_count/"><code>bv.value_change_count</code></a>.</li>
 </ul>
 <blockquote>
-<p>Note: per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">REQUIREMENTS.md</a>, <code>z_score</code> is family <code>AGG-Z-*</code> — it lives here in <code>velocity/</code> per RESEARCH §3 directory layout (entity-level statistics that pair naturally with the velocity / trend / outlier ops). <a href="/docs/operators/velocity/rate_of_change/"><code>bv.rate_of_change</code></a> is the canonical Phase 9 velocity-family op per RESEARCH §5 — it lives here, <strong>not</strong> in <a href="../decay/">decay/</a>, because it computes a slope across two adjacent events rather than an exponentially-weighted statistic.</p>
+<p>Note: per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">REQUIREMENTS.md</a>, <code>z_score</code> is family <code>AGG-Z-*</code> — it lives here in <code>velocity/</code> per RESEARCH §3 directory layout (entity-level statistics that pair naturally with the velocity / trend / outlier ops). <a href="/docs/operators/velocity/rate_of_change/"><code>bv.rate_of_change</code></a> is the canonical v0 velocity-family op per RESEARCH §5 — it lives here, <strong>not</strong> in <a href="../decay/">decay/</a>, because it computes a slope across two adjacent events rather than an exponentially-weighted statistic.</p>
 </blockquote>
 <h2 id="see-also" tabindex="-1"><a class="header-anchor" href="#see-also" aria-hidden="true">#</a> See also</h2>
 <ul>

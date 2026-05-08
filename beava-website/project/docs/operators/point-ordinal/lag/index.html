@@ -124,7 +124,7 @@
 <pre><code class="language-python">bv.lag(
     field: str,
     *,
-    n: int,                         # REQUIRED — register-time kwarg
+    n: int, # REQUIRED — register-time kwarg
     where: bv.Col | None = None,
 ) -&gt; AggDescriptor
 </code></pre>
@@ -208,7 +208,7 @@ the result is the field value from exactly <code>n</code> matching events back.<
 </tr>
 <tr>
 <td>Memory per entity</td>
-<td><strong><code>BoundedByRequiredKwarg(&quot;n&quot;)</code></strong> — <code>(n+1) × sizeof(field)</code> bytes per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a></td>
+<td><strong><code>BoundedByRequiredKwarg(&quot;n&quot;)</code></strong> — <code>(n+1) × sizeof(field)</code> bytes per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a></td>
 </tr>
 <tr>
 <td>Lifetime mode</td>
@@ -239,7 +239,7 @@ app.push(&quot;Txn&quot;, {&quot;card_id&quot;: &quot;c1&quot;, &quot;amount&quo
 
 # Query
 result = app.get(&quot;CardPrevAmount&quot;, &quot;c1&quot;)
-# result == {&quot;prev_amount&quot;: 25.0}  # 1 event ago (the second one), not the most recent
+# result == {&quot;prev_amount&quot;: 25.0} # 1 event ago (the second one), not the most recent
 </code></pre>
 <h3 id="example-2-previous-status-code-5-events-ago-failed-cluster-detection" tabindex="-1"><a class="header-anchor" href="#example-2-previous-status-code-5-events-ago-failed-cluster-detection" aria-hidden="true">#</a> Example 2: Previous status code 5 events ago (failed-cluster detection)</h3>
 <pre><code class="language-python">@bv.table(key=&quot;user_id&quot;)

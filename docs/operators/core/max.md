@@ -49,7 +49,7 @@ has seen zero matching events, the result is `null` (Python `None`).
 |----------|-------|
 | CPU per event | **Tier 1** (~10 ns algorithm floor / ~30 ns measured) — see [cost-class.md](../cost-class.md#tier-1-fast-40-nscall--38-ops) |
 | Memory per entity | `O(1)` — single retained value per bucket (≤64 buckets) |
-| Lifetime mode (`window="forever"`) | **Allowed** — `O(1)` footprint per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
+| Lifetime mode (`window="forever"`) | **Allowed** — `O(1)` footprint per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
 
 ## Examples
 

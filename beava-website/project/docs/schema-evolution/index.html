@@ -123,7 +123,7 @@ additive descriptor changes (the default), destructive changes (<code>force=true
 and dry-run validation (<code>dry_run=true</code>). The contract is shared across all 3
 SDKs (Python / TypeScript / Go) per
 <a href="/docs/sdk-api/shared/#schema-evolution">shared.md § Schema evolution</a>.
-<strong>Last reviewed:</strong> 2026-05-03 (Phase 13.0).</p>
+<strong>Last reviewed:</strong> 2026-05-03.</p>
 </blockquote>
 <h2 id="overview" tabindex="-1"><a class="header-anchor" href="#overview" aria-hidden="true">#</a> Overview</h2>
 <p>beava registration is <strong>additive-only by default</strong> — re-running
@@ -481,10 +481,10 @@ each path:</p>
 <li><code>pre_check_unsupported_node_kind</code> — rejects payloads with
 <code>kind=&quot;upsert&quot;</code> / <code>kind=&quot;delete&quot;</code> / <code>kind=&quot;retract&quot;</code> etc. with
 <code>unsupported_node_kind</code>. Per ADR-001, <code>kind=&quot;table&quot;</code> is now PERMITTED
-for aggregation-output (the v0 amendment lands in Phase 13.4).</li>
+for aggregation-output (the v0 amendment landed in v0).</li>
 <li><code>pre_check_unbounded_op_in_lifetime_mode</code> — rejects lifetime-mode ops
 without a finite memory bound with <code>unbounded_op_in_lifetime_mode</code>
-(per V0-MEM-GOV-02 from Phase 12.8).</li>
+(per V0-MEM-GOV-02).</li>
 </ul>
 </li>
 <li>
@@ -511,8 +511,8 @@ classification per the matrix above. Destructive paths without <code>force=true<
 raise <code>registration_conflict</code> (HTTP 409) carrying the full diff envelope.</p>
 </li>
 </ol>
-<p>The JSON-prelude shim pattern (steps 1) was introduced in Phase 12.6 Plan 04
-and extended through Phase 12.7 + 12.8 to keep structured error codes stable
+<p>The JSON-prelude shim pattern (steps 1) was introduced in v0
+and extended through v0 to keep structured error codes stable
 across schema/code changes — when the corresponding Rust struct fields or enum
 variants are removed, the shim catches the legacy payload BEFORE strict serde
 returns a generic &quot;unknown variant&quot; / &quot;unknown field&quot; message.</p>
@@ -534,8 +534,8 @@ Go functional options).</li>
 — the FORBIDDEN rows enumerate which structural changes the validator
 rejects unconditionally (<code>force=true</code> does NOT bypass them).</li>
 <li><a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-001-bv-table-partial-overturn.md">ADR-001</a> —
-<code>@bv.table</code> aggregation-output revival; pre-13.4 the JSON-prelude shim
-rejects <code>kind=&quot;table&quot;</code>, post-13.4 it permits the aggregation-output form
+<code>@bv.table</code> aggregation-output revival; pre-v0 the JSON-prelude shim
+rejects <code>kind=&quot;table&quot;</code>, v0 it permits the aggregation-output form
 and continues rejecting other table surfaces.</li>
 </ul>
 

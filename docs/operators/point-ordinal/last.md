@@ -51,7 +51,7 @@ matching events with a non-null `field`, the result is `null` (Python `None`).
 | Resource | Bound |
 |----------|-------|
 | CPU per event | **Tier 1** (~8 ns floor / ~30 ns measured) — see [cost-class.md](../cost-class.md#tier-1-fast-40-nscall--38-ops) |
-| Memory per entity | `O(1)` — single `Option<Value>` slot per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
+| Memory per entity | `O(1)` — single `Option<Value>` slot per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
 | Lifetime mode | **Required** — `bv.last` has no `window=` kwarg; lifetime is the only mode |
 
 ## Examples
@@ -125,7 +125,7 @@ See [examples/wire/register-fraud-team.request.json](../../../examples/wire/regi
 - **Field missing from event:** treated identically to null — skipped.
 - **Out-of-order event-time:** **does not matter.** beava is processing-time-only per [`project_redis_shaped_no_event_time_ever`](../../../.planning/PROJECT.md); `last` always reflects the **server arrival order**, never the event payload's timestamp field.
 - **`window=` kwarg attempted:** raises `TypeError` at SDK-helper-call time. Use [`bv.last_n(n=1, window="...")`](./last_n.md) for a windowed alternative.
-- **Lifetime mode:** **the only mode.** Footprint is `O(1)` per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md).
+- **Lifetime mode:** **the only mode.** Footprint is `O(1)` per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md).
 
 ## See also
 

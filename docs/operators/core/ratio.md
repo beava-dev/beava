@@ -50,7 +50,7 @@ or otherwise), the result is `null` (Python `None`) — no division-by-zero.
 |----------|-------|
 | CPU per event | **Tier 1** (~5 ns algorithm floor / ~25 ns measured) — see [cost-class.md](../cost-class.md#tier-1-fast-40-nscall--38-ops) |
 | Memory per entity | `O(1)` — `(matching, total)` per bucket (≤64 buckets) |
-| Lifetime mode (`window=None`) | **Allowed** — `O(1)` footprint per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
+| Lifetime mode (`window=None`) | **Allowed** — `O(1)` footprint per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
 
 ## Examples
 
@@ -78,7 +78,7 @@ app.push("Login", {"user_id": "alice", "status": "failed"})
 
 # Query
 result = app.get("UserFailRate", "alice")
-# result == {"fail_rate_lifetime": 0.6666666666666666}  # 2 / 3
+# result == {"fail_rate_lifetime": 0.6666666666666666} # 2 / 3
 ```
 
 ### Example 2: Click-through rate this hour

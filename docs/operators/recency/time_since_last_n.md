@@ -7,7 +7,7 @@
 ```python
 bv.time_since_last_n(
     *,
-    n: int,                         # REQUIRED — register-time kwarg
+    n: int, # REQUIRED — register-time kwarg
     where: bv.Col | None = None,
 ) -> AggDescriptor
 ```
@@ -66,7 +66,7 @@ clock-skew safety.
 | Resource | Bound |
 |----------|-------|
 | CPU per event | **Tier 1** (~12 ns floor / ~35 ns measured) — see [cost-class.md](../cost-class.md#tier-1-fast-40-nscall--38-ops) |
-| Memory per entity | **`BoundedByRequiredKwarg("n")`** — `n × 8` bytes per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
+| Memory per entity | **`BoundedByRequiredKwarg("n")`** — `n × 8` bytes per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
 | Lifetime mode | **Required** — `bv.time_since_last_n` has no `window=` kwarg; lifetime is the only mode |
 
 ## Examples

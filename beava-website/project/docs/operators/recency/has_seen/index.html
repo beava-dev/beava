@@ -182,7 +182,7 @@ cold-start value (no events seen) is <code>false</code>.</p>
 </tr>
 <tr>
 <td>Memory per entity</td>
-<td><code>O(1)</code> — single <code>Option&lt;i64&gt;</code> slot in the shared <code>SeenState</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a></td>
+<td><code>O(1)</code> — single <code>Option&lt;i64&gt;</code> slot in the shared <code>SeenState</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a></td>
 </tr>
 <tr>
 <td>Lifetime mode</td>
@@ -213,7 +213,7 @@ app.push(&quot;Payment&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;sta
 
 # Query
 result = app.get(&quot;UserHasPaid&quot;, &quot;alice&quot;)
-# result == {&quot;has_paid&quot;: True}  # the second event flipped it; subsequent failures don't matter
+# result == {&quot;has_paid&quot;: True} # the second event flipped it; subsequent failures don't matter
 </code></pre>
 <h3 id="example-2-has-this-card-ever-been-used-internationally" tabindex="-1"><a class="header-anchor" href="#example-2-has-this-card-ever-been-used-internationally" aria-hidden="true">#</a> Example 2: Has this card ever been used internationally?</h3>
 <pre><code class="language-python">@bv.table(key=&quot;card_id&quot;)
@@ -247,7 +247,7 @@ def CardUsedInternationally(txns) -&gt; bv.Table:
 <li><strong><code>where=</code> filter excludes everything:</strong> result is <code>false</code> until a matching event arrives, then sticks at <code>true</code>.</li>
 <li><strong>Once <code>true</code>, never reverts:</strong> beava never decrements or clears <code>has_seen</code> based on events alone. The only reset path is full entity eviction via <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md"><code>@bv.event(cold_after=...)</code></a>, which deletes the underlying <code>SeenState</code>.</li>
 <li><strong><code>window=</code> kwarg attempted:</strong> raises <code>TypeError</code> at SDK-helper-call time. For &quot;ever matched in the last N ms?&quot; semantics, see <a href="/docs/operators/recency/first_seen_in_window/"><code>bv.first_seen_in_window</code></a>.</li>
-<li><strong>Lifetime mode:</strong> <strong>the only mode.</strong> Footprint is <code>O(1)</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a>.</li>
+<li><strong>Lifetime mode:</strong> <strong>the only mode.</strong> Footprint is <code>O(1)</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a>.</li>
 </ul>
 <h2 id="see-also" tabindex="-1"><a class="header-anchor" href="#see-also" aria-hidden="true">#</a> See also</h2>
 <ul>

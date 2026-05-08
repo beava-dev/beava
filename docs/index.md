@@ -2,7 +2,7 @@
 
 > Real-time feature server for fraud, ad-tech, and behavioral analytics.
 
-beava is a single-binary feature server. Push events in over HTTP, declare aggregations, query features by entity key. Per-instance: ≥3M events/sec/core for simple counters, ~6 KB per entity for the rich fraud-team shape, P99 batch-get under 10 ms (verified Phase 12.9 2026-05-03; v0 launch ship-pitch numbers).
+beava is a single-binary feature server. Push events in over HTTP, declare aggregations, query features by entity key. Per-instance: ≥3M events/sec/core for simple counters, ~6 KB per entity for the rich fraud-team shape, P99 batch-get under 10 ms — v0 launch ship-pitch numbers.
 
 ## Quickstart
 
@@ -31,7 +31,7 @@ beava is a single-binary feature server. Push events in over HTTP, declare aggre
 ## Operator catalog
 
 - [docs/operators/index.md](./operators/index.md) — full 54-op catalogue (53 unique kinds + ema alias inside ewma.md)
-- [docs/operators/cost-class.md](./operators/cost-class.md) — per-op CPU tier metadata (Phase 19.2)
+- [docs/operators/cost-class.md](./operators/cost-class.md) — per-op CPU tier metadata.
 - Family overviews:
   - [Core (8)](./operators/core/index.md) — `count`, `sum`, `mean`, `min`, `max`, `var`, `std`, `ratio`
   - [Sketch (5)](./operators/sketch/index.md) — `n_unique`, `quantile`, `top_k`, `bloom_member`, `entropy`
@@ -85,12 +85,12 @@ Wire fixtures: [examples/wire/](../examples/wire/) — 20 JSON request + respons
 - Events-only with `@bv.table` aggregation-output exception (per `project_v0_events_only_scope` + ADR-001) — no `app.upsert/delete/retract` in v0
 - Processing-time only; no event-time, no joins, no watermarks (per `project_redis_shaped_no_event_time_ever`)
 - Memory governance: opt-in `cold_after=` TTL + lifetime aggregation contract (V0-MEM-GOV-01/02/03)
-- 80 B `size_of::<AggOp>` cap (per Phase 12.9; CI tripwire enforced by `crates/beava-core/tests/per_entity_size_dump.rs::aggop_size_within_cap`)
+- 80 B `size_of::<AggOp>` cap (per v0; CI tripwire enforced by `crates/beava-core/tests/per_entity_size_dump.rs::aggop_size_within_cap`)
 - Polars op naming convention (per ADR-002)
-- Global aggregation + `bv.lit` first-class (per ADR-003 — implementation in 13.4 + 13.5 + 13.6)
+- Global aggregation + `bv.lit` first-class (per ADR-003 — implementation in v0)
 
 ## Versioning
 
-v0.0.0 ships from Phase 13.8 (packaging + GA tag) — currently in development. See [.planning/ROADMAP.md](../.planning/ROADMAP.md) for the full phase plan.
-
-Active phase: **Phase 13.0 (design contract + spec docs) ✅ CLOSED 2026-05-03 (PASS)**. Next: 4-way parallel **Phase 13.4 (engine prep) + 13.5 (Python SDK + bench CLI) + 13.6 (TS + Go SDKs) + 13.7 (docs site)** → sequential **Phase 13.8 (packaging + GA tag)**.
+v0.0.0 is the upcoming OSS launch. v0 covers the Python SDK, the engine wire
+contract, packaging (PyPI / Homebrew / Docker), and minimum-viable docs.
+Everything not in scope for v0 is out of scope.

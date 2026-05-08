@@ -7,8 +7,8 @@
 ```python
 bv.geo_distance(
     *,
-    lat: str,                        # REQUIRED — name of the latitude field on the event
-    lon: str,                        # REQUIRED — name of the longitude field on the event
+    lat: str, # REQUIRED — name of the latitude field on the event
+    lon: str, # REQUIRED — name of the longitude field on the event
     where: bv.Col | None = None,
 ) -> AggDescriptor
 ```
@@ -40,9 +40,9 @@ trip).
 `bv.geo_distance` belongs to the **bounded-buffer + geo** family.
 State is `O(1)` per entity — `Option<(f64, f64)>` for the previous
 point + `f64` for the running total — behind a `Box` for the
-`AggOp::GeoDistance` variant per Phase 12.9 boxing (the variant fits
+`AggOp::GeoDistance` variant per v0 boxing (the variant fits
 the 80-byte `AggOp` enum cap; see `crates/beava-core/src/agg_op.rs`
-line 487 and [Phase 12.9 SUMMARY](../../../.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md)).
+line 487 and [SUMMARY](../../../.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md)).
 Per-event update is **Tier 2** (~18 ns floor / ~42 ns measured per
 [cost-class.md](../cost-class.md#tier-2-moderate-30-100-nscall--6-ops)) —
 two field reads + one haversine + one floating-point add. There is no
@@ -54,7 +54,7 @@ accumulation per [V0-MEM-GOV-01](../../../.planning/REQUIREMENTS.md).
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `lat` | `str` | **Yes** | — | Name of the latitude field on the event (NOT a literal coordinate). Field value must be `f64` or `i64` decimal degrees in `[-90, 90]`. Resolved to a column index at register time per Plan 19.2-06 D-01 fast-path. |
+| `lat` | `str` | **Yes** | — | Name of the latitude field on the event (NOT a literal coordinate). Field value must be `f64` or `i64` decimal degrees in `[-90, 90]`. Resolved to a column index at register time. |
 | `lon` | `str` | **Yes** | — | Name of the longitude field on the event. Field value must be `f64` or `i64` decimal degrees in `[-180, 180]`. |
 | `where` | `bv.Col` | No | `None` | Boolean expression on event fields; only matching events are added to the path total. |
 
@@ -71,7 +71,7 @@ to the total.
 | Resource | Bound |
 |----------|-------|
 | CPU per event | **Tier 2** (~18 ns floor / ~42 ns measured — two field reads + haversine + one f64 add) — see [cost-class.md](../cost-class.md#tier-2-moderate-30-100-nscall--6-ops). The haversine is the irreducible Tier 2 cost. |
-| Memory per entity | **`O(1)`** — `Option<(f64, f64)>` for the previous point + `f64` for the running total. Boxed inside `AggOp` per Phase 12.9 (`crates/beava-core/src/agg_op.rs` line 487). |
+| Memory per entity | **`O(1)`** — `Option<(f64, f64)>` for the previous point + `f64` for the running total. Boxed inside `AggOp` per v0 (`crates/beava-core/src/agg_op.rs` line 487). |
 | Lifetime mode | **Required** — `bv.geo_distance` has no `window=` kwarg in v0; lifetime is the only mode. |
 
 ## Examples
@@ -102,7 +102,7 @@ result = app.get("DriverTotalKm", "driver_42")
 ### Example 2: Distance per session, scoped via cold-entity TTL
 
 ```python
-@bv.event(cold_after="2h")        # entity state drops after 2h of inactivity
+@bv.event(cold_after="2h") # entity state drops after 2h of inactivity
 class TripPing:
     trip_id: str
     lat: float
@@ -160,5 +160,5 @@ See [examples/wire/register-fraud-team.request.json](../../../examples/wire/regi
 - [bv.geo_spread](./geo_spread.md) — RMS-dispersion sibling (how spread out are this entity's points around their mean centroid)
 - [bv.distance_from_home](./distance_from_home.md) — current-event distance from a centroid of recent locations
 - [V0-MEM-GOV-01](../../../.planning/REQUIREMENTS.md) — cold-entity eviction (`@bv.event(cold_after=...)`) for windowing the lifetime
-- [Phase 12.9 SUMMARY](../../../.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md) — `AggOp::GeoDistance` boxing context
+- [SUMMARY](../../../.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md) — `AggOp::GeoDistance` boxing context
 - [pipeline-dsl/compilation-rules.md](../../pipeline-dsl/compilation-rules.md) — chain compilation rules

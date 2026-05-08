@@ -185,7 +185,7 @@ an integer; cold-start (no events seen) returns <code>0</code>, never <code>null
 </tr>
 <tr>
 <td>Memory per entity</td>
-<td><code>O(1)</code> — two <code>u64</code> slots in <code>StreakState</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a></td>
+<td><code>O(1)</code> — two <code>u64</code> slots in <code>StreakState</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a></td>
 </tr>
 <tr>
 <td>Lifetime mode</td>
@@ -210,11 +210,11 @@ def UserConsecutiveFails(logins) -&gt; bv.Table:
     )
 
 # Push events in arrival order
-app.push(&quot;Login&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;status&quot;: &quot;failed&quot;})  # streak = 1
-app.push(&quot;Login&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;status&quot;: &quot;failed&quot;})  # streak = 2
-app.push(&quot;Login&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;status&quot;: &quot;failed&quot;})  # streak = 3
-app.push(&quot;Login&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;status&quot;: &quot;ok&quot;})      # streak = 0 (reset)
-app.push(&quot;Login&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;status&quot;: &quot;failed&quot;})  # streak = 1
+app.push(&quot;Login&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;status&quot;: &quot;failed&quot;}) # streak = 1
+app.push(&quot;Login&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;status&quot;: &quot;failed&quot;}) # streak = 2
+app.push(&quot;Login&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;status&quot;: &quot;failed&quot;}) # streak = 3
+app.push(&quot;Login&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;status&quot;: &quot;ok&quot;}) # streak = 0 (reset)
+app.push(&quot;Login&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;status&quot;: &quot;failed&quot;}) # streak = 1
 
 # Query
 result = app.get(&quot;UserConsecutiveFails&quot;, &quot;alice&quot;)
@@ -254,7 +254,7 @@ def CardLocalRun(txns) -&gt; bv.Table:
 <li><strong>Out-of-order event-time:</strong> <strong>does not matter.</strong> beava is processing-time-only per <a href="https://github.com/beava-dev/beava/blob/main/.planning/PROJECT.md"><code>project_redis_shaped_no_event_time_ever</code></a>; the streak follows server arrival order strictly.</li>
 <li><strong>Cold-entity eviction:</strong> if <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md"><code>@bv.event(cold_after=...)</code></a> evicts the entity, <code>StreakState</code> is dropped; the next event after eviction starts a fresh streak (current = 1 if it matches, 0 otherwise).</li>
 <li><strong><code>window=</code> kwarg attempted:</strong> raises <code>TypeError</code> at SDK-helper-call time. There is no windowed <code>streak</code> — windowed streaks would require a different state shape (a deque of match/no-match flags) and are out of v0 scope.</li>
-<li><strong>Lifetime mode:</strong> <strong>the only mode.</strong> Footprint is <code>O(1)</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a>.</li>
+<li><strong>Lifetime mode:</strong> <strong>the only mode.</strong> Footprint is <code>O(1)</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a>.</li>
 </ul>
 <h2 id="see-also" tabindex="-1"><a class="header-anchor" href="#see-also" aria-hidden="true">#</a> See also</h2>
 <ul>

@@ -222,10 +222,10 @@ def IpCadence(clicks) -&gt; bv.Table:
     )
 
 # Push events in arrival order
-app.push(&quot;Click&quot;, {&quot;ip&quot;: &quot;1.2.3.4&quot;, &quot;user_agent&quot;: &quot;bot/1.0&quot;})  # mean = null
-app.push(&quot;Click&quot;, {&quot;ip&quot;: &quot;1.2.3.4&quot;, &quot;user_agent&quot;: &quot;bot/1.0&quot;})  # mean = Δ1
-app.push(&quot;Click&quot;, {&quot;ip&quot;: &quot;1.2.3.4&quot;, &quot;user_agent&quot;: &quot;bot/1.0&quot;})  # mean = avg(Δ1, Δ2)
-app.push(&quot;Click&quot;, {&quot;ip&quot;: &quot;1.2.3.4&quot;, &quot;user_agent&quot;: &quot;bot/1.0&quot;})  # mean = avg(Δ1, Δ2, Δ3)
+app.push(&quot;Click&quot;, {&quot;ip&quot;: &quot;1.2.3.4&quot;, &quot;user_agent&quot;: &quot;bot/1.0&quot;}) # mean = null
+app.push(&quot;Click&quot;, {&quot;ip&quot;: &quot;1.2.3.4&quot;, &quot;user_agent&quot;: &quot;bot/1.0&quot;}) # mean = Δ1
+app.push(&quot;Click&quot;, {&quot;ip&quot;: &quot;1.2.3.4&quot;, &quot;user_agent&quot;: &quot;bot/1.0&quot;}) # mean = avg(Δ1, Δ2)
+app.push(&quot;Click&quot;, {&quot;ip&quot;: &quot;1.2.3.4&quot;, &quot;user_agent&quot;: &quot;bot/1.0&quot;}) # mean = avg(Δ1, Δ2, Δ3)
 
 # Query
 result = app.get(&quot;IpCadence&quot;, &quot;1.2.3.4&quot;)

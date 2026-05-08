@@ -123,9 +123,9 @@
 <h2 id="signature" tabindex="-1"><a class="header-anchor" href="#signature" aria-hidden="true">#</a> Signature</h2>
 <pre><code class="language-python">bv.distance_from_home(
     *,
-    lat: str,                        # REQUIRED — name of the latitude field on the event
-    lon: str,                        # REQUIRED — name of the longitude field on the event
-    samples: int = 100,              # SOFT default — BoundedByConfig per V0-MEM-GOV-02
+    lat: str, # REQUIRED — name of the latitude field on the event
+    lon: str, # REQUIRED — name of the longitude field on the event
+    samples: int = 100, # SOFT default — BoundedByConfig per V0-MEM-GOV-02
     where: bv.Col | None = None,
 ) -&gt; AggDescriptor
 </code></pre>
@@ -165,10 +165,10 @@ QUERY iterates the ring for the centroid (O(samples) — at most 100
 points by default, cold-path on <code>app.get(...)</code>). Update cost is
 effectively Tier 1; the cost class lists this op in Tier 3 because the
 query path can dominate in query-heavy pipelines. State is behind a
-<code>Box</code> for the <code>AggOp::DistanceFromHome</code> variant per Phase 12.9 boxing
+<code>Box</code> for the <code>AggOp::DistanceFromHome</code> variant per v0 boxing
 (the variant fits the 80-byte <code>AggOp</code> enum cap; see
 <code>crates/beava-core/src/agg_op.rs</code> line 489 and
-<a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md">Phase 12.9 SUMMARY</a>).
+<a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md">SUMMARY</a>).
 There is no <code>window=</code> kwarg in v0 — <code>bv.distance_from_home</code> is
 <strong>lifetime-only</strong>. The &quot;home&quot; is implicitly bounded by the ring's
 <code>samples</code> capacity (newest event displaces oldest after ring fills);
@@ -191,7 +191,7 @@ per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS
 <td><code>str</code></td>
 <td><strong>Yes</strong></td>
 <td>—</td>
-<td>Name of the latitude field on the event (NOT a literal coordinate). Field value must be <code>f64</code> or <code>i64</code> decimal degrees in <code>[-90, 90]</code>. Resolved to a column index at register time per Plan 19.2-06 D-01 fast-path.</td>
+<td>Name of the latitude field on the event (NOT a literal coordinate). Field value must be <code>f64</code> or <code>i64</code> decimal degrees in <code>[-90, 90]</code>. Resolved to a column index at register time.</td>
 </tr>
 <tr>
 <td><code>lon</code></td>
@@ -242,7 +242,7 @@ the first query returns <code>0.0</code>.</p>
 </tr>
 <tr>
 <td>Memory per entity</td>
-<td><strong><code>BoundedByConfig(&quot;samples&quot;, 100)</code></strong> — <code>samples × 16</code> bytes per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a>. At default <code>samples=100</code>: 1600 bytes for the ring + ~16 bytes for the last-point memo. Boxed inside <code>AggOp</code> per Phase 12.9 (<code>crates/beava-core/src/agg_op.rs</code> line 489).</td>
+<td><strong><code>BoundedByConfig(&quot;samples&quot;, 100)</code></strong> — <code>samples × 16</code> bytes per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a>. At default <code>samples=100</code>: 1600 bytes for the ring + ~16 bytes for the last-point memo. Boxed inside <code>AggOp</code> per v0 (<code>crates/beava-core/src/agg_op.rs</code> line 489).</td>
 </tr>
 <tr>
 <td>Lifetime mode</td>
@@ -273,7 +273,7 @@ def CardDistanceFromHome(txns) -&gt; bv.Table:
 
 # After 100+ Boston-area transactions, then a Las Vegas swipe
 result = app.get(&quot;CardDistanceFromHome&quot;, &quot;card_xyz&quot;)
-# result == {&quot;km_from_home&quot;: 4128.5}  # ~4100 km from the Boston centroid
+# result == {&quot;km_from_home&quot;: 4128.5} # ~4100 km from the Boston centroid
 </code></pre>
 <h3 id="example-2-smaller-ring-for-memory-sensitive-deployments" tabindex="-1"><a class="header-anchor" href="#example-2-smaller-ring-for-memory-sensitive-deployments" aria-hidden="true">#</a> Example 2: Smaller ring for memory-sensitive deployments</h3>
 <pre><code class="language-python">@bv.table(key=&quot;user_id&quot;)
@@ -283,7 +283,7 @@ def UserDistanceFromHomeSmall(events) -&gt; bv.Table:
               .agg(km_from_home=bv.distance_from_home(
                   lat=&quot;lat&quot;,
                   lon=&quot;lon&quot;,
-                  samples=50,         # 800 bytes/entity; more volatile centroid
+                  samples=50, # 800 bytes/entity; more volatile centroid
               ))
     )
 </code></pre>
@@ -333,7 +333,7 @@ def UserDistanceFromHomeSmall(events) -&gt; bv.Table:
 <li><a href="/docs/operators/buffer-geo/most_recent_n/">bv.most_recent_n</a> — generic last-N-values sibling (this op is the geo-specific specialisation that computes a centroid + distance)</li>
 <li><a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-01</a> — cold-entity eviction (<code>@bv.event(cold_after=...)</code>) for time-bounded &quot;home&quot;</li>
 <li><a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a> — <code>BoundedByConfig</code> lifetime-aggregation contract</li>
-<li><a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md">Phase 12.9 SUMMARY</a> — <code>AggOp::DistanceFromHome</code> boxing context</li>
+<li><a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md">SUMMARY</a> — <code>AggOp::DistanceFromHome</code> boxing context</li>
 <li><a href="/docs/pipeline-dsl/compilation-rules/">pipeline-dsl/compilation-rules.md</a> — chain compilation rules</li>
 </ul>
 

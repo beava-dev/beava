@@ -148,7 +148,7 @@ for &quot;how many devices has this account ever logged in from successfully?&qu
 The hybrid mode is transparent at the API: callers always read a single
 integer.</p>
 <p><code>bv.n_unique</code> belongs to the <strong>sketch</strong> family and is <code>BoundedSketch</code> per
-<a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a> — fixed
+<a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a> — fixed
 structural cap regardless of stream length.</p>
 <h2 id="parameters" tabindex="-1"><a class="header-anchor" href="#parameters" aria-hidden="true">#</a> Parameters</h2>
 <table>
@@ -225,7 +225,7 @@ structural cap regardless of stream length.</p>
 </tr>
 <tr>
 <td>Lifetime mode (<code>window=None</code>)</td>
-<td><strong>Allowed</strong> — <code>BoundedSketch</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a></td>
+<td><strong>Allowed</strong> — <code>BoundedSketch</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a></td>
 </tr>
 </tbody>
 </table>
@@ -291,9 +291,9 @@ def DeviceFootprint(logins) -&gt; bv.Table:
 <li><strong><code>exact_threshold</code> set to 0:</strong> forces always-HLL mode; useful for explicit memory tuning when you know the cardinality will be high. Tier 3 floor applies from the first event.</li>
 <li><strong>Field type:</strong> <code>str</code>, <code>i64</code>, <code>f64</code> are all supported (hashable). Non-hashable types fail at register time with <code>schema_mismatch</code>.</li>
 <li><strong>NaN inputs:</strong> treated as a single distinct value (NaN equals itself in the HLL hasher); for cleaner semantics filter with <code>where=~bv.col(&quot;field&quot;).isnull()</code>.</li>
-<li><strong>Lifetime mode (<code>window=None</code>):</strong> explicitly allowed — HLL is <code>BoundedSketch</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a>.</li>
+<li><strong>Lifetime mode (<code>window=None</code>):</strong> explicitly allowed — HLL is <code>BoundedSketch</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a>.</li>
 <li><strong>Hybrid promotion:</strong> transparent — caller only sees the integer estimate. Promotion happens once the entity has seen <code>exact_threshold</code> distinct values; in exact mode the result is precise, in HLL mode the standard error is ~1.6% at precision=14.</li>
-<li><strong>Combining with quadkey for geo:</strong> the recommended replacement for the deleted <code>bv.unique_cells</code> op (Phase 19.2) is <code>bv.n_unique(quadkey(lat, lon, zoom))</code>. The <code>quadkey(...)</code> expression at apply time produces a deterministic integer cell id for <code>n_unique</code> to count.</li>
+<li><strong>Combining with quadkey for geo:</strong> the recommended replacement for the deleted <code>bv.unique_cells</code> op is <code>bv.n_unique(quadkey(lat, lon, zoom))</code>. The <code>quadkey(...)</code> expression at apply time produces a deterministic integer cell id for <code>n_unique</code> to count.</li>
 </ul>
 <h2 id="see-also" tabindex="-1"><a class="header-anchor" href="#see-also" aria-hidden="true">#</a> See also</h2>
 <ul>

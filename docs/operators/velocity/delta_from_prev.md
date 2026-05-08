@@ -80,9 +80,9 @@ def UserBalanceJump(updates) -> bv.Table:
     )
 
 # Push events
-app.push("BalanceUpdate", {"user_id": "alice", "balance": 1000.0})  # last_jump = null
-app.push("BalanceUpdate", {"user_id": "alice", "balance": 1250.0})  # last_jump = 250
-app.push("BalanceUpdate", {"user_id": "alice", "balance": 1200.0})  # last_jump = -50
+app.push("BalanceUpdate", {"user_id": "alice", "balance": 1000.0}) # last_jump = null
+app.push("BalanceUpdate", {"user_id": "alice", "balance": 1250.0}) # last_jump = 250
+app.push("BalanceUpdate", {"user_id": "alice", "balance": 1200.0}) # last_jump = -50
 
 # Query
 result = app.get("UserBalanceJump", "alice")

@@ -52,7 +52,7 @@ never decreases.
 | Resource | Bound |
 |----------|-------|
 | CPU per event | **Tier 1** (~12 ns floor / ~32 ns measured) — see [cost-class.md](../cost-class.md#tier-1-fast-40-nscall--38-ops) |
-| Memory per entity | `O(1)` — same two-`u64` `StreakState` shared with [`bv.streak`](./streak.md) per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
+| Memory per entity | `O(1)` — same two-`u64` `StreakState` shared with [`bv.streak`](./streak.md) per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
 | Lifetime mode | **Required** — `bv.max_streak` has no `window=` kwarg; lifetime is the only mode |
 
 ## Examples
@@ -129,7 +129,7 @@ See [examples/wire/register-fraud-team.request.json](../../../examples/wire/regi
 - **Out-of-order event-time:** **does not matter.** beava is processing-time-only per [`project_redis_shaped_no_event_time_ever`](../../../.planning/PROJECT.md); streaks follow server arrival order.
 - **Cold-entity eviction:** post-eviction, `max_streak` resets to `0` and rebuilds from the next match.
 - **`window=` kwarg attempted:** raises `TypeError` at SDK-helper-call time. A windowed maximum-streak would require a different state shape and is out of v0 scope.
-- **Lifetime mode:** **the only mode.** Footprint is `O(1)` per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md).
+- **Lifetime mode:** **the only mode.** Footprint is `O(1)` per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md).
 
 ## See also
 

@@ -7,7 +7,7 @@ admin sidecar, the snapshot writer) but they sit beside the apply thread,
 not inside it. State mutations only happen on the apply thread.
 
 This is a permanent architectural commitment: the locked memory file is
-`project_no_sharded_apply`, last reaffirmed 2026-04-26 when Phase 13.3's
+`project_no_sharded_apply`, last reaffirmed 2026-04-26 when v0's
 `RefCell + LocalSet` lockless-apply proposal was REJECTED.
 
 ## Why single-thread
@@ -32,7 +32,7 @@ The single-thread model is correctness-by-construction:
 For higher per-instance throughput, beava expects users to run multiple
 instances sharded at the entity-key level — the **Redis-cluster pattern**.
 Each instance owns a slice of the key space; the SDK or a thin proxy
-routes pushes/gets to the right instance. Phase 13.3's lockless-apply
+routes pushes/gets to the right instance. v0's lockless-apply
 proposal was rejected in favor of this — see
 `project_no_sharded_apply` for the full reasoning.
 
@@ -51,7 +51,7 @@ the HTTP listener (both data-plane). On each ready event:
 1. **Receive frame.** mio reads the inbound frame from the socket.
 2. **Parse.** TCP frames are `[u32 length][u16 op][u8 content_type][payload]`;
    HTTP requests are dispatched by route. The IoPool worker thread
-   (Plan 18-04.8) eagerly deserialises push payloads into `Row` while
+   (an internal plan.8) eagerly deserialises push payloads into `Row` while
    the bytes are hot in L1, then hands the parsed row to the apply
    thread via the `MioClient.parsed_rows` side-channel — saves ~190 ns
    per push at parallel=4.
@@ -74,9 +74,9 @@ The dispatch entry point is
 ## What the apply loop does NOT do
 
 - **No async / no tokio in the data plane.** Per
-  `project_phase18_no_dual_runtime` (locked Phase 12.6), the apply path
+  `project_phase18_no_dual_runtime` (locked v0), the apply path
   is synchronous and runs on a hand-rolled mio event loop. The legacy
-  axum data-plane was deleted in Phase 12.6 (~7,475 LOC removed). See
+  axum data-plane was deleted in v0 (~7,475 LOC removed). See
   [mio-data-plane.md](./mio-data-plane.md) for the full enforcement
   story.
 - **No locks on hot path.** Per-entity state lives in a `HashMap` owned
@@ -100,14 +100,14 @@ The dispatch entry point is
 The apply thread is the only thread that mutates state. These run beside
 it:
 
-| Thread             | Role                                                                | Lives in                              |
+| Thread | Role | Lives in |
 | ------------------ | ------------------------------------------------------------------- | ------------------------------------- |
-| **Apply**          | mio event loop; reads, validates, dispatches, applies                | `apply_shard.rs::dispatch_one`        |
-| **IoPool worker**  | Eagerly parses push frames into `Row` while bytes are L1-hot         | `server.rs::read_and_parse_client`    |
-| **WAL writer**     | Drains the WAL ring buffer; fsyncs in background; advances LSN watermarks | `wal_writer.rs`                  |
-| **Snapshot**       | Periodic snapshot serialization (default 30s)                        | `snapshot_writer.rs`                  |
-| **Admin sidecar**  | tokio runtime serving `/health`, `/ready`, `/metrics`, `/registry`   | `http_admin.rs`                       |
-| **Recovery (boot)**| Loads latest snapshot + replays WAL; runs once before serving begins | `recovery.rs`                         |
+| **Apply** | mio event loop; reads, validates, dispatches, applies | `apply_shard.rs::dispatch_one` |
+| **IoPool worker** | Eagerly parses push frames into `Row` while bytes are L1-hot | `server.rs::read_and_parse_client` |
+| **WAL writer** | Drains the WAL ring buffer; fsyncs in background; advances LSN watermarks | `wal_writer.rs` |
+| **Snapshot** | Periodic snapshot serialization (default 30s) | `snapshot_writer.rs` |
+| **Admin sidecar** | tokio runtime serving `/health`, `/ready`, `/metrics`, `/registry` | `http_admin.rs` |
+| **Recovery (boot)**| Loads latest snapshot + replays WAL; runs once before serving begins | `recovery.rs` |
 
 `recovery.rs` is the only other legitimate caller of
 `apply_event_to_aggregations` besides the apply thread — see
@@ -135,9 +135,9 @@ callers are forbidden by an architectural test (see
 ## Cross-references
 
 - [`CLAUDE.md` § mio-only Hot-Path Invariant](../../CLAUDE.md) — locked
-  Phase 12.6 commitment; the architectural test that enforces it at CI.
+  v0 commitment; the architectural test that enforces it at CI.
 - `~/.claude/projects/-Users-petrpan26-work-tally/memory/project_no_sharded_apply.md`
-  — the locked single-thread commitment + the rejected Phase 13.3
+  — the locked single-thread commitment + the rejected v0
   proposal.
 - [mio-data-plane.md](./mio-data-plane.md) — mio runtime details +
   admin sidecar separation.

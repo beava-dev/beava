@@ -53,7 +53,7 @@ matching events with a non-null `field`, the result is `null` (Python `None`).
 | Resource | Bound |
 |----------|-------|
 | CPU per event | **Tier 1** (~5 ns floor / ~25 ns measured) — see [cost-class.md](../cost-class.md#tier-1-fast-40-nscall--38-ops) |
-| Memory per entity | `O(1)` — single `Option<Value>` slot per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
+| Memory per entity | `O(1)` — single `Option<Value>` slot per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
 | Lifetime mode | **Required** — `bv.first` has no `window=` kwarg; lifetime is the only mode |
 
 ## Examples
@@ -81,7 +81,7 @@ app.push("Login", {"user_id": "alice", "device_id": "macbook-pro"})
 
 # Query
 result = app.get("UserFirstDevice", "alice")
-# result == {"first_device": "iphone-12"}  # the second event is a no-op
+# result == {"first_device": "iphone-12"} # the second event is a no-op
 ```
 
 ### Example 2: First successful payment amount per user
@@ -126,7 +126,7 @@ See [examples/wire/register-fraud-team.request.json](../../../examples/wire/regi
 - **`where=` filter excludes everything:** result is `null`; once a matching event eventually arrives, the value is captured and sticks for the entity's lifetime.
 - **Field missing from event:** treated identically to null — skipped.
 - **`window=` kwarg attempted:** raises `TypeError` at SDK-helper-call time. There is no windowed `first`; compose with [`bv.last_n(n=1, window="...")`](../buffer-geo/most_recent_n.md) for a windowed "earliest in this window" approximation, or use [`bv.first_seen`](../recency/first_seen.md) if only the arrival time matters.
-- **Lifetime mode:** **the only mode.** Footprint is `O(1)` per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) — a single `Option<Value>` slot.
+- **Lifetime mode:** **the only mode.** Footprint is `O(1)` per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) — a single `Option<Value>` slot.
 
 ## See also
 

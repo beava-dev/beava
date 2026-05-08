@@ -65,7 +65,7 @@ returns the dict with all 168 keys at `0`.
 | Resource | Bound |
 |----------|-------|
 | CPU per event | **Tier 1** (~4 ns floor / ~25 ns measured — direct `Vec[168]` index write) — see [cost-class.md](../cost-class.md#tier-1-fast-40-nscall--38-ops) |
-| Memory per entity | **`O(1)`** — fixed `Vec<u64>` of length 168 = 1,344 bytes per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
+| Memory per entity | **`O(1)`** — fixed `Vec<u64>` of length 168 = 1,344 bytes per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
 | Lifetime mode | **Required** — `bv.dow_hour_histogram` has no `window=` kwarg in v0; lifetime is the only mode |
 
 ## Examples

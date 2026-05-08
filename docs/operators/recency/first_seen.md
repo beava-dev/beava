@@ -52,7 +52,7 @@ the entity has seen zero matching events, the result is `null` (Python
 | Resource | Bound |
 |----------|-------|
 | CPU per event | **Tier 1** (~8 ns floor / ~30 ns measured) — see [cost-class.md](../cost-class.md#tier-1-fast-40-nscall--38-ops) |
-| Memory per entity | `O(1)` — single `Option<i64>` slot in the shared `SeenState` per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
+| Memory per entity | `O(1)` — single `Option<i64>` slot in the shared `SeenState` per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
 | Lifetime mode | **Required** — `bv.first_seen` has no `window=` kwarg; lifetime is the only mode |
 
 ## Examples
@@ -74,12 +74,12 @@ def UserCreatedAt(logins) -> bv.Table:
     )
 
 # Push events
-app.push("Login", {"user_id": "alice"})  # arrives at server time t=1700000000000
-app.push("Login", {"user_id": "alice"})  # arrives at server time t=1700000005000
+app.push("Login", {"user_id": "alice"}) # arrives at server time t=1700000000000
+app.push("Login", {"user_id": "alice"}) # arrives at server time t=1700000005000
 
 # Query
 result = app.get("UserCreatedAt", "alice")
-# result == {"first_login_ms": 1700000000000}  # the second login is a no-op
+# result == {"first_login_ms": 1700000000000} # the second login is a no-op
 ```
 
 ### Example 2: First successful payment timestamp per card
@@ -121,7 +121,7 @@ See [examples/wire/register-fraud-team.request.json](../../../examples/wire/regi
 - **Server-time, NOT event-time:** the captured value is the server's `now_ms()` at apply, not any payload field. Per [`project_redis_shaped_no_event_time_ever`](../../../.planning/PROJECT.md), beava intentionally has no event-time concept. Producers cannot influence the captured timestamp via the payload.
 - **Cold-entity eviction:** if [`@bv.event(cold_after=...)`](../../../.planning/REQUIREMENTS.md) is configured and the entity is evicted, the next event after eviction is treated as a fresh entity — `first_seen` resets to that re-arrival's `now_ms()`. This is the documented Redis-TTL pattern (V0-MEM-GOV-01).
 - **`window=` kwarg attempted:** raises `TypeError` at SDK-helper-call time. For "is this value new in the last N ms?" semantics, see [`bv.first_seen_in_window`](./first_seen_in_window.md).
-- **Lifetime mode:** **the only mode.** Footprint is `O(1)` per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md).
+- **Lifetime mode:** **the only mode.** Footprint is `O(1)` per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md).
 
 ## See also
 

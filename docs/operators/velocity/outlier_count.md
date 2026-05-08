@@ -97,7 +97,7 @@ for amt in [100.0, 95.0, 110.0, 102.0, 98.0, 5000.0]:
 
 # Query
 result = app.get("UserAmtOutliers", "alice")
-# result == {"amt_outliers_24h": 1}  # the $5,000 event broke the 3-sigma threshold
+# result == {"amt_outliers_24h": 1} # the $5,000 event broke the 3-sigma threshold
 ```
 
 ### Example 2: Two-sigma response-time outliers per IP, hourly window

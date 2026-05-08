@@ -101,7 +101,7 @@ Each operator page follows the same 9-section template (Signature / Description 
 
 ## Cost-class metadata
 
-- See [cost-class.md](./cost-class.md) for per-op CPU tier (Tier 1 / Tier 2 / Tier 3) — alive Phase 19.2 metadata, cross-linked from each op page's Complexity section.
+- See [cost-class.md](./cost-class.md) for per-op CPU tier (Tier 1 / Tier 2 / Tier 3) — alive v0 metadata, cross-linked from each op page's Complexity section.
 
 ## See also
 

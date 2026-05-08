@@ -118,10 +118,10 @@
 <article class="docs-prose">
 <h1>Pipeline DSL Expressions (`bv.col`)</h1>
 <blockquote>
-<p><strong>Status:</strong> Authoritative for v0. Documents the <strong>post-13.5 target</strong> Python
+<p><strong>Status:</strong> Authoritative for v0. Documents the <strong>v0 target</strong> Python
 expression DSL. The current <code>python/beava/_col.py</code> already implements every
-surface in this doc — Phase 13.5 polishes naming + cross-language parity.
-<strong>Last reviewed:</strong> 2026-05-03 (Phase 13.0).</p>
+surface in this doc — v0 polishes naming + cross-language parity.
+<strong>Last reviewed:</strong> 2026-05-03.</p>
 </blockquote>
 <h2 id="overview" tabindex="-1"><a class="header-anchor" href="#overview" aria-hidden="true">#</a> Overview</h2>
 <p><code>bv.col(name)</code> constructs a <strong>column-reference expression</strong> — a leaf in an
@@ -132,13 +132,13 @@ string the server's expression evaluator parses back into a predicate.</p>
 <p>The grammar is <strong>locked</strong> — the server-side parser depends on the canonical
 shape; SDK ports MUST produce the same string for the same Python source.</p>
 <h2 id="grammar-canonical" tabindex="-1"><a class="header-anchor" href="#grammar-canonical" aria-hidden="true">#</a> Grammar (canonical)</h2>
-<pre><code>expr      := field | literal | bin_op | unary_op | call
-field     := identifier | identifier &quot;.&quot; identifier         # e.g. x, Stream.x
-literal   := number | &quot;'&quot; string &quot;'&quot; | &quot;true&quot; | &quot;false&quot; | &quot;null&quot;
-bin_op    := &quot;(&quot; expr &lt;space&gt; op &lt;space&gt; expr &quot;)&quot;           # EVERY binary op is parenthesized
-op        := &quot;+&quot; | &quot;-&quot; | &quot;*&quot; | &quot;/&quot; | &quot;&gt;&quot; | &quot;&gt;=&quot; | &quot;&lt;&quot; | &quot;&lt;=&quot; | &quot;==&quot; | &quot;!=&quot; | &quot;and&quot; | &quot;or&quot;
-unary_op  := &quot;(&quot; &quot;not&quot; &lt;space&gt; expr &quot;)&quot;
-call      := ident &quot;(&quot; expr (&quot;,&quot; &lt;space&gt; expr)* &quot;)&quot;
+<pre><code>expr := field | literal | bin_op | unary_op | call
+field := identifier | identifier &quot;.&quot; identifier # e.g. x, Stream.x
+literal := number | &quot;'&quot; string &quot;'&quot; | &quot;true&quot; | &quot;false&quot; | &quot;null&quot;
+bin_op := &quot;(&quot; expr &lt;space&gt; op &lt;space&gt; expr &quot;)&quot; # EVERY binary op is parenthesized
+op := &quot;+&quot; | &quot;-&quot; | &quot;*&quot; | &quot;/&quot; | &quot;&gt;&quot; | &quot;&gt;=&quot; | &quot;&lt;&quot; | &quot;&lt;=&quot; | &quot;==&quot; | &quot;!=&quot; | &quot;and&quot; | &quot;or&quot;
+unary_op := &quot;(&quot; &quot;not&quot; &lt;space&gt; expr &quot;)&quot;
+call := ident &quot;(&quot; expr (&quot;,&quot; &lt;space&gt; expr)* &quot;)&quot;
 </code></pre>
 <p>String literal escaping: <code>\\</code> becomes <code>\\\\</code>; <code>'</code> becomes <code>\\'</code>. This is the
 single mitigation point for predicate-string injection from user-supplied
@@ -146,12 +146,12 @@ strings (T-03-02-01).</p>
 <h2 id="bvcolname-column-reference" tabindex="-1"><a class="header-anchor" href="#bvcolname-column-reference" aria-hidden="true">#</a> <code>bv.col(name)</code> — column reference</h2>
 <pre><code class="language-python">import beava as bv
 
-amount = bv.col(&quot;amount&quot;)            # Field('amount')
-amount.to_expr_string()              # &quot;amount&quot;
+amount = bv.col(&quot;amount&quot;) # Field('amount')
+amount.to_expr_string() # &quot;amount&quot;
 
 # Qualified field reference (used when ops cross multiple upstream sources):
 foreign = bv.col(&quot;Txn.amount&quot;)
-foreign.to_expr_string()             # &quot;Txn.amount&quot;
+foreign.to_expr_string() # &quot;Txn.amount&quot;
 </code></pre>
 <p>Args:</p>
 <ul>
@@ -161,10 +161,10 @@ foreign.to_expr_string()             # &quot;Txn.amount&quot;
 <h2 id="arithmetic-" tabindex="-1"><a class="header-anchor" href="#arithmetic-" aria-hidden="true">#</a> Arithmetic: <code>+ - * /</code></h2>
 <p>The four binary arithmetic operators are overloaded on <code>_ExprAST</code> and accept
 either another expression or a Python scalar (auto-wrapped via <code>bv.lit(...)</code>):</p>
-<pre><code class="language-python">(bv.col(&quot;a&quot;) + bv.col(&quot;b&quot;)).to_expr_string()        # &quot;(a + b)&quot;
-(bv.col(&quot;amount&quot;) * 2).to_expr_string()             # &quot;(amount * 2)&quot;
-(bv.col(&quot;amount&quot;) / 100).to_expr_string()           # &quot;(amount / 100)&quot;
-(5 - bv.col(&quot;balance&quot;)).to_expr_string()            # &quot;(5 - balance)&quot;
+<pre><code class="language-python">(bv.col(&quot;a&quot;) + bv.col(&quot;b&quot;)).to_expr_string() # &quot;(a + b)&quot;
+(bv.col(&quot;amount&quot;) * 2).to_expr_string() # &quot;(amount * 2)&quot;
+(bv.col(&quot;amount&quot;) / 100).to_expr_string() # &quot;(amount / 100)&quot;
+(5 - bv.col(&quot;balance&quot;)).to_expr_string() # &quot;(5 - balance)&quot;
 </code></pre>
 <p>Both forms (left-operand or right-operand scalar) compile correctly because
 <code>_ExprAST</code> implements both <code>__add__</code> and <code>__radd__</code> (and the same for <code>-</code>,
@@ -178,10 +178,10 @@ arithmetic context. Cast first via <code>.cast(&quot;int&quot;)</code>.</li>
 <li>Otherwise, <code>f64 + i64 → f64</code>; <code>i64 + i64 → i64</code>.</li>
 </ul>
 <h2 id="comparison" tabindex="-1"><a class="header-anchor" href="#comparison" aria-hidden="true">#</a> Comparison: <code>&gt; &gt;= &lt; &lt;= == !=</code></h2>
-<pre><code class="language-python">(bv.col(&quot;amount&quot;) &gt; 100).to_expr_string()           # &quot;(amount &gt; 100)&quot;
-(bv.col(&quot;amount&quot;) &gt;= 100).to_expr_string()          # &quot;(amount &gt;= 100)&quot;
-(bv.col(&quot;status&quot;) == &quot;ok&quot;).to_expr_string()         # &quot;(status == 'ok')&quot;
-(bv.col(&quot;status&quot;) != &quot;ok&quot;).to_expr_string()         # &quot;(status != 'ok')&quot;
+<pre><code class="language-python">(bv.col(&quot;amount&quot;) &gt; 100).to_expr_string() # &quot;(amount &gt; 100)&quot;
+(bv.col(&quot;amount&quot;) &gt;= 100).to_expr_string() # &quot;(amount &gt;= 100)&quot;
+(bv.col(&quot;status&quot;) == &quot;ok&quot;).to_expr_string() # &quot;(status == 'ok')&quot;
+(bv.col(&quot;status&quot;) != &quot;ok&quot;).to_expr_string() # &quot;(status != 'ok')&quot;
 </code></pre>
 <p>All comparison ops return <code>bool</code> regardless of operand types. String
 literals on the right-hand side are auto-quoted and backslash-escaped per
@@ -192,9 +192,9 @@ the grammar.</p>
 <pre><code class="language-python">left = bv.col(&quot;amount&quot;) &gt; 100
 right = bv.col(&quot;merchant&quot;) == &quot;amazon&quot;
 
-(left &amp; right).to_expr_string()   # &quot;((amount &gt; 100) and (merchant == 'amazon'))&quot;
-(left | right).to_expr_string()   # &quot;((amount &gt; 100) or (merchant == 'amazon'))&quot;
-(~left).to_expr_string()          # &quot;(not (amount &gt; 100))&quot;
+(left &amp; right).to_expr_string() # &quot;((amount &gt; 100) and (merchant == 'amazon'))&quot;
+(left | right).to_expr_string() # &quot;((amount &gt; 100) or (merchant == 'amazon'))&quot;
+(~left).to_expr_string() # &quot;(not (amount &gt; 100))&quot;
 </code></pre>
 <p><strong>Both operands MUST be boolean</strong> — the server-side type inference rejects
 <code>bool &amp; i64</code> etc. with <code>schema_mismatch</code>. Use <code>.cast(&quot;bool&quot;)</code> if you have a
@@ -210,7 +210,7 @@ bv.col(&quot;a&quot;) &gt; 100 &amp; bv.col(&quot;b&quot;) &gt; 0
 <p>The SDK does NOT detect or rewrite the wrong form; it produces a
 schema-mismatch error at register time. Always parenthesise your sub-predicates.</p>
 <h2 id="isnull-null-check" tabindex="-1"><a class="header-anchor" href="#isnull-null-check" aria-hidden="true">#</a> <code>.isnull()</code> — null-check</h2>
-<pre><code class="language-python">bv.col(&quot;amount&quot;).isnull().to_expr_string()        # &quot;(amount == null)&quot;
+<pre><code class="language-python">bv.col(&quot;amount&quot;).isnull().to_expr_string() # &quot;(amount == null)&quot;
 </code></pre>
 <p>Shorthand for the <code>(col == null)</code> form. Emitted as a <code>_BinOp</code> so it composes
 with boolean combinators:</p>
@@ -221,8 +221,8 @@ non_null_pos.to_expr_string()
 <p>Use <code>.isnull()</code> rather than <code>(col == None)</code> for clarity — both compile to
 the same wire form, but <code>.isnull()</code> reads better in chains.</p>
 <h2 id="casttypename-type-coercion" tabindex="-1"><a class="header-anchor" href="#casttypename-type-coercion" aria-hidden="true">#</a> <code>.cast(type_name)</code> — type coercion</h2>
-<pre><code class="language-python">bv.col(&quot;flag_str&quot;).cast(&quot;bool&quot;).to_expr_string()  # &quot;cast(flag_str, bool)&quot;
-bv.col(&quot;amount&quot;).cast(&quot;int&quot;).to_expr_string()     # &quot;cast(amount, int)&quot;
+<pre><code class="language-python">bv.col(&quot;flag_str&quot;).cast(&quot;bool&quot;).to_expr_string() # &quot;cast(flag_str, bool)&quot;
+bv.col(&quot;amount&quot;).cast(&quot;int&quot;).to_expr_string() # &quot;cast(amount, int)&quot;
 </code></pre>
 <p>Args:</p>
 <ul>
@@ -252,8 +252,8 @@ def UserStats(txn) -&gt; bv.Table:
 </code></pre>
 <h2 id="aliasname-rename-in-derivation-context" tabindex="-1"><a class="header-anchor" href="#aliasname-rename-in-derivation-context" aria-hidden="true">#</a> <code>.alias(name)</code> — rename in derivation context</h2>
 <blockquote>
-<p><strong>Status:</strong> Implemented post-13.5; current code uses <code>**kwargs</code> naming on
-<code>with_columns(name=expr)</code> instead. SDK porters in 13.6 may add <code>.alias()</code>
+<p><strong>Status:</strong> Implemented v0; current code uses <code>**kwargs</code> naming on
+<code>with_columns(name=expr)</code> instead. SDK porters in v0 may add <code>.alias()</code>
 as a convenience method. Documented here for forward compatibility.</p>
 </blockquote>
 <pre><code class="language-python">expensive = (bv.col(&quot;amount&quot;) &gt; 100).alias(&quot;is_expensive&quot;)
@@ -275,11 +275,11 @@ auto-generated / programmatic pipelines.</p>
 </blockquote>
 <pre><code class="language-python">import beava as bv
 
-bv.lit(100).to_expr_string()       # &quot;100&quot;
-bv.lit(3.14).to_expr_string()      # &quot;3.14&quot;
-bv.lit(True).to_expr_string()      # &quot;true&quot;
-bv.lit(None).to_expr_string()      # &quot;null&quot;
-bv.lit(&quot;amazon&quot;).to_expr_string()  # &quot;'amazon'&quot;
+bv.lit(100).to_expr_string() # &quot;100&quot;
+bv.lit(3.14).to_expr_string() # &quot;3.14&quot;
+bv.lit(True).to_expr_string() # &quot;true&quot;
+bv.lit(None).to_expr_string() # &quot;null&quot;
+bv.lit(&quot;amazon&quot;).to_expr_string() # &quot;'amazon'&quot;
 </code></pre>
 <p>Supported value types: <code>int</code>, <code>float</code>, <code>bool</code>, <code>str</code>, <code>None</code>. Other types
 raise <code>TypeError</code> at decoration time. Strings are quoted with single quotes
@@ -304,7 +304,7 @@ expressions; round-trip tests on every fixture in
 <a href="https://github.com/beava-dev/beava/blob/main/examples/wire/"><code>examples/wire/</code></a> verify this.</p>
 <h2 id="validation-at-register-time" tabindex="-1"><a class="header-anchor" href="#validation-at-register-time" aria-hidden="true">#</a> Validation at register-time</h2>
 <p>When the server parses the register payload (per
-<a href="/docs/wire-spec/#op_register-0x0001">wire-spec OP_REGISTER</a>) it runs Phase 4
+<a href="/docs/wire-spec/#op_register-0x0001">wire-spec OP_REGISTER</a>) it runs v0
 expression validation on every <code>expr</code> string:</p>
 <ul>
 <li><strong>Parse error</strong> (malformed grammar, unbalanced parens) →

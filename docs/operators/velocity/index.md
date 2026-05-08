@@ -35,7 +35,7 @@ All 9 are `O(1)` memory per entity — see the per-op page Complexity section fo
 - **"How busy is this entity?"** → [`bv.inter_arrival_stats`](./inter_arrival_stats.md) for cadence; [`bv.burst_count`](./burst_count.md) for peak.
 - **"How often does this value flip?"** → [`bv.value_change_count`](./value_change_count.md).
 
-> Note: per [REQUIREMENTS.md](../../../.planning/REQUIREMENTS.md), `z_score` is family `AGG-Z-*` — it lives here in `velocity/` per RESEARCH §3 directory layout (entity-level statistics that pair naturally with the velocity / trend / outlier ops). [`bv.rate_of_change`](./rate_of_change.md) is the canonical Phase 9 velocity-family op per RESEARCH §5 — it lives here, **not** in [decay/](../decay/), because it computes a slope across two adjacent events rather than an exponentially-weighted statistic.
+> Note: per [REQUIREMENTS.md](../../../.planning/REQUIREMENTS.md), `z_score` is family `AGG-Z-*` — it lives here in `velocity/` per RESEARCH §3 directory layout (entity-level statistics that pair naturally with the velocity / trend / outlier ops). [`bv.rate_of_change`](./rate_of_change.md) is the canonical v0 velocity-family op per RESEARCH §5 — it lives here, **not** in [decay/](../decay/), because it computes a slope across two adjacent events rather than an exponentially-weighted statistic.
 
 ## See also
 

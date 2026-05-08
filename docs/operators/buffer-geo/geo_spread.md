@@ -7,8 +7,8 @@
 ```python
 bv.geo_spread(
     *,
-    lat: str,                        # REQUIRED — name of the latitude field on the event
-    lon: str,                        # REQUIRED — name of the longitude field on the event
+    lat: str, # REQUIRED — name of the latitude field on the event
+    lon: str, # REQUIRED — name of the longitude field on the event
     where: bv.Col | None = None,
 ) -> AggDescriptor
 ```
@@ -33,7 +33,7 @@ fields on the event (e.g. `lat="latitude"`, `lon="longitude"`) — they
 are NOT literal coordinates. The 4-scalar Welford state is `O(1)` per
 entity and is updated in **constant time** regardless of how many
 events the entity has seen — there is no buffer to walk on each
-update. This was a deliberate Phase 19.1.2 fix: the prior
+update. This was a deliberate v0 fix: the prior
 implementation walked an O(n)-per-push samples vector (5,000–25,000
 ns/event traced); the Welford rewrite is pure scalar math (~18 ns
 floor / ~40 ns measured per [cost-class.md](../cost-class.md)).
@@ -42,9 +42,9 @@ floor / ~40 ns measured per [cost-class.md](../cost-class.md)).
 update is **Tier 3** (~18 ns floor / ~40 ns measured — borderline Tier 2/3
 per the audit, kept in Tier 3 per the official cost-class
 classification). State is behind a `Box` for the `AggOp::GeoSpread`
-variant per Phase 12.9 boxing (the variant fits the 80-byte `AggOp`
+variant per v0 boxing (the variant fits the 80-byte `AggOp`
 enum cap; see `crates/beava-core/src/agg_op.rs` line 488 and
-[Phase 12.9 SUMMARY](../../../.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md)).
+[SUMMARY](../../../.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md)).
 There is no `window=` kwarg in v0 — `bv.geo_spread` is **lifetime-only**.
 Compose with `@bv.event(cold_after="...")` for time-bounded dispersion
 per [V0-MEM-GOV-01](../../../.planning/REQUIREMENTS.md).
@@ -53,7 +53,7 @@ per [V0-MEM-GOV-01](../../../.planning/REQUIREMENTS.md).
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `lat` | `str` | **Yes** | — | Name of the latitude field on the event (NOT a literal coordinate). Field value must be `f64` or `i64` decimal degrees in `[-90, 90]`. Resolved to a column index at register time per Plan 19.2-06 D-01 fast-path. |
+| `lat` | `str` | **Yes** | — | Name of the latitude field on the event (NOT a literal coordinate). Field value must be `f64` or `i64` decimal degrees in `[-90, 90]`. Resolved to a column index at register time. |
 | `lon` | `str` | **Yes** | — | Name of the longitude field on the event. Field value must be `f64` or `i64` decimal degrees in `[-180, 180]`. |
 | `where` | `bv.Col` | No | `None` | Boolean expression on event fields; only matching events update the Welford accumulators. |
 
@@ -70,7 +70,7 @@ After 2+ matching events the result is a non-negative `f64`.
 | Resource | Bound |
 |----------|-------|
 | CPU per event | **Tier 3** (~18 ns floor / ~40 ns measured — pure scalar Welford updates: 2 means + 2 second-moment accumulators) — see [cost-class.md](../cost-class.md#tier-3-algorithmic-floor-100-300-nscall--9-ops). Borderline Tier 2/3; kept in Tier 3 per audit classification. |
-| Memory per entity | **`O(1)`** — `(u64, f64, f64, f64, f64)` for the 4 Welford accumulators + counter. Boxed inside `AggOp` per Phase 12.9 (`crates/beava-core/src/agg_op.rs` line 488). |
+| Memory per entity | **`O(1)`** — `(u64, f64, f64, f64, f64)` for the 4 Welford accumulators + counter. Boxed inside `AggOp` per v0 (`crates/beava-core/src/agg_op.rs` line 488). |
 | Lifetime mode | **Required** — `bv.geo_spread` has no `window=` kwarg in v0; lifetime is the only mode. |
 
 ## Examples
@@ -96,7 +96,7 @@ def UserGeoSpread(txns) -> bv.Table:
 
 # After 4 transactions at NYC, Boston, DC, Philadelphia
 result = app.get("UserGeoSpread", "alice")
-# result == {"spread_km": 215.7}  # ~200 km RMS dispersion across the NE corridor
+# result == {"spread_km": 215.7} # ~200 km RMS dispersion across the NE corridor
 ```
 
 ### Example 2: Spread for high-value transactions only
@@ -158,5 +158,5 @@ See [examples/wire/register-fraud-team.request.json](../../../examples/wire/regi
 - [bv.distance_from_home](./distance_from_home.md) — current-event distance from a centroid of recent locations
 - [bv.variance](../core/var.md) — 1-D Welford variance companion (this op is the 2-D geographic version)
 - [V0-MEM-GOV-01](../../../.planning/REQUIREMENTS.md) — cold-entity eviction (`@bv.event(cold_after=...)`) for windowing the lifetime
-- [Phase 12.9 SUMMARY](../../../.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md) — `AggOp::GeoSpread` boxing context
+- [SUMMARY](../../../.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md) — `AggOp::GeoSpread` boxing context
 - [pipeline-dsl/compilation-rules.md](../../pipeline-dsl/compilation-rules.md) — chain compilation rules

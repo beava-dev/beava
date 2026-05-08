@@ -36,7 +36,7 @@ fraud rules need both central-tendency and tail behavior.
 The hybrid mode is transparent at the API: callers always read a single
 float. Promotion happens server-side without observable behavior change
 beyond a small accuracy tradeoff. `bv.quantile` belongs to the **sketch**
-family and is `BoundedSketch` per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) — fixed structural cap regardless of stream length.
+family and is `BoundedSketch` per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) — fixed structural cap regardless of stream length.
 
 ## Parameters
 
@@ -59,9 +59,9 @@ A single `f64`. When the entity has seen zero matching events, the result is
 | Resource | Bound |
 |----------|-------|
 | CPU per event | **Tier 2** (Exact mode, ~8 ns floor / ~35 ns measured) — see [cost-class.md](../cost-class.md#tier-2-moderate-30-100-nscall--6-ops) |
-|  | **Tier 3** (DDSketch mode, post-promotion, ~130 ns floor / ~180 ns measured) — see [cost-class.md](../cost-class.md#tier-3-algorithmic-floor-100-300-nscall--9-ops) |
+| | **Tier 3** (DDSketch mode, post-promotion, ~130 ns floor / ~180 ns measured) — see [cost-class.md](../cost-class.md#tier-3-algorithmic-floor-100-300-nscall--9-ops) |
 | Memory per entity | `BoundedSketch` — exact array up to `exact_threshold` entries, then DDSketch buckets (~few KB max) regardless of stream length |
-| Lifetime mode (`window=None`) | **Allowed** — `BoundedSketch` per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
+| Lifetime mode (`window=None`) | **Allowed** — `BoundedSketch` per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
 
 ## Examples
 
@@ -138,7 +138,7 @@ See [examples/wire/register-fraud-team.request.json](../../../examples/wire/regi
 - **`q` out of range:** values outside `[0, 1]` raise `RegistrationError(code="aggregation_invalid_param")` at register time.
 - **Non-numeric field:** schema validation rejects at register time with structured error code `schema_mismatch`.
 - **NaN inputs:** poisons the sketch state in DDSketch mode (NaN routes to a non-finite bucket); filter with `where=~bv.col("amount").isnull()` if your source can emit NaN.
-- **Lifetime mode (`window=None`):** explicitly allowed — DDSketch is `BoundedSketch` per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md).
+- **Lifetime mode (`window=None`):** explicitly allowed — DDSketch is `BoundedSketch` per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md).
 - **Hybrid promotion:** transparent. Callers cannot observe whether the entity is in exact or sketch mode (intentional). Promotion happens once the entity has seen `exact_threshold` distinct values.
 - **`exact_threshold` lowered to 0:** equivalent to "always sketch mode"; useful only for explicit memory tuning.
 

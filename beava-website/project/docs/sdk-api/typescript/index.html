@@ -121,8 +121,8 @@
 <p><strong>Communicate-only SDK.</strong> This SDK pushes events, registers pre-compiled JSON descriptors, and reads features. Pipeline authoring (event sources, expression DSL, op helpers) lives in the <strong>Python SDK only</strong> — see <a href="/docs/sdk-api/python/">python.md</a>. Use Python's <code>bv.App.register_json(...)</code> (or hand-write the JSON per <a href="/docs/wire-spec/#op_register-0x0001">docs/wire-spec.md OP_REGISTER</a>) to produce descriptors, then ship that JSON to your TypeScript app.</p>
 </blockquote>
 <blockquote>
-<p><strong>Status:</strong> Authoritative for v0. Documents the post-13.6 TS SDK shape (rescoped 2026-05-03 to communicate-only). Cross-language semantics live in <a href="/docs/sdk-api/shared/">shared.md</a>; wire-level body shapes live in <a href="/docs/wire-spec/">docs/wire-spec.md</a>. Python is the canonical authoring reference.</p>
-<p><strong>Last reviewed:</strong> 2026-05-03 (Phase 13.6).</p>
+<p><strong>Status:</strong> Authoritative for v0. Documents the v0 TS SDK shape (rescoped 2026-05-03 to communicate-only). Cross-language semantics live in <a href="/docs/sdk-api/shared/">shared.md</a>; wire-level body shapes live in <a href="/docs/wire-spec/">docs/wire-spec.md</a>. Python is the canonical authoring reference.</p>
+<p><strong>Last reviewed:</strong> 2026-05-03.</p>
 </blockquote>
 <h2 id="overview" tabindex="-1"><a class="header-anchor" href="#overview" aria-hidden="true">#</a> Overview</h2>
 <p><code>@beava/sdk</code> is a wire-thin TypeScript client for the beava real-time feature server. It targets Node.js 18+ (LTS) and is <strong>ESM-only</strong> (<code>&quot;type&quot;: &quot;module&quot;</code>).</p>
@@ -137,15 +137,15 @@
 <h2 id="module-structure" tabindex="-1"><a class="header-anchor" href="#module-structure" aria-hidden="true">#</a> Module structure</h2>
 <pre><code>sdk/typescript/
 ├── src/
-│   ├── index.ts             # public exports: beavaApp, errors, types, wire, transports
-│   ├── app.ts               # beavaApp class with all 8 wire methods
-│   ├── wire.ts              # frame codec + opcode constants (CT_JSON only in v0)
-│   ├── transport.ts         # HttpTransport (uses global fetch)
-│   ├── transport-tcp.ts     # TcpTransport (node:net, Redis-style FIFO)
-│   ├── embed.ts             # spawnEmbeddedServer, teardownServer, discoverBinary
-│   ├── errors.ts            # RegistrationError, BinaryNotFoundError
-│   └── types.ts             # Descriptor (opaque), result interfaces
-└── test/                    # vitest specs
+│ ├── index.ts # public exports: beavaApp, errors, types, wire, transports
+│ ├── app.ts # beavaApp class with all 8 wire methods
+│ ├── wire.ts # frame codec + opcode constants (CT_JSON only in v0)
+│ ├── transport.ts # HttpTransport (uses global fetch)
+│ ├── transport-tcp.ts # TcpTransport (node:net, Redis-style FIFO)
+│ ├── embed.ts # spawnEmbeddedServer, teardownServer, discoverBinary
+│ ├── errors.ts # RegistrationError, BinaryNotFoundError
+│ └── types.ts # Descriptor (opaque), result interfaces
+└── test/ # vitest specs
 </code></pre>
 <p>There are deliberately <strong>no</strong> <code>events.ts</code> / <code>col.ts</code> / <code>agg.ts</code> / <code>table.ts</code> files — the TS SDK has no authoring layer. See <a href="/docs/sdk-api/shared/#authoring-vs-communicate">shared.md § Authoring vs communicate</a>.</p>
 <h2 id="beavaapp-class" tabindex="-1"><a class="header-anchor" href="#beavaapp-class" aria-hidden="true">#</a> beavaApp class</h2>
@@ -158,12 +158,12 @@ class beavaApp {
   register(descriptors: Descriptor[], opts?: { force?: boolean; dry_run?: boolean }): Promise&lt;RegisterResult&gt;;
   push(eventName: string, fields: Record&lt;string, unknown&gt;): Promise&lt;PushResult&gt;;
   pushSync(eventName: string, fields: Record&lt;string, unknown&gt;): Promise&lt;PushResult&gt;;
-  get(table: string): Promise&lt;FeatureRow&gt;;                                          // 1-arg = global table per ADR-003
+  get(table: string): Promise&lt;FeatureRow&gt;; // 1-arg = global table per ADR-003
   get(table: string, key: string | (string | number | boolean)[]): Promise&lt;FeatureRow&gt;; // 2-arg = per-entity
   batchGet(requests: GetRequest[]): Promise&lt;FeatureRow[]&gt;;
-  reset(): Promise&lt;void&gt;;                                                            // server gates on test_mode
+  reset(): Promise&lt;void&gt;; // server gates on test_mode
   ping(): Promise&lt;PingResult&gt;;
-  close(): Promise&lt;void&gt;;                                                            // idempotent
+  close(): Promise&lt;void&gt;; // idempotent
 }
 </code></pre>
 <h3 id="constructor-url-scheme-dispatch" tabindex="-1"><a class="header-anchor" href="#constructor-url-scheme-dispatch" aria-hidden="true">#</a> Constructor + URL-scheme dispatch</h3>
@@ -197,7 +197,7 @@ class beavaApp {
 <p><code>options</code>:</p>
 <ul>
 <li><code>timeout</code> — per-request I/O timeout in ms (default <code>30000</code>).</li>
-<li><code>test_mode</code> — passes <code>BEAVA_TEST_MODE=1</code> to the embed-mode subprocess (mirrors Python <code>bv.App(test_mode=True)</code> per Phase 13.5 D-05). Ignored in network mode.</li>
+<li><code>test_mode</code> — passes <code>BEAVA_TEST_MODE=1</code> to the embed-mode subprocess (mirrors Python <code>bv.App(test_mode=True)</code> per v0 D-05). Ignored in network mode.</li>
 <li><code>binary_path</code> — overrides the embed-mode binary discovery path.</li>
 </ul>
 <h3 id="registerdescriptors-opts" tabindex="-1"><a class="header-anchor" href="#registerdescriptors-opts" aria-hidden="true">#</a> <code>register(descriptors, opts?)</code></h3>
@@ -211,14 +211,14 @@ class beavaApp {
 </ol>
 <p>Returns <code>RegisterResult</code>:</p>
 <pre><code class="language-typescript">interface RegisterResult {
-  status: string;          // &quot;ok&quot; on success
+  status: string; // &quot;ok&quot; on success
   registry_version: number;
   added?: string[];
   removed?: string[];
   changed?: string[];
 }
 </code></pre>
-<p><code>opts.force</code>: pass-through to wire <code>force</code> flag (allows destructive schema changes per Phase 13.4 D-01).
+<p><code>opts.force</code>: pass-through to wire <code>force</code> flag (allows destructive schema changes per v0 D-01).
 <code>opts.dry_run</code>: pass-through to wire <code>dry_run</code> flag (validate without applying).</p>
 <h3 id="pusheventname-fields-and-pushsynceventname-fields" tabindex="-1"><a class="header-anchor" href="#pusheventname-fields-and-pushsynceventname-fields" aria-hidden="true">#</a> <code>push(eventName, fields)</code> and <code>pushSync(eventName, fields)</code></h3>
 <p><code>push</code> posts to <code>POST /push/&lt;eventName&gt;</code> with <code>{fields: {...}}</code>. Default semantics: <code>acks=1</code> (durable on this server).</p>
@@ -236,7 +236,7 @@ class beavaApp {
 <h3 id="batchgetrequests" tabindex="-1"><a class="header-anchor" href="#batchgetrequests" aria-hidden="true">#</a> <code>batchGet(requests)</code></h3>
 <p>Posts to <code>POST /batch-get</code> with <code>{requests: [...]}</code>. Returns <code>FeatureRow[]</code> in request order. v0 has no partial success: any per-entry error rejects the whole batch and surfaces as a single <code>RegistrationError</code>.</p>
 <h3 id="reset" tabindex="-1"><a class="header-anchor" href="#reset" aria-hidden="true">#</a> <code>reset()</code></h3>
-<p>Posts to <code>POST /reset</code>. The server returns <code>403</code> with <code>{error: {code: &quot;reset_forbidden&quot;, ...}}</code> unless <code>test_mode</code> is enabled per Phase 13.4 D-03. The error surfaces verbatim as a <code>RegistrationError</code>.</p>
+<p>Posts to <code>POST /reset</code>. The server returns <code>403</code> with <code>{error: {code: &quot;reset_forbidden&quot;, ...}}</code> unless <code>test_mode</code> is enabled per v0 D-03. The error surfaces verbatim as a <code>RegistrationError</code>.</p>
 <h3 id="ping" tabindex="-1"><a class="header-anchor" href="#ping" aria-hidden="true">#</a> <code>ping()</code></h3>
 <p>Calls <code>GET /health</code>. Returns <code>PingResult</code>:</p>
 <pre><code class="language-typescript">interface PingResult { server_version: string; registry_version: number; }
@@ -245,13 +245,13 @@ class beavaApp {
 <p>Idempotent. Closes the underlying transport. In embed mode, sends <code>SIGTERM</code> to the spawned subprocess and <code>SIGKILL</code>s after 5s if it didn't exit; cleans up the per-instance temp CWD.</p>
 <h2 id="errors" tabindex="-1"><a class="header-anchor" href="#errors" aria-hidden="true">#</a> Errors</h2>
 <pre><code class="language-typescript">class RegistrationError extends Error {
-  code: string;        // structured error code, e.g. &quot;unsupported_node_kind&quot;, &quot;invalid_registration&quot;
-  path?: string;       // JSON pointer-ish path, e.g. &quot;nodes[0].kind&quot;
-  errors?: unknown[];  // sub-errors (multi-error responses)
+  code: string; // structured error code, e.g. &quot;unsupported_node_kind&quot;, &quot;invalid_registration&quot;
+  path?: string; // JSON pointer-ish path, e.g. &quot;nodes[0].kind&quot;
+  errors?: unknown[]; // sub-errors (multi-error responses)
 }
 
 class BinaryNotFoundError extends Error {
-  searched: string[];  // paths that were probed during 4-step discovery
+  searched: string[]; // paths that were probed during 4-step discovery
 }
 </code></pre>
 <p><code>RegistrationError</code> is thrown by every wire method on non-2xx responses (HTTP transport) or on <code>OP_ERROR_RESPONSE</code> frames (TCP transport). The <code>code</code> field maps to <a href="/docs/error-codes/">docs/error-codes.md</a>.</p>
@@ -279,7 +279,7 @@ class BinaryNotFoundError extends Error {
 <li><strong>Cross-language semantics:</strong> <a href="/docs/sdk-api/shared/">shared.md</a></li>
 <li><strong>Authoring SDK (Python):</strong> <a href="/docs/sdk-api/python/">python.md</a></li>
 <li><strong>Go SDK (sister communicate-only client):</strong> <a href="/docs/sdk-api/go/">go.md</a></li>
-<li><strong>Phase 13.6 plan + summary:</strong> <code>.planning/phases/13.6-typescript-go-sdks/</code></li>
+<li><strong>v0 plan + summary:</strong> <code>.planning/phases/v0-typescript-go-sdks/</code></li>
 </ul>
 
 </article>

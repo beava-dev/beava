@@ -186,7 +186,7 @@ the entity has seen zero matching events, the result is <code>null</code> (Pytho
 </tr>
 <tr>
 <td>Memory per entity</td>
-<td><code>O(1)</code> — single <code>Option&lt;i64&gt;</code> slot in the shared <code>SeenState</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a></td>
+<td><code>O(1)</code> — single <code>Option&lt;i64&gt;</code> slot in the shared <code>SeenState</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a></td>
 </tr>
 <tr>
 <td>Lifetime mode</td>
@@ -210,12 +210,12 @@ def UserCreatedAt(logins) -&gt; bv.Table:
     )
 
 # Push events
-app.push(&quot;Login&quot;, {&quot;user_id&quot;: &quot;alice&quot;})  # arrives at server time t=1700000000000
-app.push(&quot;Login&quot;, {&quot;user_id&quot;: &quot;alice&quot;})  # arrives at server time t=1700000005000
+app.push(&quot;Login&quot;, {&quot;user_id&quot;: &quot;alice&quot;}) # arrives at server time t=1700000000000
+app.push(&quot;Login&quot;, {&quot;user_id&quot;: &quot;alice&quot;}) # arrives at server time t=1700000005000
 
 # Query
 result = app.get(&quot;UserCreatedAt&quot;, &quot;alice&quot;)
-# result == {&quot;first_login_ms&quot;: 1700000000000}  # the second login is a no-op
+# result == {&quot;first_login_ms&quot;: 1700000000000} # the second login is a no-op
 </code></pre>
 <h3 id="example-2-first-successful-payment-timestamp-per-card" tabindex="-1"><a class="header-anchor" href="#example-2-first-successful-payment-timestamp-per-card" aria-hidden="true">#</a> Example 2: First successful payment timestamp per card</h3>
 <pre><code class="language-python">@bv.table(key=&quot;card_id&quot;)
@@ -248,7 +248,7 @@ def CardFirstSuccessAt(txns) -&gt; bv.Table:
 <li><strong>Server-time, NOT event-time:</strong> the captured value is the server's <code>now_ms()</code> at apply, not any payload field. Per <a href="https://github.com/beava-dev/beava/blob/main/.planning/PROJECT.md"><code>project_redis_shaped_no_event_time_ever</code></a>, beava intentionally has no event-time concept. Producers cannot influence the captured timestamp via the payload.</li>
 <li><strong>Cold-entity eviction:</strong> if <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md"><code>@bv.event(cold_after=...)</code></a> is configured and the entity is evicted, the next event after eviction is treated as a fresh entity — <code>first_seen</code> resets to that re-arrival's <code>now_ms()</code>. This is the documented Redis-TTL pattern (V0-MEM-GOV-01).</li>
 <li><strong><code>window=</code> kwarg attempted:</strong> raises <code>TypeError</code> at SDK-helper-call time. For &quot;is this value new in the last N ms?&quot; semantics, see <a href="/docs/operators/recency/first_seen_in_window/"><code>bv.first_seen_in_window</code></a>.</li>
-<li><strong>Lifetime mode:</strong> <strong>the only mode.</strong> Footprint is <code>O(1)</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a>.</li>
+<li><strong>Lifetime mode:</strong> <strong>the only mode.</strong> Footprint is <code>O(1)</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a>.</li>
 </ul>
 <h2 id="see-also" tabindex="-1"><a class="header-anchor" href="#see-also" aria-hidden="true">#</a> See also</h2>
 <ul>

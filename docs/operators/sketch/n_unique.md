@@ -35,7 +35,7 @@ The hybrid mode is transparent at the API: callers always read a single
 integer.
 
 `bv.n_unique` belongs to the **sketch** family and is `BoundedSketch` per
-[Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) — fixed
+[V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) — fixed
 structural cap regardless of stream length.
 
 ## Parameters
@@ -58,9 +58,9 @@ A single `i64`. When the entity has seen zero matching events, the result is
 | Resource | Bound |
 |----------|-------|
 | CPU per event | **Tier 2** (Exact mode, ~18 ns floor / ~80 ns post-wrapping-fix) — see [cost-class.md](../cost-class.md#tier-2-moderate-30-100-nscall--6-ops) |
-|  | **Tier 3** (HLL mode, post-promotion) |
+| | **Tier 3** (HLL mode, post-promotion) |
 | Memory per entity | `BoundedSketch` — exact hashset up to `exact_threshold` entries, then HLL fixed at `2^precision` registers (~16 KB at precision=14) |
-| Lifetime mode (`window=None`) | **Allowed** — `BoundedSketch` per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
+| Lifetime mode (`window=None`) | **Allowed** — `BoundedSketch` per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md) |
 
 ## Examples
 
@@ -136,9 +136,9 @@ See [examples/wire/register-fraud-team.request.json](../../../examples/wire/regi
 - **`exact_threshold` set to 0:** forces always-HLL mode; useful for explicit memory tuning when you know the cardinality will be high. Tier 3 floor applies from the first event.
 - **Field type:** `str`, `i64`, `f64` are all supported (hashable). Non-hashable types fail at register time with `schema_mismatch`.
 - **NaN inputs:** treated as a single distinct value (NaN equals itself in the HLL hasher); for cleaner semantics filter with `where=~bv.col("field").isnull()`.
-- **Lifetime mode (`window=None`):** explicitly allowed — HLL is `BoundedSketch` per [Phase 12.8 V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md).
+- **Lifetime mode (`window=None`):** explicitly allowed — HLL is `BoundedSketch` per [V0-MEM-GOV-02](../../../.planning/REQUIREMENTS.md).
 - **Hybrid promotion:** transparent — caller only sees the integer estimate. Promotion happens once the entity has seen `exact_threshold` distinct values; in exact mode the result is precise, in HLL mode the standard error is ~1.6% at precision=14.
-- **Combining with quadkey for geo:** the recommended replacement for the deleted `bv.unique_cells` op (Phase 19.2) is `bv.n_unique(quadkey(lat, lon, zoom))`. The `quadkey(...)` expression at apply time produces a deterministic integer cell id for `n_unique` to count.
+- **Combining with quadkey for geo:** the recommended replacement for the deleted `bv.unique_cells` op is `bv.n_unique(quadkey(lat, lon, zoom))`. The `quadkey(...)` expression at apply time produces a deterministic integer cell id for `n_unique` to count.
 
 ## See also
 

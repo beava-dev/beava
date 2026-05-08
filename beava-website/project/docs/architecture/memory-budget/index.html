@@ -123,11 +123,11 @@ exceeds RAM, beava refuses new entities. The budget for v0 is
 <strong>~7 KB per entity for a rich 30-feature pack</strong> — verified post-Phase
 12.9 — which gives <strong>~700 GB for 100 M entities</strong>, fitting on a 1 TB
 NVMe box with headroom.</p>
-<p>This page walks the per-entity memory math, the verified Phase 12.9
+<p>This page walks the per-entity memory math, the verified v0
 numbers, what can blow the budget, and the three V0-MEM-GOV invariants
 that keep it honest.</p>
-<h2 id="verified-phase-129-numbers-cite-explicitly" tabindex="-1"><a class="header-anchor" href="#verified-phase-129-numbers-cite-explicitly" aria-hidden="true">#</a> Verified Phase 12.9 numbers (cite explicitly)</h2>
-<p>Phase 12.9 (closed 2026-05-03 PASS) boxed 7 fat AggOp variants
+<h2 id="verified-v0-numbers-cite-explicitly" tabindex="-1"><a class="header-anchor" href="#verified-v0-numbers-cite-explicitly" aria-hidden="true">#</a> Verified v0 numbers (cite explicitly)</h2>
+<p>v0 (closed 2026-05-03 PASS) boxed 7 fat AggOp variants
 (<code>SeasonalDeviation</code>, <code>HourOfDayHistogram</code>, <code>EventTypeMix</code>,
 <code>GeoVelocity</code>, <code>GeoSpread</code>, <code>GeoDistance</code>, <code>DistanceFromHome</code>) so they
 store as <code>Box&lt;State&gt;</code> (8 B inline + heap state) instead of inline. The
@@ -180,7 +180,7 @@ result:</p>
 </tr>
 </tbody>
 </table>
-<p>Per the Phase 12.9 SUMMARY, fraud-team weighted-average per-entity
+<p>Per the v0 SUMMARY, fraud-team weighted-average per-entity
 dropped from <strong>~22 KB → ~6 KB</strong> post-boxing — clearing the 7 KB budget
 with headroom.</p>
 <h2 id="ci-tripwire-aggopsizewithincap" tabindex="-1"><a class="header-anchor" href="#ci-tripwire-aggopsizewithincap" aria-hidden="true">#</a> CI tripwire: <code>aggop_size_within_cap</code></h2>
@@ -198,11 +198,11 @@ fn aggop_size_within_cap() {
 decision: either Box the new variant (preferred — preserves the cap) or
 explicitly raise <code>AGGOP_SIZE_CAP_BYTES</code> with a documented rationale.
 80 B accommodates <code>TrendResidualState</code> (72 B; the largest unboxed variant
-post-12.9) plus discriminant + alignment headroom.</p>
+v0) plus discriminant + alignment headroom.</p>
 <p>This is <strong>not</strong> an aspirational target — it's a CI gate. PRs that
 add a new fat variant inline get caught before merge.</p>
 <p>See <a href="https://github.com/beava-dev/beava/blob/main/crates/beava-core/tests/per_entity_size_dump.rs"><code>crates/beava-core/tests/per_entity_size_dump.rs</code></a>
-and the Phase 12.9 SUMMARY at
+and the v0 SUMMARY at
 <a href="https://github.com/beava-dev/beava/blob/main/.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md"><code>.planning/phases/12.9-aggop-memory-boxing/12.9-SUMMARY.md</code></a>.</p>
 <h2 id="per-entity-memory-math" tabindex="-1"><a class="header-anchor" href="#per-entity-memory-math" aria-hidden="true">#</a> Per-entity memory math</h2>
 <p>For a representative 30-feature aggregation pack on a single entity:</p>
@@ -274,7 +274,7 @@ For very high cardinality you may want windowed sketches instead of
 lifetime.</li>
 </ol>
 <h2 id="v0-mem-gov-invariants" tabindex="-1"><a class="header-anchor" href="#v0-mem-gov-invariants" aria-hidden="true">#</a> V0-MEM-GOV invariants</h2>
-<p>The three V0-MEM-GOV invariants (locked Phase 12.8) collectively bound
+<p>The three V0-MEM-GOV invariants (locked v0) collectively bound
 <code>entities × per-entity bytes</code> — the only memory dimension beava ships
 with:</p>
 <h3 id="v0-mem-gov-01-cold-entity-ttl-opt-in" tabindex="-1"><a class="header-anchor" href="#v0-mem-gov-01-cold-entity-ttl-opt-in" aria-hidden="true">#</a> V0-MEM-GOV-01 — Cold-entity TTL (opt-in)</h3>
@@ -307,16 +307,16 @@ per-windowed-op trims trailing buckets that have rolled past the
 64-bucket cap; the <code>BucketReclaimCounter::inc()</code> site at
 <a href="https://github.com/beava-dev/beava/blob/main/crates/beava-core/src/agg_windowed.rs"><code>crates/beava-core/src/agg_windowed.rs</code></a>
 fires on every eviction so operators can observe the rate.</p>
-<p>No new mechanism in Phase 12.8 — Tier 2 was already shipping; this
+<p>No new mechanism in v0 — Tier 2 was already shipping; this
 REQ-ID locks the contract: idle entities continue holding state until
 either (a) Tier 1 cold-TTL evicts them or (b) the next event triggers
 normal <code>update_at()</code> cleanup.</p>
 <p>Metric: <code>beava_bucket_reclaim_total</code>.</p>
 <h2 id="metrics-observable" tabindex="-1"><a class="header-anchor" href="#metrics-observable" aria-hidden="true">#</a> /metrics observable</h2>
-<p>Five Prometheus metric families ship from Phase 12.8 Plan 06 to make
+<p>Five Prometheus metric families ship from v0 an internal plan to make
 the budget observable in production:</p>
 <ul>
-<li><code>beava_cold_entity_evictions_total</code> (counter) — Plan 03 cold-TTL
+<li><code>beava_cold_entity_evictions_total</code> (counter) — an internal plan cold-TTL
 evictions fired.</li>
 <li><code>beava_lifetime_op_cap_hit_total</code> (counter) — entropy-categories
 capped + future top_k / histogram cap-hit events.</li>
@@ -325,8 +325,8 @@ snapshot (sampled).</li>
 <li><code>beava_bucket_reclaim_total</code> (counter) —
 <code>WindowedOp::evict_oldest_bucket</code> firings.</li>
 <li><code>beava_bytes_per_entity_p99</code> (gauge) — currently a static 7000
-placeholder per Phase 12.8 PLANNER-SURFACED CONCERN; dynamic
-sampling deferred to Phase 13.4 / v0.0.x. Phase 12.9's actual
+placeholder per v0 PLANNER-SURFACED CONCERN; dynamic
+sampling deferred to v0 / v0.0.x. v0's actual
 fraud-team weighted-avg is ~6 KB so the static value is no longer
 misleading, just not informative; replacement is ~30 LOC in
 <code>agg_state.rs::EntityCountResidentSnapshot</code>.</li>
@@ -338,7 +338,7 @@ endpoint shape + Prometheus exposition format.</p>
 memory consumers exist but don't scale per-entity:</p>
 <ul>
 <li><strong>Registry</strong> — once per process (not per entity); typically &lt;100 KB.</li>
-<li><strong>WAL ring buffer</strong> — fixed 16 MiB × 3 buffers (Phase 18); 48 MiB
+<li><strong>WAL ring buffer</strong> — fixed 16 MiB × 3 buffers (v0); 48 MiB
 total regardless of entity count.</li>
 <li><strong>HTTP listener / TCP listener</strong> — per-connection buffers; small.</li>
 <li><strong>Snapshot working memory</strong> — peaks during snapshot serialization
@@ -349,7 +349,7 @@ others are noise.</p>
 <h2 id="cross-references" tabindex="-1"><a class="header-anchor" href="#cross-references" aria-hidden="true">#</a> Cross-references</h2>
 <ul>
 <li><a href="../../CLAUDE.md"><code>CLAUDE.md</code> § Constraints</a> — the canonical 7 KB /
-entity number + the citation chain into Phase 12.9 SUMMARY +
+entity number + the citation chain into v0 SUMMARY +
 <code>aggop_size_within_cap</code> CI tripwire.</li>
 <li><a href="../../CLAUDE.md"><code>CLAUDE.md</code> § Memory Governance Invariant</a> — the
 three V0-MEM-GOV invariants in full.</li>
@@ -369,7 +369,7 @@ apply + horizontal-scale story (Redis-cluster pattern).</li>
 <li><a href="/docs/architecture/observability/">observability.md</a> — Prometheus metrics for
 observing the budget in production.</li>
 <li><a href="https://github.com/beava-dev/beava/blob/main/.planning/ideas/per-entity-memory-budget.md"><code>.planning/ideas/per-entity-memory-budget.md</code></a>
-— historical analysis that drove Phase 12.9 boxing.</li>
+— historical analysis that drove v0 boxing.</li>
 </ul>
 
 </article>
@@ -377,7 +377,7 @@ observing the budget in production.</li>
 <aside class="docs-toc" aria-label="On this page">
   <div class="toc-title">On this page</div>
   <ul class="toc-list">
-      <li><a href="#verified-phase-129-numbers-cite-explicitly">Verified Phase 12.9 numbers (cite explicitly)</a></li>
+      <li><a href="#verified-v0-numbers-cite-explicitly">Verified v0 numbers (cite explicitly)</a></li>
       <li><a href="#ci-tripwire-aggopsizewithincap">CI tripwire: aggop_size_within_cap</a></li>
       <li><a href="#per-entity-memory-math">Per-entity memory math</a></li>
       <li><a href="#capacity-calculation">Capacity calculation</a></li>

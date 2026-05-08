@@ -1,9 +1,9 @@
 # Pipeline DSL Expressions (`bv.col`)
 
-> **Status:** Authoritative for v0. Documents the **post-13.5 target** Python
+> **Status:** Authoritative for v0. Documents the **v0 target** Python
 > expression DSL. The current `python/beava/_col.py` already implements every
-> surface in this doc — Phase 13.5 polishes naming + cross-language parity.
-> **Last reviewed:** 2026-05-03 (Phase 13.0).
+> surface in this doc — v0 polishes naming + cross-language parity.
+> **Last reviewed:** 2026-05-03.
 
 ## Overview
 
@@ -19,13 +19,13 @@ shape; SDK ports MUST produce the same string for the same Python source.
 ## Grammar (canonical)
 
 ```
-expr      := field | literal | bin_op | unary_op | call
-field     := identifier | identifier "." identifier         # e.g. x, Stream.x
-literal   := number | "'" string "'" | "true" | "false" | "null"
-bin_op    := "(" expr <space> op <space> expr ")"           # EVERY binary op is parenthesized
-op        := "+" | "-" | "*" | "/" | ">" | ">=" | "<" | "<=" | "==" | "!=" | "and" | "or"
-unary_op  := "(" "not" <space> expr ")"
-call      := ident "(" expr ("," <space> expr)* ")"
+expr := field | literal | bin_op | unary_op | call
+field := identifier | identifier "." identifier # e.g. x, Stream.x
+literal := number | "'" string "'" | "true" | "false" | "null"
+bin_op := "(" expr <space> op <space> expr ")" # EVERY binary op is parenthesized
+op := "+" | "-" | "*" | "/" | ">" | ">=" | "<" | "<=" | "==" | "!=" | "and" | "or"
+unary_op := "(" "not" <space> expr ")"
+call := ident "(" expr ("," <space> expr)* ")"
 ```
 
 String literal escaping: `\\` becomes `\\\\`; `'` becomes `\\'`. This is the
@@ -37,12 +37,12 @@ strings (T-03-02-01).
 ```python
 import beava as bv
 
-amount = bv.col("amount")            # Field('amount')
-amount.to_expr_string()              # "amount"
+amount = bv.col("amount") # Field('amount')
+amount.to_expr_string() # "amount"
 
 # Qualified field reference (used when ops cross multiple upstream sources):
 foreign = bv.col("Txn.amount")
-foreign.to_expr_string()             # "Txn.amount"
+foreign.to_expr_string() # "Txn.amount"
 ```
 
 Args:
@@ -57,10 +57,10 @@ The four binary arithmetic operators are overloaded on `_ExprAST` and accept
 either another expression or a Python scalar (auto-wrapped via `bv.lit(...)`):
 
 ```python
-(bv.col("a") + bv.col("b")).to_expr_string()        # "(a + b)"
-(bv.col("amount") * 2).to_expr_string()             # "(amount * 2)"
-(bv.col("amount") / 100).to_expr_string()           # "(amount / 100)"
-(5 - bv.col("balance")).to_expr_string()            # "(5 - balance)"
+(bv.col("a") + bv.col("b")).to_expr_string() # "(a + b)"
+(bv.col("amount") * 2).to_expr_string() # "(amount * 2)"
+(bv.col("amount") / 100).to_expr_string() # "(amount / 100)"
+(5 - bv.col("balance")).to_expr_string() # "(5 - balance)"
 ```
 
 Both forms (left-operand or right-operand scalar) compile correctly because
@@ -78,10 +78,10 @@ propagation):
 ## Comparison: `> >= < <= == !=`
 
 ```python
-(bv.col("amount") > 100).to_expr_string()           # "(amount > 100)"
-(bv.col("amount") >= 100).to_expr_string()          # "(amount >= 100)"
-(bv.col("status") == "ok").to_expr_string()         # "(status == 'ok')"
-(bv.col("status") != "ok").to_expr_string()         # "(status != 'ok')"
+(bv.col("amount") > 100).to_expr_string() # "(amount > 100)"
+(bv.col("amount") >= 100).to_expr_string() # "(amount >= 100)"
+(bv.col("status") == "ok").to_expr_string() # "(status == 'ok')"
+(bv.col("status") != "ok").to_expr_string() # "(status != 'ok')"
 ```
 
 All comparison ops return `bool` regardless of operand types. String
@@ -97,9 +97,9 @@ Python's keyword `and / or / not` cannot be operator-overloaded; beava uses
 left = bv.col("amount") > 100
 right = bv.col("merchant") == "amazon"
 
-(left & right).to_expr_string()   # "((amount > 100) and (merchant == 'amazon'))"
-(left | right).to_expr_string()   # "((amount > 100) or (merchant == 'amazon'))"
-(~left).to_expr_string()          # "(not (amount > 100))"
+(left & right).to_expr_string() # "((amount > 100) and (merchant == 'amazon'))"
+(left | right).to_expr_string() # "((amount > 100) or (merchant == 'amazon'))"
+(~left).to_expr_string() # "(not (amount > 100))"
 ```
 
 **Both operands MUST be boolean** — the server-side type inference rejects
@@ -123,7 +123,7 @@ schema-mismatch error at register time. Always parenthesise your sub-predicates.
 ## `.isnull()` — null-check
 
 ```python
-bv.col("amount").isnull().to_expr_string()        # "(amount == null)"
+bv.col("amount").isnull().to_expr_string() # "(amount == null)"
 ```
 
 Shorthand for the `(col == null)` form. Emitted as a `_BinOp` so it composes
@@ -141,8 +141,8 @@ the same wire form, but `.isnull()` reads better in chains.
 ## `.cast(type_name)` — type coercion
 
 ```python
-bv.col("flag_str").cast("bool").to_expr_string()  # "cast(flag_str, bool)"
-bv.col("amount").cast("int").to_expr_string()     # "cast(amount, int)"
+bv.col("flag_str").cast("bool").to_expr_string() # "cast(flag_str, bool)"
+bv.col("amount").cast("int").to_expr_string() # "cast(amount, int)"
 ```
 
 Args:
@@ -181,8 +181,8 @@ def UserStats(txn) -> bv.Table:
 
 ## `.alias(name)` — rename in derivation context
 
-> **Status:** Implemented post-13.5; current code uses `**kwargs` naming on
-> `with_columns(name=expr)` instead. SDK porters in 13.6 may add `.alias()`
+> **Status:** Implemented v0; current code uses `**kwargs` naming on
+> `with_columns(name=expr)` instead. SDK porters in v0 may add `.alias()`
 > as a convenience method. Documented here for forward compatibility.
 
 ```python
@@ -211,11 +211,11 @@ but is not required to author v0 pipelines.
 ```python
 import beava as bv
 
-bv.lit(100).to_expr_string()       # "100"
-bv.lit(3.14).to_expr_string()      # "3.14"
-bv.lit(True).to_expr_string()      # "true"
-bv.lit(None).to_expr_string()      # "null"
-bv.lit("amazon").to_expr_string()  # "'amazon'"
+bv.lit(100).to_expr_string() # "100"
+bv.lit(3.14).to_expr_string() # "3.14"
+bv.lit(True).to_expr_string() # "true"
+bv.lit(None).to_expr_string() # "null"
+bv.lit("amazon").to_expr_string() # "'amazon'"
 ```
 
 Supported value types: `int`, `float`, `bool`, `str`, `None`. Other types
@@ -248,7 +248,7 @@ expressions; round-trip tests on every fixture in
 ## Validation at register-time
 
 When the server parses the register payload (per
-[wire-spec OP_REGISTER](../wire-spec.md#op_register-0x0001)) it runs Phase 4
+[wire-spec OP_REGISTER](../wire-spec.md#op_register-0x0001)) it runs v0
 expression validation on every `expr` string:
 
 - **Parse error** (malformed grammar, unbalanced parens) →

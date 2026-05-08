@@ -190,7 +190,7 @@ range — clock skew that would produce a negative age returns 0 instead.</p>
 </tr>
 <tr>
 <td>Memory per entity</td>
-<td><code>O(1)</code> — single <code>Option&lt;i64&gt;</code> slot in the shared <code>SeenState</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a></td>
+<td><code>O(1)</code> — single <code>Option&lt;i64&gt;</code> slot in the shared <code>SeenState</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a></td>
 </tr>
 <tr>
 <td>Lifetime mode</td>
@@ -257,7 +257,7 @@ def UserSuccessAge(logins) -&gt; bv.Table:
 <li><strong>Server-time, NOT event-time:</strong> both endpoints are server-side per <a href="https://github.com/beava-dev/beava/blob/main/.planning/PROJECT.md"><code>project_redis_shaped_no_event_time_ever</code></a>. Producers cannot influence the captured <code>first_ms</code> or the read-time <code>now_ms()</code> via payload fields.</li>
 <li><strong>Cold-entity eviction:</strong> if <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md"><code>@bv.event(cold_after=...)</code></a> evicts the entity, <code>age</code> resets to &quot;ms since the next post-eviction arrival&quot; — the entity is treated as fresh per the Redis-TTL pattern (V0-MEM-GOV-01).</li>
 <li><strong><code>window=</code> kwarg attempted:</strong> raises <code>TypeError</code> at SDK-helper-call time. <code>age</code> is &quot;since first observation&quot;, which is inherently lifetime; for windowed-recency see <a href="/docs/operators/recency/first_seen_in_window/"><code>bv.first_seen_in_window</code></a>.</li>
-<li><strong>Lifetime mode:</strong> <strong>the only mode.</strong> Footprint is <code>O(1)</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a>.</li>
+<li><strong>Lifetime mode:</strong> <strong>the only mode.</strong> Footprint is <code>O(1)</code> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a>.</li>
 </ul>
 <h2 id="see-also" tabindex="-1"><a class="header-anchor" href="#see-also" aria-hidden="true">#</a> See also</h2>
 <ul>

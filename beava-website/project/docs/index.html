@@ -120,7 +120,7 @@
 <blockquote>
 <p>Real-time feature server for fraud, ad-tech, and behavioral analytics.</p>
 </blockquote>
-<p>beava is a single-binary feature server. Push events in over HTTP, declare aggregations, query features by entity key. Per-instance: ≥3M events/sec/core for simple counters, ~6 KB per entity for the rich fraud-team shape, P99 batch-get under 10 ms (verified Phase 12.9 2026-05-03; v0 launch ship-pitch numbers).</p>
+<p>beava is a single-binary feature server. Push events in over HTTP, declare aggregations, query features by entity key. Per-instance: ≥3M events/sec/core for simple counters, ~6 KB per entity for the rich fraud-team shape, P99 batch-get under 10 ms — v0 launch ship-pitch numbers.</p>
 <h2 id="quickstart" tabindex="-1"><a class="header-anchor" href="#quickstart" aria-hidden="true">#</a> Quickstart</h2>
 <ul>
 <li><a href="/docs/quickstart/">Quickstart</a> — <code>pip install &quot;git+https://github.com/beava-dev/beava.git#subdirectory=python&quot;</code> → first feature in 60 seconds</li>
@@ -148,7 +148,7 @@
 <h2 id="operator-catalog" tabindex="-1"><a class="header-anchor" href="#operator-catalog" aria-hidden="true">#</a> Operator catalog</h2>
 <ul>
 <li><a href="/docs/operators/">docs/operators/index.md</a> — full 54-op catalogue (53 unique kinds + ema alias inside <a href="http://ewma.md">ewma.md</a>)</li>
-<li><a href="/docs/operators/cost-class/">docs/operators/cost-class.md</a> — per-op CPU tier metadata (Phase 19.2)</li>
+<li><a href="/docs/operators/cost-class/">docs/operators/cost-class.md</a> — per-op CPU tier metadata.</li>
 <li>Family overviews:
 <ul>
 <li><a href="/docs/operators/core/">Core (8)</a> — <code>count</code>, <code>sum</code>, <code>mean</code>, <code>min</code>, <code>max</code>, <code>var</code>, <code>std</code>, <code>ratio</code></li>
@@ -203,13 +203,14 @@
 <li>Events-only with <code>@bv.table</code> aggregation-output exception (per <code>project_v0_events_only_scope</code> + ADR-001) — no <code>app.upsert/delete/retract</code> in v0</li>
 <li>Processing-time only; no event-time, no joins, no watermarks (per <code>project_redis_shaped_no_event_time_ever</code>)</li>
 <li>Memory governance: opt-in <code>cold_after=</code> TTL + lifetime aggregation contract (V0-MEM-GOV-01/02/03)</li>
-<li>80 B <code>size_of::&lt;AggOp&gt;</code> cap (per Phase 12.9; CI tripwire enforced by <code>crates/beava-core/tests/per_entity_size_dump.rs::aggop_size_within_cap</code>)</li>
+<li>80 B <code>size_of::&lt;AggOp&gt;</code> cap (per v0; CI tripwire enforced by <code>crates/beava-core/tests/per_entity_size_dump.rs::aggop_size_within_cap</code>)</li>
 <li>Polars op naming convention (per ADR-002)</li>
-<li>Global aggregation + <code>bv.lit</code> first-class (per ADR-003 — implementation in 13.4 + 13.5 + 13.6)</li>
+<li>Global aggregation + <code>bv.lit</code> first-class (per ADR-003 — implementation in v0)</li>
 </ul>
 <h2 id="versioning" tabindex="-1"><a class="header-anchor" href="#versioning" aria-hidden="true">#</a> Versioning</h2>
-<p>v0.0.0 ships from Phase 13.8 (packaging + GA tag) — currently in development. See <a href="https://github.com/beava-dev/beava/blob/main/.planning/ROADMAP.md">.planning/ROADMAP.md</a> for the full phase plan.</p>
-<p>Active phase: <strong>Phase 13.0 (design contract + spec docs) ✅ CLOSED 2026-05-03 (PASS)</strong>. Next: 4-way parallel <strong>Phase 13.4 (engine prep) + 13.5 (Python SDK + bench CLI) + 13.6 (TS + Go SDKs) + 13.7 (docs site)</strong> → sequential <strong>Phase 13.8 (packaging + GA tag)</strong>.</p>
+<p>v0.0.0 is the upcoming OSS launch. v0 covers the Python SDK, the engine wire
+contract, packaging (PyPI / Homebrew / Docker), and minimum-viable docs.
+Everything not in scope for v0 is out of scope.</p>
 
 </article>
 </main>

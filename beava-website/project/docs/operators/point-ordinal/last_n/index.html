@@ -124,7 +124,7 @@
 <pre><code class="language-python">bv.last_n(
     field: str,
     *,
-    n: int,                         # REQUIRED — register-time kwarg
+    n: int, # REQUIRED — register-time kwarg
     where: bv.Col | None = None,
 ) -&gt; AggDescriptor
 </code></pre>
@@ -206,7 +206,7 @@ no <code>List</code> variant — Python SDK readers parse it back transparently.
 </tr>
 <tr>
 <td>Memory per entity</td>
-<td><strong><code>BoundedByRequiredKwarg(&quot;n&quot;)</code></strong> — <code>n × sizeof(field)</code> bytes per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">Phase 12.8 V0-MEM-GOV-02</a></td>
+<td><strong><code>BoundedByRequiredKwarg(&quot;n&quot;)</code></strong> — <code>n × sizeof(field)</code> bytes per <a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a></td>
 </tr>
 <tr>
 <td>Lifetime mode</td>
@@ -285,7 +285,7 @@ def CardRecentSuccessAmounts(txns) -&gt; bv.Table:
 <li><a href="/docs/operators/cost-class/">cost-class.md</a> — performance tier (Tier 1)</li>
 <li><a href="/docs/operators/point-ordinal/first_n/">bv.first_n</a> — symmetric companion: first N values (also <code>BoundedByRequiredKwarg(&quot;n&quot;)</code>)</li>
 <li><a href="/docs/operators/point-ordinal/last/">bv.last</a> — degenerate <code>n=1</code> case (lighter — no <code>VecDeque</code> allocation)</li>
-<li><a href="/docs/operators/buffer-geo/most_recent_n/">bv.most_recent_n</a> — N most recent values within a window (Phase 11 buffer family)</li>
+<li><a href="/docs/operators/buffer-geo/most_recent_n/">bv.most_recent_n</a> — N most recent values within a window (v0 buffer family)</li>
 <li><a href="/docs/operators/point-ordinal/lag/">bv.lag</a> — value <code>n</code> events ago (single value, not the rolling window)</li>
 <li><a href="https://github.com/beava-dev/beava/blob/main/.planning/REQUIREMENTS.md">V0-MEM-GOV-02</a> — BoundedByRequiredKwarg memory governance contract</li>
 <li><a href="/docs/pipeline-dsl/compilation-rules/">pipeline-dsl/compilation-rules.md</a> — chain compilation rules</li>

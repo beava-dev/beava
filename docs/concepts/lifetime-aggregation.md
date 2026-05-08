@@ -68,16 +68,16 @@ variants per operator string.
 
 ### Memory bound classifications
 
-| Class                                   | Examples                                                                                              | Per-entity bound                                  |
+| Class | Examples | Per-entity bound |
 | --------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| `O1`                                    | `count`, `sum`, `mean`, `min`, `max`, `var`, `std`, `ratio`, `first`, `last`, `has_seen`, `first_seen`, `last_seen`, `age`, `time_since`, `streak`, `max_streak`, `negative_streak`, decay family, velocity / trend family | One scalar (or fixed pair) per entity.            |
-| `BoundedSketch`                         | `n_unique` (HLL), `quantile` (DDSketch), `bloom_member`                                               | Sketch state — bounded by sketch parameters.      |
-| `BoundedByRequiredKwarg("n")`           | `first_n`, `last_n`, `lag`, `time_since_last_n`, `most_recent_n`                                      | `n × size_of::<element>` — caller specifies.       |
-| `BoundedByRequiredKwarg("samples")`     | `reservoir_sample`                                                                                    | `samples × size_of::<element>` — caller specifies. |
-| `BoundedByRequiredKwarg("buckets")`     | `histogram`                                                                                           | `buckets.len() × size_of::<bucket counter>`.       |
-| `BoundedByConfig("max_categories", 256)` | `entropy`, `event_type_mix`                                                                           | Up to 256 distinct categories tracked per entity.  |
-| `BoundedByConfig("k", 10)`              | `top_k`                                                                                               | Top-K SpaceSaving sketch — `k` slots default 10.   |
-| `BoundedByConfig("samples", 100)`       | `distance_from_home`                                                                                  | Ring buffer of 100 recent geo points.              |
+| `O1` | `count`, `sum`, `mean`, `min`, `max`, `var`, `std`, `ratio`, `first`, `last`, `has_seen`, `first_seen`, `last_seen`, `age`, `time_since`, `streak`, `max_streak`, `negative_streak`, decay family, velocity / trend family | One scalar (or fixed pair) per entity. |
+| `BoundedSketch` | `n_unique` (HLL), `quantile` (DDSketch), `bloom_member` | Sketch state — bounded by sketch parameters. |
+| `BoundedByRequiredKwarg("n")` | `first_n`, `last_n`, `lag`, `time_since_last_n`, `most_recent_n` | `n × size_of::<element>` — caller specifies. |
+| `BoundedByRequiredKwarg("samples")` | `reservoir_sample` | `samples × size_of::<element>` — caller specifies. |
+| `BoundedByRequiredKwarg("buckets")` | `histogram` | `buckets.len() × size_of::<bucket counter>`. |
+| `BoundedByConfig("max_categories", 256)` | `entropy`, `event_type_mix` | Up to 256 distinct categories tracked per entity. |
+| `BoundedByConfig("k", 10)` | `top_k` | Top-K SpaceSaving sketch — `k` slots default 10. |
+| `BoundedByConfig("samples", 100)` | `distance_from_home` | Ring buffer of 100 recent geo points. |
 
 Operators not classifiable as bounded are forbidden in lifetime mode at
 register-time.
@@ -153,7 +153,7 @@ memory dimension beava ships with.
 ## Cross-references
 
 - [`CLAUDE.md` § Memory Governance Invariant](../../CLAUDE.md) — locked
-  Phase 12.8 contract; cite for the architectural commitment.
+  v0 contract; cite for the architectural commitment.
 - [`.planning/REQUIREMENTS.md`](../../.planning/REQUIREMENTS.md)
   V0-MEM-GOV-02 — the canonical requirement statement.
 - [`crates/beava-core/src/register_validate.rs`](../../crates/beava-core/src/register_validate.rs)

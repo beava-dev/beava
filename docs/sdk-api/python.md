@@ -1,10 +1,10 @@
 # beava Python SDK
 
-> **Status:** Authoritative for v0. Documents the **post-13.5 target** Python
-> SDK shape — Phase 13.5 implements the rewrite. Cross-language semantics
+> **Status:** Authoritative for v0. Documents the **v0 target** Python
+> SDK shape — v0 implements the rewrite. Cross-language semantics
 > live in [shared.md](shared.md); wire-level body shapes live in
 > [docs/wire-spec.md](../wire-spec.md).
-> **Last reviewed:** 2026-05-03 (Phase 13.0).
+> **Last reviewed:** 2026-05-03.
 
 ## Overview
 
@@ -23,9 +23,9 @@ The v0 Python public surface is:
 - 53 op helper functions in the `bv.*` namespace, named per Polars conventions per [ADR-002](../../.planning/decisions/ADR-002-polars-op-rename.md) — `bv.mean` / `bv.var` / `bv.std` / `bv.n_unique` / `bv.quantile` (NOT `bv.avg` / `bv.variance` / etc.).
 - `beava.test` fixtures for pytest integration.
 
-This doc describes the **v0-target** shape that Phase 13.5 will land. The
+This doc describes the **v0-target** shape that v0 will land. The
 current `python/beava/_agg.py` is incomplete (`@bv.table` is stubbed out
-per Plan 12.7-06; only 32 of the 53 op helpers are present; `app.batch_get`
+per an internal plan; only 32 of the 53 op helpers are present; `app.batch_get`
 and `app.reset` are not yet wired). The forward-looking shape documented
 here is what the SDK rewrite ships.
 
@@ -34,25 +34,25 @@ here is what the SDK rewrite ships.
 ## Module structure
 
 ```
-beava/                     # core flat namespace
-├── __init__.py            # public exports: App, event, table, col, lit, count, sum, mean, ...
-├── _app.py                # App class + transport dispatch
-├── _events.py             # @bv.event decorator (class + function form)
-├── _table.py              # @bv.table decorator (function form, per ADR-001)
-├── _agg.py                # 53 op helpers (count / sum / mean / ... / z_score)
-├── _col.py                # bv.col(...) + bv.lit(...) + operator overloading
-├── _errors.py             # exceptions (RegistrationError, BinaryNotFoundError)
-├── _types.py              # bv.Optional[T], bv.Field(...), type vocab
-├── _wire.py               # frame codec, opcodes
-├── _transport.py          # HTTP / TCP / Embed transports + URL-scheme dispatch
-└── _embed.py              # binary discovery + spawn
+beava/ # core flat namespace
+├── __init__.py # public exports: App, event, table, col, lit, count, sum, mean, ...
+├── _app.py # App class + transport dispatch
+├── _events.py # @bv.event decorator (class + function form)
+├── _table.py # @bv.table decorator (function form, per ADR-001)
+├── _agg.py # 53 op helpers (count / sum / mean / ... / z_score)
+├── _col.py # bv.col(...) + bv.lit(...) + operator overloading
+├── _errors.py # exceptions (RegistrationError, BinaryNotFoundError)
+├── _types.py # bv.Optional[T], bv.Field(...), type vocab
+├── _wire.py # frame codec, opcodes
+├── _transport.py # HTTP / TCP / Embed transports + URL-scheme dispatch
+└── _embed.py # binary discovery + spawn
 
-beava/test/                # test fixtures (separate submodule)
-├── fixture                # pytest fixture factory
-├── replay                 # replay events for deterministic tests
-└── assert_features_eq     # assertion helper
+beava/test/ # test fixtures (separate submodule)
+├── fixture # pytest fixture factory
+├── replay # replay events for deterministic tests
+└── assert_features_eq # assertion helper
 
-beava/cli/                 # CLI subcommands (Redis-style: beava bench, beava demo, etc.)
+beava/cli/ # CLI subcommands (Redis-style: beava bench, beava demo, etc.)
 ```
 
 ## App class
@@ -118,7 +118,7 @@ per [shared.md § Wire transports](shared.md#wire-transports):
 **Embed mode requires the context manager:**
 
 ```python
-with bv.App() as app:                    # spawns the binary, binds to ephemeral ports
+with bv.App() as app: # spawns the binary, binds to ephemeral ports
     app.register(Txn, UserFeatures)
     app.push("Txn", {"user_id": "alice", "amount": 42.50})
     print(app.get("UserFeatures", "alice"))
@@ -193,7 +193,7 @@ Sequence Number) and `registry_version`. Idempotent re-pushes (matching
 
 - `ValidationError` (push variant) — `schema_mismatch`, `missing_field`,
   `unknown_event`. See [docs/error-codes.md](../error-codes.md) (forward-ref
-  Plan 13.0-12) for the full list.
+  an internal plan) for the full list.
 - `RuntimeError` — App is closed, or embed-mode used without context manager.
 
 ### `app.get(table, key)`
@@ -292,7 +292,7 @@ class Txn:
     user_id: str
     amount: float
     merchant: str
-    ip: bv.Optional[str]              # nullable per shared.md § Field types
+    ip: bv.Optional[str] # nullable per shared.md § Field types
 ```
 
 The class body declares the event's **schema** via Python type annotations.
@@ -304,10 +304,10 @@ Supported field types are the 6-element vocabulary from
 
 ```python
 @bv.event(
-    keep_events_for="30d",        # event retention; default None (unbounded)
-    cold_after="1d",              # cold-entity TTL per V0-MEM-GOV-01; default None
-    dedupe_key="trace_id",        # field name for idempotent replay
-    dedupe_window="5m",           # dedup TTL
+    keep_events_for="30d", # event retention; default None (unbounded)
+    cold_after="1d", # cold-entity TTL per V0-MEM-GOV-01; default None
+    dedupe_key="trace_id", # field name for idempotent replay
+    dedupe_window="5m", # dedup TTL
 )
 class Login:
     user_id: str
@@ -318,7 +318,7 @@ class Login:
 | Kwarg | Type | Default | Behavior |
 |-------|------|---------|----------|
 | `keep_events_for` | duration string | `None` | Event-retention TTL. `None` = unbounded (windowed ops still bound state on their windows). |
-| `cold_after` | duration string | `None` | Per-source cold-entity TTL per V0-MEM-GOV-01 (Phase 12.8). Range: `[1s, 365d]`; `"forever"` is REJECTED — use `cold_after=None` for unbounded retention. |
+| `cold_after` | duration string | `None` | Per-source cold-entity TTL per V0-MEM-GOV-01. Range: `[1s, 365d]`; `"forever"` is REJECTED — use `cold_after=None` for unbounded retention. |
 | `dedupe_key` | field name | `None` | Field used for idempotent-replay matching. Must be in schema. |
 | `dedupe_window` | duration string | `None` | Dedup TTL — re-pushes within this window with matching `dedupe_key` are treated as idempotent replays. |
 
@@ -429,7 +429,7 @@ This is the mypy-friendly default; prefer it whenever possible.
 ```python
 def test_user_clicks():
     @bv.event
-    class Click:                 # local to this fn — never reaches module scope
+    class Click: # local to this fn — never reaches module scope
         user_id: str
 
     @bv.table(key="user_id")
@@ -452,7 +452,7 @@ class Click:
 
 def make_user_clicks_table():
     @bv.table(key="user_id")
-    def UserClicks(c: Click):    # Click captured as a free variable
+    def UserClicks(c: Click): # Click captured as a free variable
         return c.group_by("user_id").agg(n=bv.count(window="forever"))
 
     return UserClicks
@@ -498,7 +498,7 @@ walks back to the method body's frame.
 def sum(field: str, *, window: str | None = None, where: bv.Col | None = None) -> AggDescriptor: ...
 ```
 
-> **Locked per Q1 Path B** ([13.0-CONTEXT.md](../../.planning/phases/13.0-design-contract-spec-docs/13.0-CONTEXT.md)).
+> **Locked per Q1 Path B** ([v0-CONTEXT.md](../../.planning/phases/v0-design-contract-spec-docs/v0-CONTEXT.md)).
 > The Python `bv.sum(field: str, ...)` signature accepts a string column name
 > **only**. Inline expressions are **FORBIDDEN**.
 
@@ -506,8 +506,8 @@ def sum(field: str, *, window: str | None = None, where: bv.Col | None = None) -
 
 ```python
 # FORBIDDEN — inline boolean-cast expression as the field arg.
-bv.sum(bv.col("is_fraud").cast(int), window="1h")     # ✗ raises RegistrationError
-bv.sum(bv.col("amount") * 2, window="1h")             # ✗ same
+bv.sum(bv.col("is_fraud").cast(int), window="1h") # ✗ raises RegistrationError
+bv.sum(bv.col("amount") * 2, window="1h") # ✗ same
 ```
 
 Why: v0 keeps the `bv.sum(field: str)` shape stable across all 3 SDKs (TS
@@ -530,9 +530,9 @@ with `with_columns(...)` first, then sum the typed column:
 @bv.table(key="user_id")
 def UserFraudCounts(txn: Txn):
     return (
-        txn.with_columns(flag_int=bv.col("is_fraud").cast(int))   # stage 1: derive int column
+        txn.with_columns(flag_int=bv.col("is_fraud").cast(int)) # stage 1: derive int column
            .group_by("user_id")
-           .agg(c=bv.sum("flag_int", window="1h"))                # stage 2: sum the int column
+           .agg(c=bv.sum("flag_int", window="1h")) # stage 2: sum the int column
     )
 ```
 
@@ -541,7 +541,7 @@ event row before the `group_by(...)` keys it. The aggregation then sums a
 plain `i64` field, exactly as the wire shape expects.
 
 > **See:** [`docs/pipeline-dsl/compilation-rules.md`](../pipeline-dsl/compilation-rules.md)
-> § Boolean-sum recipe (Plan 13.0-12 — forward reference) for the canonical
+> § Boolean-sum recipe (forthcoming) for the canonical
 > worked example, the corresponding wire JSON, and the ambiguity-matrix
 > FORBIDDEN row that locks this rule across all 3 SDKs.
 
@@ -558,7 +558,7 @@ the same rule with idiomatic syntax:
 ## Pipeline DSL (chained methods on Event/Table)
 
 Per [docs/pipeline-dsl/overview.md](../pipeline-dsl/overview.md) (Plan
-13.0-12 — forward reference), the v0-supported chain methods on event
+v0 — forward reference), the v0-supported chain methods on event
 descriptors and event derivations are Polars-style:
 
 | Method | Returns | Description |
@@ -581,15 +581,15 @@ multi-agg, FORBIDDEN patterns like `with_columns AFTER group_by`) lives at
 ## Expression DSL (bv.col)
 
 ```python
-bv.col("amount") > 100                               # comparison: amount > 100
-bv.col("user_id") == "alice"                         # equality: user_id == 'alice'
-(bv.col("amount") > 100) & (bv.col("status") == "ok")  # conjunction (use & for and)
-(bv.col("amount") > 100) | (bv.col("status") == "ok")  # disjunction (use | for or)
-~(bv.col("flag"))                                    # negation (use ~ for not)
-bv.col("amount").isnull()                            # null check
-bv.col("status").cast("int")                         # type cast
-bv.col("a") + bv.col("b") * 2                        # arithmetic
-bv.lit(42)                                           # literal value
+bv.col("amount") > 100 # comparison: amount > 100
+bv.col("user_id") == "alice" # equality: user_id == 'alice'
+(bv.col("amount") > 100) & (bv.col("status") == "ok") # conjunction (use & for and)
+(bv.col("amount") > 100) | (bv.col("status") == "ok") # disjunction (use | for or)
+~(bv.col("flag")) # negation (use ~ for not)
+bv.col("amount").isnull() # null check
+bv.col("status").cast("int") # type cast
+bv.col("a") + bv.col("b") * 2 # arithmetic
+bv.lit(42) # literal value
 ```
 
 Operator overloading details:
@@ -604,7 +604,7 @@ Operator overloading details:
   as a bare identifier (validated against `{"str", "int", "float", "bool"}`).
 
 Cross-link: [`docs/pipeline-dsl/expressions.md`](../pipeline-dsl/expressions.md)
-(Plan 13.0-12) for the full grammar and edge cases.
+(an internal plan) for the full grammar and edge cases.
 
 `bv.lit(value)` wraps a Python value as a literal AST node, useful for
 explicit literal coercion or for the rare case where Python operator
@@ -633,7 +633,7 @@ events.filter(bv.col("amount") > bv.lit(100))
 
 The implicit operator-overloading coercion (`bv.col("x") > 100`) still works — `bv.lit` is for cases where explicit construction matters (constant columns, type-coercion patterns, cross-language parity with TS/Go SDKs that lack Python's flexible operator overloading).
 
-`bv.lit` lands in Phase 13.5 (`python/beava/__init__.py`, ~5 LOC). Acceptance gate: `python/tests/v0/test_lit.py` (Plan 13.0-16, 5 tests).
+`bv.lit` lands in v0 (`python/beava/__init__.py`, ~5 LOC). Acceptance gate: `python/tests/v0/test_lit.py` (an internal plan, 5 tests).
 
 ## Global aggregation — per ADR-003
 
@@ -645,24 +645,24 @@ class Click:
     user_id: str
     page: str
 
-@bv.table   # no key= → global table
+@bv.table # no key= → global table
 def TotalClicks(clicks) -> bv.Table:
     return clicks.agg(total=bv.count(window="forever"))
 
 app = bv.App()
 app.register(Click, TotalClicks)
 app.push("Click", {"user_id": "alice", "page": "/home"})
-app.push("Click", {"user_id": "bob",   "page": "/home"})
+app.push("Click", {"user_id": "bob", "page": "/home"})
 
-app.get("TotalClicks")  # → {"total": 2}, no entity arg
+app.get("TotalClicks") # → {"total": 2}, no entity arg
 ```
 
 **Three equivalent forms** compile to the same wire payload (all use `key: []`):
 
 ```python
-clicks.agg(total=bv.count(...))                 # shortest — direct .agg() shorthand
-clicks.group_by().agg(total=bv.count(...))      # explicit empty group_by
-@bv.table                                       # decorator with no key=
+clicks.agg(total=bv.count(...)) # shortest — direct .agg() shorthand
+clicks.group_by().agg(total=bv.count(...)) # explicit empty group_by
+@bv.table # decorator with no key=
 def Foo(c): return c.agg(total=bv.count(...))
 ```
 
@@ -684,7 +684,7 @@ Mismatched arity raises `KeyError` with a clear message indicating the table's e
 - Top-K-globally features ("top 10 hottest pages on the platform")
 - Cross-entity aggregations ("total spend across all users in last hour")
 
-**Implementation deferred** to Phase 13.5 (~110 LOC: `bv.lit` export + `events.group_by()` empty allowance + `events.agg(**aggs)` shorthand + `@bv.table` no-`key=` form + `App.get(table_name)` 1-arg overload). The wire-level signal is `key: []` (empty array) on the register payload + sentinel `key: ""` (empty string) on the GET request — see [`docs/wire-spec.md`](../wire-spec.md) § Global tables. Acceptance gate: `python/tests/v0/test_global.py` (Plan 13.0-16, 8 tests).
+**Implementation deferred** to v0 (~110 LOC: `bv.lit` export + `events.group_by()` empty allowance + `events.agg(**aggs)` shorthand + `@bv.table` no-`key=` form + `App.get(table_name)` 1-arg overload). The wire-level signal is `key: []` (empty array) on the register payload + sentinel `key: ""` (empty string) on the GET request — see [`docs/wire-spec.md`](../wire-spec.md) § Global tables. Acceptance gate: `python/tests/v0/test_global.py` (an internal plan, 8 tests).
 
 ## Operator catalog
 
@@ -723,7 +723,7 @@ Old names ship as deprecation aliases in v0.0.x and are **removed in v0.1**.
 
 Per-op signatures, semantics, and worked examples live on each per-op
 page under [`docs/operators/<family>/<op>.md`](../operators/) (Plans
-13.0-05 through 13.0-11 — forward references).
+v0 through v0 — forward references).
 
 ## Exceptions
 
@@ -731,17 +731,17 @@ The public exception hierarchy (from `python/beava/_errors.py`):
 
 ```python
 class RegistrationError(Exception):
-    code: str                          # structured error code (one of 9 ValidationError kinds)
-    path: str                          # JSON-pointer-style path to offending field
-    message: str                       # human-readable message
-    errors: list[ValidationError]      # all errors when server returns multiple
+    code: str # structured error code (one of 9 ValidationError kinds)
+    path: str # JSON-pointer-style path to offending field
+    message: str # human-readable message
+    errors: list[ValidationError] # all errors when server returns multiple
 
 class BinaryNotFoundError(Exception):
-    pass                               # raised by embed mode when binary not on PATH
+    pass # raised by embed mode when binary not on PATH
 
 @dataclass(frozen=True)
 class ValidationError:
-    kind: str                          # one of VALIDATION_ERROR_KINDS
+    kind: str # one of VALIDATION_ERROR_KINDS
     path: str
     message: str
 ```
@@ -749,7 +749,7 @@ class ValidationError:
 The 9 valid `ValidationError.kind` values are documented in
 [shared.md § ValidationError envelope](shared.md#validationerror-envelope).
 The full alphabetised structured-code list with HTTP status mapping lives
-at [`docs/error-codes.md`](../error-codes.md) (Plan 13.0-12 — forward
+at [`docs/error-codes.md`](../error-codes.md) (an internal plan — forward
 reference).
 
 ## bv.test fixtures
@@ -807,14 +807,14 @@ near-equality (relative tolerance `1e-9`) for sketch-based ops like
 
 ## Plan-level traceability
 
-This document is authored by Plan 13.0-04 (Wave 1). Downstream consumers:
+This document is authored by an internal plan (Wave 1). Downstream consumers:
 
 - [`docs/sdk-api/typescript.md`](typescript.md) — TS SDK port mirrors this surface.
 - [`docs/sdk-api/go.md`](go.md) — Go SDK port mirrors this surface.
-- **Phase 13.5** — Python SDK rewrite reads this doc as the canonical
+- **v0** — Python SDK rewrite reads this doc as the canonical
   surface; lands the v0-target shape (full `_agg.py` 53 helpers, full
   `_app.py` with `batch_get` / `reset`, `@bv.table` revival).
-- **Phase 13.6** — TS + Go SDK ports use this doc as the parity reference.
+- **v0** — TS + Go SDK ports use this doc as the parity reference.
 
-For the full Phase 13.0 plan tree, see
-[`.planning/phases/13.0-design-contract-spec-docs/13.0-PLAN.md`](../../.planning/phases/13.0-design-contract-spec-docs/13.0-PLAN.md).
+For the planning history, see
+[`.planning/phases/v0-design-contract-spec-docs/v0-PLAN.md`](../../.planning/phases/v0-design-contract-spec-docs/v0-PLAN.md).

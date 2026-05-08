@@ -123,7 +123,7 @@ files live on local disk; there is no replication, no remote storage, no
 quorum write. State recovery on boot is a snapshot load + WAL replay
 from the snapshot's LSN to present.</p>
 <p>This page covers the on-disk wire format, the recovery flow, the
-sync-mode trade-offs, and what got reset in the Phase 12.7 schema strip.</p>
+sync-mode trade-offs, and what got reset in the v0 schema strip.</p>
 <h2 id="overview" tabindex="-1"><a class="header-anchor" href="#overview" aria-hidden="true">#</a> Overview</h2>
 <table>
 <thead>
@@ -149,8 +149,8 @@ sync-mode trade-offs, and what got reset in the Phase 12.7 schema strip.</p>
 <p>On boot, beava loads the latest snapshot, replays WAL records from that
 snapshot's LSN to the present, then begins serving. RTO target is &lt; 30 s
 at 10 GB state on NVMe.</p>
-<h2 id="wal-format-post-127-reset" tabindex="-1"><a class="header-anchor" href="#wal-format-post-127-reset" aria-hidden="true">#</a> WAL format (post-12.7 RESET)</h2>
-<p>Plan 12.7-05 RESET both <code>FORMAT_VERSION</code> (WAL) and
+<h2 id="wal-format-v0-reset" tabindex="-1"><a class="header-anchor" href="#wal-format-v0-reset" aria-hidden="true">#</a> WAL format (v0 RESET)</h2>
+<p>an internal plan RESET both <code>FORMAT_VERSION</code> (WAL) and
 <code>SNAPSHOT_FORMAT_VERSION</code> / <code>SNAPSHOT_BODY_FORMAT_VERSION</code> back to <strong>1</strong>
 when the entire <code>@bv.table</code> surface (TableUpsert / TableDelete /
 TableRetract record types + temporal MVCC) was deleted. v0 launches at
@@ -159,24 +159,24 @@ unreleased and there is nothing to be backward-compatible with.</p>
 <p><strong>Pre-12.7 dev WALs / snapshots</strong> (which carried <code>v=2</code>) fail at the
 version-byte check on recovery with <code>SchemaVersionMismatch</code>. There is no
 migration shim — operators clear <code>.beava/wal</code> + <code>.beava/snapshots</code>
-before booting the new binary. (Locked decision per Phase 12.7 D-01:
+before booting the new binary. (Locked decision per v0 D-01:
 &quot;hard rip RESET, no migration.&quot;)</p>
 <h3 id="wal-segment-layout" tabindex="-1"><a class="header-anchor" href="#wal-segment-layout" aria-hidden="true">#</a> WAL segment layout</h3>
 <p>The WAL is a sequence of <strong>segments</strong>, each prefixed by an 8-byte magic
 header:</p>
-<pre><code class="language-text">File:   [MAGIC = b&quot;BEAVAWAL&quot;][record][record][record]...
+<pre><code class="language-text">File: [MAGIC = b&quot;BEAVAWAL&quot;][record][record][record]...
 </code></pre>
 <p>Each record is a self-describing frame:</p>
 <pre><code class="language-text">Record: [u32 length][u32 crc32c][u64 lsn][u8 record_type][payload]
-        ↑       ↑       ↑       ↑       ↑
-        |       |       |       |       └── raw bytes (record-type specific)
-        |       |       |       └── 0x01 Event | 0x02 RegistryBump
-        |       |       └── monotonically increasing log sequence number
-        |       └── CRC32C over [lsn || record_type || payload]
+        ↑ ↑ ↑ ↑ ↑
+        | | | | └── raw bytes (record-type specific)
+        | | | └── 0x01 Event | 0x02 RegistryBump
+        | | └── monotonically increasing log sequence number
+        | └── CRC32C over [lsn || record_type || payload]
         └── covers [crc || lsn || record_type || payload]
 </code></pre>
 <p>Implementation: <a href="https://github.com/beava-dev/beava/blob/main/crates/beava-persistence/src/record.rs"><code>crates/beava-persistence/src/record.rs</code></a>.</p>
-<h3 id="recordtype-variants-post-127" tabindex="-1"><a class="header-anchor" href="#recordtype-variants-post-127" aria-hidden="true">#</a> RecordType variants (post-12.7)</h3>
+<h3 id="recordtype-variants-v0" tabindex="-1"><a class="header-anchor" href="#recordtype-variants-v0" aria-hidden="true">#</a> RecordType variants (v0)</h3>
 <table>
 <thead>
 <tr>
@@ -199,25 +199,25 @@ header:</p>
 <tr>
 <td><code>0x03</code></td>
 <td>(deleted)</td>
-<td>Was <code>TableUpsert</code>; pre-12.7 only — surfaces as <code>UnknownRecordType</code> on recovery</td>
+<td>Was <code>TableUpsert</code>; pre-v0 only — surfaces as <code>UnknownRecordType</code> on recovery</td>
 </tr>
 <tr>
 <td><code>0x04</code></td>
 <td>(deleted)</td>
-<td>Was <code>TableDelete</code>; pre-12.7 only</td>
+<td>Was <code>TableDelete</code>; pre-v0 only</td>
 </tr>
 <tr>
 <td><code>0x05</code></td>
 <td>(deleted)</td>
-<td>Was <code>Retract</code>; pre-12.7 only</td>
+<td>Was <code>Retract</code>; pre-v0 only</td>
 </tr>
 </tbody>
 </table>
 <p>Bytes <code>0x03</code> / <code>0x04</code> / <code>0x05</code> fall through to the existing
-<code>UnknownRecordType</code> arm — pre-12.7 dev WALs that carried these bytes
+<code>UnknownRecordType</code> arm — pre-v0 dev WALs that carried these bytes
 surface the standard &quot;unknown record_type&quot; error on recovery, which is
 the operator's signal to clear the WAL.</p>
-<h2 id="snapshot-format-post-127-reset" tabindex="-1"><a class="header-anchor" href="#snapshot-format-post-127-reset" aria-hidden="true">#</a> Snapshot format (post-12.7 RESET)</h2>
+<h2 id="snapshot-format-v0-reset" tabindex="-1"><a class="header-anchor" href="#snapshot-format-v0-reset" aria-hidden="true">#</a> Snapshot format (v0 RESET)</h2>
 <p>Snapshot files have the same MAGIC + version pattern. Two version
 constants gate the format:</p>
 <ul>
@@ -253,7 +253,7 @@ thread starts polling for new connections.</li>
 <p>RTO target: <strong>&lt; 30 s on 10 GB state on NVMe</strong>. Recovery runs single-threaded
 on the apply thread (mirrors the production hot path).</p>
 <h2 id="sync-modes" tabindex="-1"><a class="header-anchor" href="#sync-modes" aria-hidden="true">#</a> Sync modes</h2>
-<p>The WAL writer has two sync modes (Phase 6.1):</p>
+<p>The WAL writer has two sync modes:</p>
 <h3 id="syncmodeperiodic-default" tabindex="-1"><a class="header-anchor" href="#syncmodeperiodic-default" aria-hidden="true">#</a> <code>SyncMode::Periodic</code> (default)</h3>
 <p>Group-commit fsync every <strong>1-5 ms or 1 MB</strong>, whichever comes first.
 Acks the push as soon as the record is appended to the in-memory ring
@@ -269,10 +269,10 @@ by upstream replay.</p>
 <p>Acks=all: the push is held until the WAL record's LSN has been fsynced
 to disk. Survives crash without loss. Cost: P99 latency rises to fsync
 latency (~1-10 ms on NVMe).</p>
-<p><code>OP_PUSH_SYNC</code> is wired through Phase 6.1 but the SDK opcode is v0.1+.
+<p><code>OP_PUSH_SYNC</code> is wired through v0 but the SDK opcode is v0.1+.
 See <a href="https://github.com/beava-dev/beava/blob/main/.planning/ideas/v0.1-deferrals.md"><code>.planning/ideas/v0.1-deferrals.md</code></a>.</p>
 <h2 id="four-watermark-lsn-discipline" tabindex="-1"><a class="header-anchor" href="#four-watermark-lsn-discipline" aria-hidden="true">#</a> Four-watermark LSN discipline</h2>
-<p>The WAL writer maintains four watermarks per Phase 18 design (memory
+<p>The WAL writer maintains four watermarks per v0 design (memory
 file <code>project_phase18_wal_architecture</code>):</p>
 <table>
 <thead>
@@ -304,7 +304,7 @@ file <code>project_phase18_wal_architecture</code>):</p>
 <code>acks=all</code> (<code>OP_PUSH_SYNC</code>): client acks after <code>synced</code>.</p>
 <p>The 3-buffer state machine (active / sealed / flushing / free) gives
 the apply thread always-available append capacity even while the
-writer is fsyncing. Buffer size: 16 MiB × 3 buffers (Phase 18 lock).</p>
+writer is fsyncing. Buffer size: 16 MiB × 3 buffers (v0 lock).</p>
 <h2 id="snapshot-truncation" tabindex="-1"><a class="header-anchor" href="#snapshot-truncation" aria-hidden="true">#</a> Snapshot truncation</h2>
 <p>A successful snapshot at LSN N truncates the WAL — segments whose
 records are entirely ≤ N can be removed. The snapshot writer signals
@@ -324,18 +324,18 @@ guarantees demand it.</li>
 <li><strong>Snapshot interval is configurable.</strong> Default 30 s. Smaller →
 faster recovery, higher steady-state I/O. Larger → slower recovery,
 lower steady-state I/O.</li>
-<li><strong>Pre-12.7 WALs / snapshots are not readable by post-12.7 binaries.</strong>
+<li><strong>Pre-12.7 WALs / snapshots are not readable by v0 binaries.</strong>
 Clear <code>&lt;persist_dir&gt;/wal</code> + <code>&lt;persist_dir&gt;/snapshots</code> before
-upgrading from a pre-12.7 dev binary. There is no migration tool.</li>
+upgrading from a pre-v0 dev binary. There is no migration tool.</li>
 </ul>
 <h2 id="cross-references" tabindex="-1"><a class="header-anchor" href="#cross-references" aria-hidden="true">#</a> Cross-references</h2>
 <ul>
-<li><a href="../../CLAUDE.md"><code>CLAUDE.md</code> § Events-Only Invariant (locked Phase 12.7)</a>
+<li><a href="../../CLAUDE.md"><code>CLAUDE.md</code> § Events-Only Invariant (locked v0)</a>
 — the schema-reset commitment + version=1 reset rationale.</li>
 <li><a href="../../CLAUDE.md"><code>CLAUDE.md</code> § Constraints</a> — &quot;WAL + periodic snapshot
 for durability&quot; + &quot;No external storage dependencies.&quot;</li>
 <li><code>~/.claude/projects/-Users-petrpan26-work-tally/memory/project_phase18_wal_architecture.md</code>
-— locked Phase 18 WAL architecture (lock-free apply, 3-buffer state
+— locked v0 WAL architecture (lock-free apply, 3-buffer state
 machine, four-watermark discipline, refuse-on-network-FS).</li>
 <li><a href="https://github.com/beava-dev/beava/blob/main/crates/beava-persistence/src/record.rs"><code>crates/beava-persistence/src/record.rs</code></a>
 — <code>FORMAT_VERSION</code>, <code>MAGIC</code>, frame encoding/decoding.</li>
@@ -359,8 +359,8 @@ WAL writer thread separation.</li>
   <div class="toc-title">On this page</div>
   <ul class="toc-list">
       <li><a href="#overview">Overview</a></li>
-      <li><a href="#wal-format-post-127-reset">WAL format (post-12.7 RESET)</a></li>
-      <li><a href="#snapshot-format-post-127-reset">Snapshot format (post-12.7 RESET)</a></li>
+      <li><a href="#wal-format-v0-reset">WAL format (v0 RESET)</a></li>
+      <li><a href="#snapshot-format-v0-reset">Snapshot format (v0 RESET)</a></li>
       <li><a href="#recovery-on-boot">Recovery on boot</a></li>
       <li><a href="#sync-modes">Sync modes</a></li>
       <li><a href="#four-watermark-lsn-discipline">Four-watermark LSN discipline</a></li>

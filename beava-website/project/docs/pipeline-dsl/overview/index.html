@@ -118,11 +118,11 @@
 <article class="docs-prose">
 <h1>Pipeline DSL Overview</h1>
 <blockquote>
-<p><strong>Status:</strong> Authoritative for v0. Documents the <strong>post-13.5 target</strong> Python
+<p><strong>Status:</strong> Authoritative for v0. Documents the <strong>v0 target</strong> Python
 pipeline-DSL surface. The current <code>python/beava/</code> predates the v0 launch
-design session — Phase 13.5 implements the rewrite. This doc is the spec
+design session — v0 implements the rewrite. This doc is the spec
 the rewrite targets.
-<strong>Last reviewed:</strong> 2026-05-03 (Phase 13.0).</p>
+<strong>Last reviewed:</strong> 2026-05-03.</p>
 </blockquote>
 <h2 id="what-pipelines-are" tabindex="-1"><a class="header-anchor" href="#what-pipelines-are" aria-hidden="true">#</a> What pipelines are</h2>
 <p>A beava <strong>pipeline</strong> is a small Python program that:</p>
@@ -164,7 +164,7 @@ def UserTxnFeatures(txn) -&gt; bv.Table:
            )
     )
 
-with bv.App() as app:                    # embed mode — spawns the binary locally
+with bv.App() as app: # embed mode — spawns the binary locally
     app.register(Txn, UserTxnFeatures)
     app.push(&quot;Txn&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;amount&quot;: 12.50})
     app.push(&quot;Txn&quot;, {&quot;user_id&quot;: &quot;alice&quot;, &quot;amount&quot;: 30.00})
@@ -190,10 +190,10 @@ class Txn:
 </code></pre>
 <p>You may parameterise the decorator with retention / dedupe knobs:</p>
 <pre><code class="language-python">@bv.event(
-    keep_events_for=&quot;30d&quot;,     # event-history retention for replay (optional)
-    dedupe_key=&quot;txn_id&quot;,       # idempotent re-pushes within dedupe_window
+    keep_events_for=&quot;30d&quot;, # event-history retention for replay (optional)
+    dedupe_key=&quot;txn_id&quot;, # idempotent re-pushes within dedupe_window
     dedupe_window=&quot;24h&quot;,
-    cold_after=&quot;7d&quot;,           # cold-entity TTL (Phase 12.8 D-01)
+    cold_after=&quot;7d&quot;, # cold-entity TTL (v0 D-01)
 )
 class Txn:
     txn_id: str
@@ -239,7 +239,7 @@ a tuple: <code>@bv.table(key=(&quot;user_id&quot;, &quot;card_id&quot;))</code>.
 exactly an <code>events.group_by(...).agg(...)</code> chain — <code>@bv.table</code> is sugar over
 the JSON wire derivation node with <code>output_kind=table</code>.</p>
 <p>Wire-level: the decorator emits a <code>{&quot;kind&quot;: &quot;derivation&quot;, &quot;name&quot;: &quot;&lt;Name&gt;&quot;, &quot;output_kind&quot;: &quot;table&quot;, &quot;key&quot;: [...], ...}</code> payload, identical to what the
-server would accept from a hand-written register JSON. SDK porters in 13.6
+server would accept from a hand-written register JSON. SDK porters in v0
 implement the same shape via builders (TS) or struct-returning functions (Go).</p>
 <h3 id="global-aggregation-bvtable-no-key-form-per-adr-003" tabindex="-1"><a class="header-anchor" href="#global-aggregation-bvtable-no-key-form-per-adr-003" aria-hidden="true">#</a> Global aggregation — <code>@bv.table</code> no-<code>key=</code> form (per ADR-003)</h3>
 <p>Per <a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-003-global-aggregation-and-bv-lit.md">ADR-003</a>, <code>@bv.table</code> may be declared <strong>without</strong> a <code>key=</code> kwarg → declares a <strong>global table</strong> (single output dict, no per-entity dimension). The wire-level signal is <code>key: []</code> (empty array).</p>
@@ -254,21 +254,21 @@ def UserClicks(c) -&gt; bv.Table:
     return c.group_by(&quot;user_id&quot;).agg(total=bv.count(window=&quot;1h&quot;))
 
 # Global (per ADR-003) — declares a single state slot for the whole table
-@bv.table   # no key= → global table
+@bv.table # no key= → global table
 def TotalClicks(c) -&gt; bv.Table:
-    return c.agg(total=bv.count(window=&quot;1h&quot;))   # no group_by
+    return c.agg(total=bv.count(window=&quot;1h&quot;)) # no group_by
 
-app.get(&quot;UserClicks&quot;, &quot;alice&quot;)  # → {&quot;total&quot;: 7}, requires entity arg
-app.get(&quot;TotalClicks&quot;)          # → {&quot;total&quot;: 1234}, no entity arg
+app.get(&quot;UserClicks&quot;, &quot;alice&quot;) # → {&quot;total&quot;: 7}, requires entity arg
+app.get(&quot;TotalClicks&quot;) # → {&quot;total&quot;: 1234}, no entity arg
 </code></pre>
 <p>Three equivalent forms compile to the same wire payload (all use <code>key: []</code>):</p>
-<pre><code class="language-python">clicks.agg(total=bv.count(...))                     # shortest — direct .agg() shorthand
-clicks.group_by().agg(total=bv.count(...))          # explicit empty group_by
-@bv.table                                           # decorator with no key=
+<pre><code class="language-python">clicks.agg(total=bv.count(...)) # shortest — direct .agg() shorthand
+clicks.group_by().agg(total=bv.count(...)) # explicit empty group_by
+@bv.table # decorator with no key=
 def Foo(c): return c.agg(total=bv.count(...))
 </code></pre>
 <p>All 53 operators work with both per-entity and global aggregation — same op semantics, different state-keying dimension. See <a href="/docs/concepts/global-aggregation/"><code>docs/concepts/global-aggregation.md</code></a> for the full conceptual treatment (when to use global vs per-entity, performance characteristics, composition with <code>cold_after=</code>).</p>
-<p>Implementation deferred to Phase 13.4 (engine sentinel routing) + Phase 13.5 (Python SDK no-<code>key=</code> form) + Phase 13.6 (TS + Go SDK overloads). Acceptance gate: <code>python/tests/v0/test_global.py</code> (Plan 13.0-16, 8 tests).</p>
+<p>Implementation deferred to the engine rename + v0 (Python SDK no-<code>key=</code> form) + v0 (TS + Go SDK overloads). Acceptance gate: <code>python/tests/v0/test_global.py</code> (an internal plan, 8 tests).</p>
 <h2 id="chain-methods-overview" tabindex="-1"><a class="header-anchor" href="#chain-methods-overview" aria-hidden="true">#</a> Chain methods overview</h2>
 <p>Stateless op methods are available on every <code>EventSource</code> and
 <code>EventDerivation</code> (and on the result of <code>.filter(...)</code> etc., enabling
@@ -363,7 +363,7 @@ that.</li>
 <li><strong>Session windows</strong> (<code>bv.session(gap_ms=..., inner=...)</code>) — out of v0 + v0.1
 per <code>.planning/ideas/session-windows-v0.1.md</code>.</li>
 <li><strong>Table mutation surface</strong> (<code>app.upsert / app.delete / app.retract</code>) —
-killed in Phase 12.7. <code>@bv.table</code> is revived for <strong>aggregation output
+killed in v0. <code>@bv.table</code> is revived for <strong>aggregation output
 only</strong> per <a href="https://github.com/beava-dev/beava/blob/main/.planning/decisions/ADR-001-bv-table-partial-overturn.md">ADR-001</a>.</li>
 <li><strong><code>bv.fork(...)</code> / <code>playground.beava.dev</code></strong> — dropped from the v0 ship.</li>
 <li><strong>CEP / sequence pattern detection / <code>on_timer</code> callbacks</strong> — deferred

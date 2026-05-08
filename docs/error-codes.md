@@ -4,7 +4,7 @@
 > emits across the wire (HTTP and TCP transports), the Python exception
 > hierarchy, the 9 frozen `ValidationError.kind` values, and the HTTP status
 > mapping. This document is the canonical reference for SDK error handling.
-> **Last reviewed:** 2026-05-03 (Phase 13.0).
+> **Last reviewed:** 2026-05-03.
 
 ## Overview
 
@@ -31,7 +31,7 @@ validation), `"fields.amount"` (during push), `"requests[2].table"` (during
 batch_get). Optional — absent for transport-level errors.
 
 The **`message`** field is human-readable. **Forward-looking framing per
-Phase 12.7 D-02** applies — messages say "X is not supported in v0",
+the events-only error framing** applies — messages say "X is not supported in v0",
 **not** "X has been removed" or "X was deprecated". The framing avoids
 implying a previous-version reference for users who never saw older
 revisions of the surface.
@@ -47,10 +47,10 @@ The Python SDK exposes three exception types (re-exported from `beava`):
 ```python
 class RegistrationError(Exception):
     """Raised when registration fails — locally (DAG/schema) or on the server (409)."""
-    code: str                              # Structured code (one of the codes below)
-    path: str                              # DAG / JSON path
-    message: str                           # Human-readable
-    errors: list[ValidationError]          # Full list when server returns multiple
+    code: str # Structured code (one of the codes below)
+    path: str # DAG / JSON path
+    message: str # Human-readable
+    errors: list[ValidationError] # Full list when server returns multiple
 ```
 
 ```python
@@ -69,9 +69,9 @@ class BinaryNotFoundError(Exception):
 @dataclass(frozen=True)
 class ValidationError:
     """Frozen dataclass for client-side and server-side validation errors."""
-    kind: str                              # One of the 9 frozen kinds below
-    path: str                              # JSON-pointer-style path
-    message: str                           # Human-readable
+    kind: str # One of the 9 frozen kinds below
+    path: str # JSON-pointer-style path
+    message: str # Human-readable
 ```
 
 `RegistrationError` is the canonical exception raised on register failures —
@@ -104,7 +104,7 @@ ADR. Source: `python/beava/_errors.py::VALIDATION_ERROR_KINDS`.
 | `table_key_invalid` | Composite-key shape is malformed at register time (empty list, non-string element, references unknown field). |
 | `registration_conflict` | Destructive change (field type change, field removal, derivation removal) without `force=true`. |
 | `duplicate_name` | Two descriptors in the same register call have the same `_name`. |
-| `unsupported_node_kind` | Body has `kind="upsert"` / `kind="delete"` / `kind="retract"` etc. — pre-12.7 surface that is permanently killed per `project_v0_events_only_scope`. Per ADR-001, `kind="table"` is now PERMITTED for aggregation-output (Phase 13.4). |
+| `unsupported_node_kind` | Body has `kind="upsert"` / `kind="delete"` / `kind="retract"` etc. — pre-v0 surface that is permanently killed per `project_v0_events_only_scope`. Per ADR-001, `kind="table"` is now PERMITTED for aggregation-output. |
 
 ## Structured codes (alphabetical)
 
@@ -226,7 +226,7 @@ processing-time only; the server stamps wall-clock arrival time on every push.
 **Recovery:** Remove the `event_time` field / kwarg. Windowed operators bucket
 on server-side `now_ms()` automatically. The Python SDK rejects this at
 decoration time (`TypeError`); register-time rejection is the server's defense
-against hand-written JSON. Wire-level codes from Phase 12.6:
+against hand-written JSON. Wire-level codes:
 `unknown_field_event_time_v0` / `unknown_field_tolerate_delay_v0`.
 
 ### code = "feature_not_in_table"
@@ -262,8 +262,7 @@ joins in a future minor release.
 **Wire opcode (TCP):** `OP_ERROR_RESPONSE = 0xFFFF` (JSON body shape below)
 **When:** A `POST /register` payload contains a destructive change (rename,
 type-change, op removal, agg removal, window-change, or key-cols change) and
-`force=true` is not set in the body. Per D-01 (Phase 13.4 Plan 06,
-USER-LOCKED), destructive registry changes require an explicit `force=true`
+`force=true` is not set in the body. Per D-01 (USER-LOCKED), destructive registry changes require an explicit `force=true`
 opt-in to apply; otherwise the server rejects with this code.
 **Path:** *(no path; the offending changes are enumerated in `error.diff.destructive`)*
 **Recovery:** Either (1) send `force=true` in the register body to apply
@@ -310,13 +309,13 @@ The diff envelope is **categorized lists** (NOT JSON-Patch). Each entry's
 `kind` discriminator names the destructive class per D-01.
 
 `force_required` is distinct from the legacy `registration_conflict` (HTTP
-409) emitted by the Phase 2 diff machinery — `registration_conflict`
+409) emitted by the diff machinery — `registration_conflict`
 predates D-01 and uses a different envelope shape. Both codes coexist in
-the v0 surface; the dispatch order is force_required FIRST (Phase 13.4
-Plan 06), legacy `registration_conflict` SECOND (additive-only path with a
+the v0 surface; the dispatch order is force_required FIRST (v0
+an internal plan), legacy `registration_conflict` SECOND (additive-only path with a
 diff that still detects schema drift from the prior registry).
 
-**Source:** Phase 13.4 Plan 06 / D-01 (USER-LOCKED).
+**Source:** v0 an internal plan / D-01 (USER-LOCKED).
 
 ### code = "frame_too_large"
 
@@ -450,7 +449,7 @@ sort. The SDK's local validator surfaces it as `cycle` (the
 **Wire opcode (TCP):** `OP_ERROR_RESPONSE = 0xFFFF` (JSON body shape below)
 **When:** A `POST /reset` (HTTP) or `OP_RESET` (TCP, opcode `0x0040`) request
 arrives at a server whose effective `test_mode` flag is `false`. Per D-03
-(Phase 13.4 Plan 08, USER-LOCKED), `OP_RESET` is the full state + registry
+(USER-LOCKED), `OP_RESET` is the full state + registry
 clear — production-by-default rejects it.
 **Path:** *(no path)*
 **Recovery:** Enable `test_mode` via either of two boot-time opt-ins (the
@@ -487,7 +486,7 @@ actionable error text. Test
 `phase13_4_reset_default_rejected::default_config_no_env_var_post_reset_returns_403_structured`
 pins this contract.
 
-**Source:** Phase 13.4 Plan 08 / D-03 (USER-LOCKED). Predecessor: the
+**Source:** v0 an internal plan / D-03 (USER-LOCKED). Predecessor: the
 pre-D-03 sketch used the shorter code `reset_disabled` with a single-flag
 gate; this entry replaces it.
 
@@ -563,7 +562,7 @@ authors must take care.
 **HTTP status:** 400
 **When:** A windowless op (lifetime mode — `window=` omitted or set to
 `"forever"`) without a finite per-entity memory bound was registered. Per
-V0-MEM-GOV-02 (Phase 12.8), every windowless op MUST declare a bound via
+V0-MEM-GOV-02, every windowless op MUST declare a bound via
 `O1` / `BoundedSketch` / `BoundedByRequiredKwarg` / `BoundedByConfig`.
 **Path:** `descriptors[<i>].agg.<feature>`.
 **Recovery:** Either (1) add a `window=` kwarg to bound the op to a sliding
@@ -663,9 +662,9 @@ reserved).
 
 **HTTP status:** 400
 **When:** Register payload has `kind="upsert"` / `kind="delete"` /
-`kind="retract"` etc. — pre-12.7 surface that is permanently killed per
+`kind="retract"` etc. — pre-v0 surface that is permanently killed per
 `project_v0_events_only_scope`. Per ADR-001, `kind="table"` is now PERMITTED
-for aggregation-output (the JSON-prelude shim amendment lands in Phase 13.4).
+for aggregation-output (the JSON-prelude shim amendment landed in v0).
 **Path:** `nodes[<i>].<name>.kind`.
 **Recovery:** Use `kind="event"`, `kind="table"` (aggregation-output only per
 ADR-001), or `kind="derivation"`. Mutation surfaces (upsert/delete/retract)
@@ -718,7 +717,7 @@ concerns (retry on `5xx`, fail-fast on `4xx`).
 
 ## Forward-looking framing rule
 
-Per Phase 12.7 D-02 (locked 2026-05-01), error messages use **forward-looking
+Per the events-only error framing (locked 2026-05-01), error messages use **forward-looking
 framing**:
 
 - ✅ "X is not supported in v0" — implies future versions may add support.
