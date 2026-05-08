@@ -47,13 +47,9 @@ const LEGACY_PAGES = [
     content: `Chapter 1: from zero to a per-customer analytics dashboard. A 10-minute interactive
       build using beava's stream and table operators. Pedagogy first; reference second.`,
   },
-  {
-    url: '/guide/recipes/fraud/',
-    meta: { title: 'Fraud detection recipe', section: 'Guide' },
-    content: `Fraud recipe: real-time signals from velocity, geo, recency, and inter-arrival
-      operators. Build a fraud-team feature pack. Use bv.histogram, bv.rate_of_change,
-      bv.geo_distance, bv.streak.`,
-  },
+  // /guide/recipes/fraud/ existed at the time this list was authored
+  // but was deleted in 0d285744 ("drop broken internal links to
+  // deleted rendered docs"). Removed from the index list 2026-05-08.
   {
     url: '/field-guide-ch1.html',
     meta: { title: 'Field guide chapter 1', section: 'Field guide' },
