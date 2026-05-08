@@ -458,43 +458,112 @@
 }
 .pager a.next { text-align: right; }
 
-/* ===== RIGHT TOC ===== */
+/* ===== RIGHT TOC =====
+ * Density-tuned: 13 entries on the App page (6 h2 + 7 h3 methods)
+ * fit comfortably inside `calc(100vh - 92px)` on a 13" laptop with
+ * the spacings below. Explicit font-family on `.toc li a` defends
+ * against unexpected inheritance — h3 method anchors must NOT pick
+ * up the serif weight of the source `<h3 class="name">` heading. */
 .toc {
   /* Sticky offset = SiteHeader height (60px) + 32px breathing room
      so the kicker doesn't kiss the header border. */
   position: sticky; top: 92px;
   align-self: start;
-  padding: 40px 0 40px 28px;
+  padding: 32px 0 32px 28px;
   max-height: calc(100vh - 92px);
   overflow-y: auto;
 }
 .toc .kicker {
   font-family: var(--font-sans); font-weight: 600; font-size: 11px;
   text-transform: uppercase; letter-spacing: 0.1em;
-  color: var(--fg3); margin: 0 0 14px;
+  color: var(--fg3); margin: 0 0 10px;
 }
-.toc ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 1px; }
+.toc ul {
+  list-style: none; padding: 0; margin: 0;
+  display: flex; flex-direction: column; gap: 0;
+}
 .toc li a {
   display: block;
-  padding: 5px 0 5px 12px;
-  font-size: 13px; color: var(--fg3); text-decoration: none;
+  padding: 4px 0 4px 12px;
+  font-family: var(--font-sans);
+  font-size: 12.5px; line-height: 1.4;
+  font-weight: 500;
+  color: var(--fg3); text-decoration: none;
   border-left: 2px solid transparent;
   transition: color 120ms var(--ease-out), border-color 120ms var(--ease-out);
 }
 .toc li a:hover { color: var(--fg1); }
-.toc li.h3 a { padding-left: 22px; font-size: 12.5px; }
+.toc li.h3 a {
+  padding-left: 22px;
+  font-size: 12px;
+  color: color-mix(in oklab, var(--fg3) 88%, transparent);
+}
 .toc li.active a {
   color: var(--accent); font-weight: 600;
   border-left-color: var(--accent);
 }
 .toc .footer-links {
-  margin-top: 24px; padding-top: 18px;
+  margin-top: 18px; padding-top: 14px;
   border-top: 1px solid var(--border);
-  display: flex; flex-direction: column; gap: 9px;
+  display: flex; flex-direction: column; gap: 8px;
   font-size: 12.5px;
 }
 .toc .footer-links a {
   color: var(--fg3); text-decoration: none;
   display: inline-flex; align-items: center; gap: 7px;
+  font-family: var(--font-sans);
 }
 .toc .footer-links a:hover { color: var(--accent); }
+
+/* ===== HEADING ANCHOR COPY LINK =====
+ * Mirrors the `.bv-content` anchor pattern from docs-kit.css. The
+ * anchor element is injected by /scripts/docs-headings.js (now
+ * extended to target `.content h2[id]` / `.content h3[id]` for SDK
+ * pages). Hover the heading to reveal the link icon; click copies
+ * the section URL to clipboard.
+ *
+ * Sub-section h3s without an id (Args / Returns / Raises / Example
+ * inside each method block) stay quiet — the script only injects on
+ * id-bearing headings. Method-name h3s INSIDE `.method-head`
+ * (id="register" etc.) do get the icon — they're the canonical link
+ * targets per method. */
+.content h2 .heading-anchor-link,
+.content h3 .heading-anchor-link {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 10px;
+  vertical-align: 2px;
+  width: 18px;
+  height: 18px;
+  padding: 2px;
+  border-radius: 5px;
+  color: var(--fg3);
+  opacity: 0;
+  transition: opacity 120ms var(--ease-out),
+              color 120ms var(--ease-out),
+              background 120ms var(--ease-out);
+  text-decoration: none;
+}
+.content h2 .heading-anchor-link svg,
+.content h3 .heading-anchor-link svg {
+  width: 14px; height: 14px; display: block;
+}
+.content h2:hover .heading-anchor-link,
+.content h3:hover .heading-anchor-link { opacity: 0.55; }
+.heading-anchor-link:hover {
+  opacity: 1 !important;
+  color: var(--accent);
+  background: var(--beava-orange-wash);
+}
+.heading-anchor-link.copied {
+  opacity: 1 !important;
+  color: #19a974; /* beava success — same as SiteFooter status pill */
+  background: rgba(25, 169, 116, 0.10);
+}
+.heading-anchor-link.copied::after {
+  content: "Copied";
+  margin-left: 6px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+}

@@ -1,7 +1,9 @@
 // docs-headings.js — copy-link icon on every H2/H3 with an id.
-// Targets both surfaces:
+// Targets three surfaces:
 //   .docs-prose  → markdown-rendered docs (mass-gen)
 //   .bv-content  → React-based docs (vision, get-started, concepts, RFCs)
+//   .content     → SDK reference pages under /sdk/ (App, @bv.event,
+//                  HTTP API, etc.) — extended 2026-05-08 sub-session A
 // Click copies the canonical URL with anchor to the clipboard and updates
 // the address bar without scrolling.
 (function () {
@@ -9,6 +11,7 @@
     var selectors = [
       '.docs-prose h2[id]', '.docs-prose h3[id]',
       '.bv-content h2[id]', '.bv-content h3[id]',
+      '.content h2[id]',    '.content h3[id]',
     ].join(', ');
     var headings = document.querySelectorAll(selectors);
     headings.forEach(function (h) {

@@ -67,8 +67,11 @@
       <div id="bv-sdk-sidebar"></div>
     </aside>
 
-    <!-- ============ MAIN ============ -->
-    <main class="content">
+    <!-- ============ MAIN ============
+         `data-pagefind-body` tells the Pagefind crawler this is the
+         main content region to index for search. Sidebar / TOC / nav
+         are excluded by build-search.mjs's excludeSelectors list. -->
+    <main class="content" data-pagefind-body>
 
       <div class="crumbs">
         <a href="/">beava</a><span class="sep">/</span>
@@ -562,5 +565,10 @@ app<span class="tk-p">.</span>close<span class="tk-p">()</span>  <span class="tk
   </script>
 
   <script src="/js/copy-buttons.js" defer></script>
+  <!-- Heading anchor copy-link icons. Injects a "#" affordance into every
+       <h2 id> / <h3 id> inside `.content` (matches the `.bv-content` and
+       `.docs-prose` surfaces too). Idempotent + uses MutationObserver to
+       catch React-mounted content. -->
+  <script src="/scripts/docs-headings.js" defer></script>
 </body>
 </html>

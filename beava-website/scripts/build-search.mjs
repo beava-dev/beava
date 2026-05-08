@@ -93,6 +93,18 @@ async function main() {
   });
   console.log(`addDirectory: ${dirRes.page_count} pages from project/docs/`);
 
+  // Index the SDK reference pages. These are hand-written HTML (not
+  // markdown-rendered) but the prose lives in plain elements inside
+  // `<main class="content" data-pagefind-body>`, so Pagefind's HTML
+  // parser picks them up directly. Sidebar / TOC / pager are mounted
+  // via React+Babel into divs OUTSIDE the data-pagefind-body main, so
+  // they're excluded from the index without further configuration.
+  const sdkRes = await index.addDirectory({
+    path: SITE_ROOT,
+    glob: 'sdk/**/*.html',
+  });
+  console.log(`addDirectory: ${sdkRes.page_count} pages from project/sdk/`);
+
   // Curated legacy entries
   for (const p of LEGACY_PAGES) {
     await index.addCustomRecord({
