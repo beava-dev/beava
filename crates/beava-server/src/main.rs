@@ -7,7 +7,13 @@
 use anyhow::{Context, Result};
 use beava_persistence::{Persistence, SyncMode};
 use beava_server::server::ServerV18Config;
-use beava_server::{banner, cli::Cli, logging, shutdown::shutdown_signal, ServerV18};
+use beava_server::{
+    banner,
+    cli::{Cli, Command},
+    logging, quickstart,
+    shutdown::shutdown_signal,
+    ServerV18,
+};
 use clap::Parser;
 use std::path::PathBuf;
 
@@ -39,6 +45,16 @@ fn resolve_config(
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+
+    // Subcommand dispatch — when present, runs to completion and exits;
+    // we never fall through to the server-boot path. The default
+    // (no subcommand) keeps booting the server, preserving back-compat
+    // for every existing `beava` / `beava -c foo.yaml` invocation.
+    if let Some(cmd) = cli.command {
+        return match cmd {
+            Command::Quickstart { no_file } => quickstart::run(no_file),
+        };
+    }
 
     let (cfg, source_label) =
         resolve_config(cli.config.as_ref()).with_context(|| match cli.config.as_ref() {
