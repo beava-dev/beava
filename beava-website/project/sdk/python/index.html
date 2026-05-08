@@ -126,17 +126,31 @@
 
       <!-- =============== INSTALL =============== -->
       <h2 id="install"><span class="step-num">01</span> Install beava</h2>
-      <p>You install two things: the <strong>server</strong> (the single binary that holds state) and the <strong>Python client</strong> (the SDK that talks to it).</p>
+      <p>One <code>pip install beava</code> ships the SDK <em>and</em> the Rust server binary (~14 MB wheel, polars / ruff / uv pattern). If you'd rather run the server in a container, Docker is the alternative.</p>
 
-      <h3>Server</h3>
       <div class="tabs" data-tabs="server">
         <div class="tabs-strip">
-          <button class="active" data-target="t-docker">docker</button>
-          <button data-target="t-cargo">cargo</button>
-          <button data-target="t-source">from source</button>
+          <button class="active" data-target="t-pip">pip</button>
+          <button data-target="t-docker">docker</button>
         </div>
 
-        <div class="tabs-panel active" id="t-docker">
+        <div class="tabs-panel active" id="t-pip">
+          <div class="codeblock">
+            <div class="codeblock-head">
+              <span class="filename">terminal</span>
+              <button class="copy-btn">Copy</button>
+            </div>
+<pre><span class="tk-k">pip</span> install beava
+
+<span class="tk-c"># SDK + server binary land together; `beava` is now on PATH</span>
+<span class="tk-k">beava</span> --data-dir ./.beava/
+<span class="tk-c"># → HTTP listen   : 127.0.0.1:8080</span>
+<span class="tk-c"># → TCP listen    : 127.0.0.1:8081 (enabled=true)</span></pre>
+          </div>
+          <p>The wheel bundles the production <code>beava</code> binary into <code>&lt;sysconfig.get_path("scripts")&gt;/beava</code>, so embed mode (<code>bv.App()</code> with no URL) finds it without extra setup. Drop <code>--data-dir</code> for an in-process tryout — defaults to <code>./.beava/</code>. Add <code>--memory-only</code> to skip the WAL entirely.</p>
+        </div>
+
+        <div class="tabs-panel" id="t-docker">
           <div class="codeblock">
             <div class="codeblock-head">
               <span class="filename">terminal</span>
@@ -148,54 +162,16 @@
   -v beava-data:/data \
   beavadev/beava:edge
 
+<span class="tk-c"># SDK install — the wheel still works without the bundled binary</span>
+<span class="tk-c"># on PATH; pass an explicit URL to `bv.App(url=...)`.</span>
+<span class="tk-k">pip</span> install beava
+
 <span class="tk-c"># verify</span>
 <span class="tk-k">curl</span> -X POST http://localhost:8080/ping
 <span class="tk-c"># → {"pong":true,"registry_version":0}</span></pre>
           </div>
           <p>Port <code>8080</code> is the HTTP data plane (push, get, batch_get, register, ping). Port <code>8081</code> is the framed-TCP fast-path (sub-millisecond JSON). Admin endpoints (<code>/health</code>, <code>/ready</code>, <code>/metrics</code>, <code>/registry</code>) live on a separate sidecar port that you opt into via the <code>--http-addr</code> / <code>--config</code> flags.</p>
         </div>
-
-        <div class="tabs-panel" id="t-cargo">
-          <div class="codeblock">
-            <div class="codeblock-head">
-              <span class="filename">terminal</span>
-              <button class="copy-btn">Copy</button>
-            </div>
-<pre><span class="tk-k">cargo</span> install --git https://github.com/beava-dev/beava beava-server
-<span class="tk-k">beava</span> --memory-only
-<span class="tk-c"># → HTTP listen   : 127.0.0.1:8080</span>
-<span class="tk-c"># → TCP listen    : 127.0.0.1:8081 (enabled=true)</span></pre>
-          </div>
-          <p>Requires Rust 1.74+. <code>--memory-only</code> skips the WAL — useful for kicking the tyres. Drop it for production (state lands under <code>./.beava/</code> by default).</p>
-        </div>
-
-        <div class="tabs-panel" id="t-source">
-          <div class="codeblock">
-            <div class="codeblock-head">
-              <span class="filename">terminal</span>
-              <button class="copy-btn">Copy</button>
-            </div>
-<pre><span class="tk-k">git</span> clone https://github.com/beava-dev/beava
-<span class="tk-k">cd</span> beava
-<span class="tk-k">cargo</span> run --release --bin beava</pre>
-          </div>
-        </div>
-      </div>
-
-      <h3>Python client</h3>
-      <div class="codeblock">
-        <div class="codeblock-head">
-          <span class="filename">terminal</span>
-          <button class="copy-btn">Copy</button>
-        </div>
-<pre><span class="tk-k">pip</span> install <span class="tk-s">"git+https://github.com/beava-dev/beava.git#subdirectory=python"</span></pre>
-      </div>
-
-      <div class="callout note">
-        <span class="ic">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-        </span>
-        <p>PyPI publish lands at v0.0.x — <code>pip install beava</code> will work then. For the v0.0.0 cut the SDK installs from the GitHub source above. Both URLs keep working after the PyPI cut.</p>
       </div>
 
       <div class="callout tip">

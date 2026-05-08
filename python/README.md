@@ -5,18 +5,16 @@ Python SDK for [Beava](https://github.com/beava-dev/beava), the single-binary re
 ## Install
 
 ```bash
-pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"
+pip install beava
 ```
 
-PyPI publish (`pip install beava`) lands in v0.0.x — see the [root README](https://github.com/beava-dev/beava#readme) for status.
+The wheel ships the SDK **and** the Rust `beava` server binary (v0.4.0+, polars-style). After install, the `beava` shell command is on `PATH` and the SDK can run against it directly — including embed mode (`bv.App()` with no URL).
 
-You also need the `beava` server running. Quickest path:
+If you'd rather run the server in a container, Docker is the alternative:
 
 ```bash
 docker run -p 8080:8080 -p 8081:8081 beavadev/beava:edge
 ```
-
-Other install options (Homebrew, Cargo, source build) are listed in the [root README quickstart](https://github.com/beava-dev/beava#60-second-quickstart).
 
 ## Quickstart
 
@@ -60,7 +58,7 @@ app = bv.App(url="tcp://localhost:8081")
 app = bv.App()
 ```
 
-Embed mode requires the `beava` binary on `PATH` (`brew install beava` or `docker pull beavadev/beava`) or `BEAVA_BINARY=/path/to/beava` set.
+Embed mode finds the `beava` binary that ships with `pip install beava` automatically. Override with `BEAVA_BINARY=/path/to/beava` if you want to point at a different build.
 
 ## Surface
 

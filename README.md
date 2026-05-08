@@ -23,18 +23,14 @@ Think **Redis for stateful streaming features**, with 50+ purpose-built aggregat
 
 ## 60-second quickstart
 
-Pre-release: install everything from main. PyPI / crates.io / Homebrew tap publish on the v0.0.0 cut.
-
 ```bash
-# Server (Docker — published from main on every push)
-docker run -p 8080:8080 -p 8081:8081 beavadev/beava:edge
-
-# Or build from source
-cargo install --git https://github.com/beava-dev/beava beava-server
+# pip ships the SDK + the Rust server binary (v0.4.0+; ~14 MB wheel,
+# polars / ruff / uv pattern). The `beava` shell command lands on PATH.
+pip install beava
 beava --data-dir ./.beava/
 
-# Python SDK (from main — PyPI 'beava' reserved for v0.0.0 GA)
-pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"
+# Or run the server in Docker (no Python required)
+docker run -p 8080:8080 -p 8081:8081 beavadev/beava:edge
 ```
 
 ```python
