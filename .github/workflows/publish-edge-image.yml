@@ -25,7 +25,10 @@ concurrency:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Bumped 30→45 after PR #17 — that build hit 30:20 on first run.
+    # Successful runs land in 22-25 min; the 45-min ceiling absorbs
+    # cache misses and multi-arch buildx slowdown without retries.
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v4
