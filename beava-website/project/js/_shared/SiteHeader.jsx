@@ -229,14 +229,24 @@ const SiteHeader = ({ active = null, search = false, maxWidth = 1200 }) => {
     }
   }, [mobileMenuOpen]);
 
-  // Inner container — width-capped to `maxWidth` and centered. Inner
-  // horizontal padding (28px) is load-bearing: it matches `.bv-docs-shell`
-  // and `.shell` (in /sdk/python/) so the brand on the left and nav on
-  // the right land at the SAME X position as the sidebar/TOC edges of
-  // the body content below the header. Without it, brand sits 28px to
-  // the left of the sidebar on wide viewports.
+  // Inner container — width-capped to match the body shell's outer
+  // bounding box and centered. Two pieces are load-bearing:
+  //
+  // 1. Internal padding `0 28px` matches `.bv-docs-shell` and `.shell`
+  //    (in /sdk/python/) so the brand on the left and nav on the right
+  //    land at the SAME X position as the sidebar/TOC edges below.
+  //
+  // 2. Effective max-width is `maxWidth + 56` (the prop value PLUS the
+  //    56px of horizontal padding) so the header's outer bounding box
+  //    matches `.bv-docs-shell`'s outer bounding box. Body shells use
+  //    `box-sizing: content-box` (CSS default) — their `max-width: 1400`
+  //    caps content area, so outer = 1400 + 56 padding = 1456. The
+  //    header inner uses `border-box` for narrow-viewport overflow
+  //    safety; without bumping `maxWidth` by 56 the chrome would be
+  //    56px narrower than the body and the user would see the docs
+  //    page "wider" than the header that sits above it.
   const inner = {
-    maxWidth, width: '100%', margin: '0 auto',
+    maxWidth: maxWidth + 56, width: '100%', margin: '0 auto',
     padding: '0 28px',
     display: 'flex', alignItems: 'center', gap: 24,
     boxSizing: 'border-box',
