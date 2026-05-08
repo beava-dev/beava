@@ -67,9 +67,9 @@ const SdkTOC = ({ editPath = '' }) => {
         {items.map(it => (
           <li key={it.id}
               className={[
-                it.level === 3 ? 'h3' : '',
+                it.level === 3 ? 'h3' : 'h2',
                 active === it.id ? 'active' : '',
-              ].filter(Boolean).join(' ') || undefined}>
+              ].filter(Boolean).join(' ')}>
             <a href={`#${it.id}`}>{it.label}</a>
           </li>
         ))}
