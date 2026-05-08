@@ -1,0 +1,147 @@
+# Build platform wheels for `pip install beava` and publish to PyPI on tag.
+#
+# From v0.4.0, the wheel ships the Rust `beava` server binary (maturin
+# `bindings = "bin"`). One wheel per (os, arch) combo + one sdist. We use
+# PyO3/maturin-action because it's the standard pattern for maturin
+# projects (polars / ruff / uv) — handles manylinux + cross-compilation
+# + interpreter resolution that cibuildwheel would require lots of
+# bespoke config to replicate.
+#
+# Triggers:
+#   - push tag v*       → full build + PyPI publish
+#   - workflow_dispatch → full build, no publish (verification path)
+#
+# First-time PyPI publish (establishing the `beava` project): configure a
+# Trusted Publisher on PyPI ahead of time as a "pending publisher" tied to
+# this repo + workflow file. Subsequent publishes need no token. Fallback
+# is an API token in the `PYPI_API_TOKEN` secret with `password:` set on
+# the publish step — used only if the `pypi` GitHub Environment isn't
+# configured.
+
+name: Release wheels (PyPI)
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: release-wheels-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: wheel (${{ matrix.os }} / ${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64
+          - os: ubuntu-latest
+            target: aarch64
+          - os: macos-13
+            target: x86_64
+          - os: macos-14
+            target: aarch64
+          - os: windows-latest
+            target: x86_64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # `bindings = "bin"` produces a single abi-none wheel per
+      # (platform, arch); no per-interpreter build needed. `--strip`
+      # echoes the strip=true flag in pyproject.toml; passing both is
+      # safe and explicit. `working-directory: python` makes maturin
+      # honor pyproject.toml's `manifest-path = "../crates/beava-server/..."`
+      # without an override flag.
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --strip --out dist
+          working-directory: python
+          manylinux: auto
+
+      - name: Smoke-test wheel imports
+        # Skip on aarch64 cross-builds: the wheel is built via qemu but
+        # can't run natively on the x86_64 runner. Native targets only.
+        if: matrix.target == 'x86_64' || (matrix.os == 'macos-14' && matrix.target == 'aarch64')
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install python/dist/*.whl
+          python -c "import beava; print('beava version:', getattr(beava, '__version__', 'n/a'))"
+          # The beava binary should be on PATH after `pip install` because
+          # the wheel ships it under <sysconfig.get_path('scripts')>/beava.
+          which beava || (echo "ERROR: beava binary not on PATH after pip install"; exit 1)
+          beava --help || true  # binary exists; --help may exit non-zero on usage errors
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.os }}-${{ matrix.target }}
+          path: python/dist/*.whl
+          if-no-files-found: error
+
+  sdist:
+    name: sdist
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
+          working-directory: python
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: python/dist/*.tar.gz
+          if-no-files-found: error
+
+  publish:
+    name: Publish to PyPI
+    needs: [build, sdist]
+    runs-on: ubuntu-latest
+    # Publish only on tag push — workflow_dispatch runs are verification-only.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    timeout-minutes: 15
+    environment:
+      name: pypi
+      url: https://pypi.org/p/beava
+    permissions:
+      # Required for PyPI Trusted Publishing (OIDC).
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Inventory artifacts
+        run: ls -la dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+          # Verbose output so a failed first publish is debuggable.
+          verbose: true
