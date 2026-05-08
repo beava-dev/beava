@@ -26,7 +26,10 @@
     grid-template-columns: 268px minmax(0, 1fr) 232px;
     max-width: 1400px;
     margin: 0 auto;
-    padding: 0 32px;
+    /* 28px horizontal padding matches `.bv-docs-shell` (docs-kit.css)
+       and the SiteHeader inner-container padding so the SDK sidebar's
+       left edge lands at the same X as the brand in the header above. */
+    padding: 0 28px;
     align-items: start;
   }
 

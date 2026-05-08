@@ -229,9 +229,17 @@ const SiteHeader = ({ active = null, search = false, maxWidth = 1200 }) => {
     }
   }, [mobileMenuOpen]);
 
+  // Inner container — width-capped to `maxWidth` and centered. Inner
+  // horizontal padding (28px) is load-bearing: it matches `.bv-docs-shell`
+  // and `.shell` (in /sdk/python/) so the brand on the left and nav on
+  // the right land at the SAME X position as the sidebar/TOC edges of
+  // the body content below the header. Without it, brand sits 28px to
+  // the left of the sidebar on wide viewports.
   const inner = {
     maxWidth, width: '100%', margin: '0 auto',
+    padding: '0 28px',
     display: 'flex', alignItems: 'center', gap: 24,
+    boxSizing: 'border-box',
   };
 
   const linkBase = {
@@ -383,7 +391,11 @@ const SiteHeader = ({ active = null, search = false, maxWidth = 1200 }) => {
       WebkitBackdropFilter: 'blur(10px)',
       borderBottom: '1px solid var(--border)',
       display: 'flex', alignItems: 'center',
-      padding: '0 24px',
+      // Outer padding intentionally 0 — the inner container's 28px
+      // horizontal padding is what governs brand/nav alignment with
+      // the body shell below. Adding outer padding here would push
+      // the brand right of where the docs sidebar starts on narrow
+      // viewports.
     }}>
       <HoverStyle/>
       <div style={inner}>
