@@ -1,0 +1,226 @@
+---
+title: "POST /push"
+description: "Push a single event."
+---
+
+Push a single event. ACK includes the WAL log offset and the registry version stamp.
+
+## Overview
+
+`POST /push` is the canonical write path for event ingestion. Send one event per request; the server validates it against the registered `EventDescriptor`, appends it to the write-ahead log, applies it to in-memory aggregations, and replies with the durable LSN once the WAL slot is reserved.
+
+- Default port: 8080 (the data-plane HTTP listener; configure via the server's http_addr).
+
+- Status: 200 OK on success; structured 4xx on validation failure (see [Errors](#errors)).
+
+- One event per request.
+
+Verb-style body, not path-style. The event name lives inside the JSON body under the event key — never in the URL path. Always POST /push; never POST /push/Foo.
+
+## Request
+
+### Headers
+
+- Content-Type: application/json — the only supported content type. /push always parses the body as JSON.
+
+### Body
+
+The body is a JSON object with two top-level keys:
+
+            event
+
+              string
+              required
+
+Name of a registered event type (e.g. `"Txn"`). Must match an `EventDescriptor` previously installed via `POST /register`; otherwise the server returns `404 event_not_found`.
+
+            data
+
+              object
+              required
+
+Event fields as a flat object. Keys must match the descriptor's declared `schema.fields`; unknown keys are rejected with `unknown_field_v0`. The names `event_time` and `event_time_ms` are reserved and rejected with `unknown_field_event_time_v0` — v0 is processing-time only.
+
+### Worked example — curl
+
+          push.sh
+          Copy
+
+```
+curl -X POST http://localhost:8080/push \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event": "Txn",
+    "data": {
+      "user_id": "alice",
+      "card_id": "card_001",
+      "amount": 42.50,
+      "merchant": "amazon",
+      "ip": "203.0.113.42"
+    }
+  }'
+```
+
+### Worked example — Python
+
+The Python SDK's `App` client wraps the same wire call:
+
+          push.py
+          Copy
+
+```
+import beava as bv
+
+app = bv.App("http://localhost:8080")
+ack = app.push("Txn", {
+    "user_id":  "alice",
+    "card_id":  "card_001",
+    "amount":   42.50,
+    "merchant": "amazon",
+    "ip":       "203.0.113.42",
+})
+print(ack["ack_lsn"])  # → 12345
+```
+
+## Response
+
+Success returns `200 OK` with a JSON body:
+
+          success body
+
+```
+{
+  "ack_lsn": 12345,
+  "registry_version": 1,
+  "idempotent_replay": false
+}
+```
+
+            ack_lsn
+
+              integer ≥ 0
+
+The durable WAL offset assigned to this event — server's monotonic Log Sequence Number. Reaching this LSN means the event survives a crash; the server returns `ack_lsn` as soon as the WAL slot is reserved (the WAL writer guarantees a fsync before the slot is reused).
+
+            registry_version
+
+              integer ≥ 1
+
+The server's current registry counter. Increments on every successful `/register`. Useful as a cache-key invalidation / schema-evolution signal on long-lived clients — when this value changes from one push to the next, the registry shape changed underneath you.
+
+            idempotent_replay
+
+              boolean
+
+`true` when the server identified this push as a re-delivery of a prior event — matched by the descriptor's `dedupe_key` within the dedupe window. The underlying state was *not* mutated; the response is byte-identical to the original ack. Always `false` when the descriptor has no `dedupe_key`, or when `dedupe_key` is set but the value is novel. The HTTP transport also signals replay via the `X-Beava-Idempotent-Replay: 1` response header.
+
+## Errors
+
+Every non-2xx response carries a JSON body with the canonical error envelope:
+
+          error envelope
+
+```
+{
+  "error": {
+    "code": "",
+    "path": "",      // optional
+    "message": ""           // optional
+  }
+}
+```
+
+The `code` field is a stable structured identifier; `path` and `message` are optional contextual detail. The push path emits these codes:
+
+            404 · event_not_found
+
+The `event` name doesn't match any registered `EventDescriptor`. Register the event first via `POST /register`.
+
+            400 · invalid_event
+
+`data` failed schema validation against the descriptor — wrong field types, wrong cardinality, or a required field missing. The canonical fixture for this case (with the optional `path` + `message` populated) lives at `examples/wire/push-validation-error.error.json`; SDKs surface that richer shape as `RegistrationError(code="schema_mismatch", path=…, message=…)`.
+
+            400 · invalid_json_body
+
+Request body isn't valid JSON. Most often a stray comma, an unquoted key, or a truncated payload.
+
+            400 · missing_event_name_in_body
+
+Body parsed as JSON but the top-level `event` string is absent or non-string. The verb-style envelope *requires* `{"event": "", "data": {…}}`.
+
+            400 · unknown_field_v0
+
+`data` contains a key not in the descriptor's `schema.fields` (and not declared optional). v0 strict-denies unknown fields rather than silently dropping them.
+
+            400 · unknown_field_event_time_v0
+
+Specialised case of `unknown_field_v0` for the reserved `event_time` / `event_time_ms` field names. v0 is processing-time only; clients sending event-time data get a structured 400 rather than silent acceptance.
+
+HTTP /push does not enforce Content-Type. The 415 unsupported_media_type code only fires on POST /register; /push attempts JSON parse against any body and emits invalid_json_body on failure. Always send Content-Type: application/json anyway — proxies and load balancers in front of beava may enforce it.
+
+## Worked example: end-to-end
+
+Canonical request and response:
+
+            request
+
+```
+{
+  "event": "Txn",
+  "data": {
+    "user_id": "alice",
+    "card_id": "card_001",
+    "amount": 42.50,
+    "merchant": "amazon",
+    "ip": "203.0.113.42"
+  }
+}
+```
+
+            response · 200 OK
+
+```
+{
+  "ack_lsn": 12345,
+  "registry_version": 1,
+  "idempotent_replay": false
+}
+```
+
+To reproduce locally: boot the server with a YAML config that sets `http_addr: 127.0.0.1:8080`, `storage.memory_only: true`, and `test_mode: true`, register a `Txn` event, then send the request above. Both fixture files validate against the JSON Schemas at `examples/wire/schemas/push.{request,response}.schema.json`.
+
+## TCP equivalent
+
+The framed-TCP fast-path carries the same JSON envelope under opcode `OP_PUSH = 0x0010`. Frame format:
+
+          tcp frame
+
+```
+[u32 length BE][u16 op = 0x0010][u8 content_type = 0x01][payload]
+
+payload:  JSON // {"event":"Txn","data":{...}}
+```
+
+TCP is strict-FIFO with one in-flight request per connection — the server replies in the same order it received requests. HTTP `/push` always parses bodies as JSON. The full opcode catalogue and frame state machine live on the [wire spec](/http/wire-spec) page.
+
+## Common questions
+
+          What's `idempotent_replay` for if I'm not setting `dedupe_key`?
+
+It's always `false` in that case — the server only consults the dedupe cache when the descriptor declares a `dedupe_key`. The field is on every push response so the wire shape is uniform regardless of whether dedupe is enabled. To opt in, declare `dedupe_key=""` on your `@bv.event` and the server will replay-detect within the descriptor's dedupe window.
+
+          Can I push multiple events in one request?
+
+No — `POST /push` is single-event. HTTP-level batching is intentionally absent: HTTP/1.1 keep-alive plus per-request acks already amortizes connection overhead well below the WAL throughput ceiling. Open one connection, fire many `POST /push` requests on it.
+
+          Is `ack_lsn` durable across restarts?
+
+Yes — `ack_lsn` is the WAL offset, persisted to disk before the server returns the ack. After a crash, recovery replays the WAL from the last snapshot up to the highest synced LSN, so any LSN you saw in a 200 response will be reflected in the post-recovery state. The same LSN is monotonically assigned across snapshots, so it remains a stable durability anchor for as long as the WAL files exist.
+
+## Where to go next
+
+You've sent your first event. The companion endpoints round out the data plane:
+
+→ **POST /get** ([/http/get](/http/get)) — Read a single feature row by entity key. JSON request, JSON response — pairs naturally with /push for the push-then-query loop.
+
+→ **App client** ([/python/app](/python/app)) — Python wrapper around /push, /get, /register, and the rest. Same wire shapes, with type hints and a context-manager lifecycle.

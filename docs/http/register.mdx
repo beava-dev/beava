@@ -1,0 +1,349 @@
+---
+title: "POST /register"
+description: "Register event sources and derivations."
+---
+
+Register event sources and derivations on a running beava server. Hot-reloadable — no restart. Each successful call bumps `registry_version`.
+
+## Overview
+
+`/register` is the cold path that installs (or extends) the pipeline a beava server runs. The body is a list of **nodes**; each node is either an event source (`kind: "event"`) or a derivation (`kind: "derivation"`). Two flags control behaviour:
+
+- dry_run: true — server validates and returns a categorized diff without committing.
+
+- force: true — replace conflicting descriptors instead of returning 409 force_required.
+
+Successful calls increment `registry_version` by one and append a `RegistryBump` record to the WAL before the in-memory registry mutates (apply-after-fsync). All client SDKs (`bv.App.register(...)`, the TCP fast-path, raw curl) emit the same JSON envelope documented below.
+
+## Request
+
+### Headers
+
+- Content-Type: application/json — required. Anything else returns 415 unsupported_media_type.
+
+### Body shape
+
+          envelope
+
+```
+{
+  "nodes": [ /* one or more node objects, see below */ ],
+  "force":    false,   // optional, default false
+  "dry_run":  false    // optional, default false
+}
+```
+
+The top-level field is nodes, not descriptors. Some early prototypes / external write-ups used descriptors — that key is rejected by the v0 server. Always send {"nodes": [...]}.
+
+            nodes
+
+              array<Node>
+              required
+
+Ordered list of nodes to install. Each entry is either an event source (`kind: "event"`) or a derivation (`kind: "derivation"`). Empty arrays are accepted and return `200 OK` with an unchanged `registry_version`.
+
+            force
+
+              bool
+
+If `true`, destructive changes (renames, type changes, key-cols changes, removed aggregations) are applied — the affected descriptor is dropped along with its accumulated state, and the new shape installs cleanly. Without `force`, destructive changes return `409 force_required`.
+
+default `false`
+
+            dry_run
+
+              bool
+
+If `true`, the server validates the payload and returns the categorized diff under `{"diff": ..., "would_apply": false}` without mutating the registry. `dry_run=true, force=true` still resolves to dry-run — dry-run wins so a "what would this do?" probe never escalates to a real mutation.
+
+default `false`
+
+### Node kinds
+
+- kind: "event" — an event source. The typed input shape you'll POST /push against.
+
+- kind: "derivation" — a derived node. Either an event-derivation (output_kind: "event", no aggregation) or a table-derivation (output_kind: "table", aggregation into a per-entity feature row).
+
+- Any other kind returns 400 unsupported_node_kind. v0 is events-only at the top level; tables are produced by derivations.
+
+### Event node — kind: "event"
+
+        {"kind": "event", "name": "<Name>", "schema": {"fields": {...}, "optional_fields": [...]}}
+
+An event source declares a typed payload shape that downstream `POST /push` calls have to match.
+
+### Fields
+
+- kind — literal "event".
+
+- name — string. The event-source identifier; case-sensitive, used as the event_name on /push.
+
+- schema.fields — object mapping field name → wire type. Allowed wire types: "str", "i64", "f64", "bool".
+
+- schema.optional_fields — array of field names that may be omitted on /push. Names must appear in schema.fields.
+
+- keep_events_for — optional duration string (e.g. "30d"). Retention horizon for the raw event log; events older than this are dropped from history.
+
+- cold_after_ms — optional integer. Per-entity cold-after threshold in milliseconds; entities idle longer than this are eligible for cold-storage tiering.
+
+### Example
+
+          event node
+
+```
+{
+  "kind": "event",
+  "name": "Txn",
+  "schema": {
+    "fields": {
+      "user_id":  "str",
+      "card_id":  "str",
+      "amount":   "f64",
+      "merchant": "str",
+      "ip":        "str"
+    },
+    "optional_fields": []
+  },
+  "keep_events_for": "30d",
+  "cold_after_ms":   86400000
+}
+```
+
+### Derivation node — kind: "derivation"
+
+        {"kind": "derivation", "name", "output_kind": "table"|"event", "upstreams": [...], "ops": [...], "table_primary_key"?: [...]}
+
+A derivation is a chain of operators applied to one or more upstream nodes. `output_kind` picks between two flavours:
+
+- "table" — aggregating derivation. Emits a per-entity row keyed by table_primary_key. Read with POST /get / POST /batch_get.
+
+- "event" — event-derivation. A typed transformation of an upstream event stream (filter / map / project) with no aggregation; downstream nodes can subscribe via upstreams.
+
+### Fields
+
+- kind — literal "derivation".
+
+- name — string. The node identifier; for output_kind: "table" this is also the table name on /get.
+
+- output_kind — "table" or "event".
+
+- upstreams — array of strings. Names of nodes (events or derivations) this node consumes. Compile-time-resolved against the registry.
+
+- ops — array of operator objects. Each operator carries an op name and a params object; operator-specific shapes are documented in the [Operator catalogue](/python/operators).
+
+- schema — optional. Required for output_kind: "event" derivations (declares the output event's field types); inferred for tables.
+
+- table_primary_key — array of field names. Required when output_kind: "table". An empty array ([]) declares a global aggregation — a single feature row keyed by the empty-string sentinel.
+
+### Example — table derivation (per-user)
+
+          derivation node — output_kind: table
+
+```
+{
+  "kind":               "derivation",
+  "name":               "UserTxnFeatures",
+  "output_kind":        "table",
+  "table_primary_key": ["user_id"],
+  "upstreams":         ["Txn"],
+  "ops": [
+    {
+      "op":   "group_by",
+      "keys": ["user_id"],
+      "agg": {
+        "tx_count_1h": { "op": "count", "params": { "window": "1h" } },
+        "tx_sum_1h":   { "op": "sum",   "params": { "field": "amount", "window": "1h" } },
+        "tx_p99_1h":   { "op": "quantile", "params": { "field": "amount", "q": 0.99, "window": "1h" } }
+      }
+    }
+  ]
+}
+```
+
+### Example — table derivation (global)
+
+An empty `table_primary_key` + empty `group_by.keys` declares a single global counter — one feature row keyed by the empty-string sentinel. Read it back with `POST /get` and `key=""`.
+
+          derivation node — global aggregation
+
+```
+{
+  "kind":               "derivation",
+  "name":               "GlobalCounter",
+  "output_kind":        "table",
+  "table_primary_key": [],
+  "upstreams":         ["Click"],
+  "ops": [
+    {
+      "op":   "group_by",
+      "keys": [],
+      "agg": {
+        "click_count": { "op": "count", "params": {} }
+      }
+    }
+  ]
+}
+```
+
+## Response — success
+
+`200 OK` with a flat JSON body:
+
+          success body
+
+```
+{
+  "status":                 "ok",
+  "registry_version":       1,
+  "added":                  ["Txn", "UserTxnFeatures"],
+  "already_present":        [],
+  "registered_descriptors": ["Txn", "UserTxnFeatures"]
+}
+```
+
+- status — literal "ok" on success.
+
+- registry_version — the post-call registry generation. Increments by one per successful registration that mutated state; unchanged on no-op / empty-payload calls.
+
+- added — names of nodes installed by this call (in payload order).
+
+- already_present — names from the payload that were already in the registry with the same shape; no-ops.
+
+- registered_descriptors — full snapshot of every descriptor name in the registry post-call. Not a copy of the request payload — it's the cumulative registry, including descriptors installed by prior /register calls.
+
+## Dry-run
+
+Pass `"dry_run": true` to validate without committing. The server runs the same destructive-change classifier it would for a real call, and returns the categorized diff:
+
+            request
+
+```
+{
+  "nodes": [
+    {
+      "kind":   "event",
+      "name":   "Login",
+      "schema": {
+        "fields": {
+          "user_id":   "str",
+          "device_id": "str"
+        },
+        "optional_fields": []
+      }
+    }
+  ],
+  "dry_run": true
+}
+```
+
+            response
+
+```
+{
+  "diff": {
+    "additive": [
+      { "kind": "new_descriptor", "name": "Login" }
+    ],
+    "destructive": []
+  },
+  "would_apply": false
+}
+```
+
+If the dry-run diff has *any* destructive entries, the equivalent real call would return `409 force_required`. Use this to gate destructive deploys behind a human approval step.
+
+## Force replace
+
+Destructive changes — type changes, renames, key-cols changes, removed aggregations — drop the affected descriptor's accumulated state when applied. Without `force=true`, the server returns `409 force_required` and refuses to proceed:
+
+          force replace
+
+```
+{
+  "nodes": [
+    {
+      "kind":   "event",
+      "name":   "Txn",
+      "schema": {
+        "fields": {
+          "user_id":  "str",
+          "amount":   "i64",
+          "currency": "str"
+        },
+        "optional_fields": []
+      }
+    }
+  ],
+  "force": true
+}
+```
+
+force=true drops accumulated state. Aggregation tables tied to the replaced descriptor lose every per-entity row; pushed events resume populating an empty table. Use a dry-run first, then bake the force flag into a deliberate cutover.
+
+## Errors
+
+All error responses share the envelope `{"error": {"code": "", ...}, "registry_version": }` with a non-2xx status. Codes:
+
+### 400 unsupported_node_kind
+
+A node carries a `kind` the server doesn't recognise. v0 accepts only `"event"` and `"derivation"`; tables are produced via `kind: "derivation", output_kind: "table"`. Body includes `path` (the JSON pointer of the offending node) and `reason`.
+
+### 400 invalid_registration
+
+The body parsed but failed schema validation — missing required field, unknown wire type, malformed operator params, unresolved upstream, etc. Body includes `path` and `reason`; v0 reports the first error wins.
+
+### 409 force_required
+
+The payload would destructively mutate the registry but `force` wasn't set. Body carries the diagnostic `diff` so callers can inspect what would change before retrying with `force: true`:
+
+          409 body
+
+```
+{
+  "code":   "force_required",
+  "reason": "Destructive registry change requires force=true. See diff for details.",
+  "diff": {
+    "additive": [],
+    "destructive": [
+      {
+        "kind":  "type_change",
+        "field": "Txn.amount",
+        "from":  "f64",
+        "to":    "i64"
+      }
+    ]
+  }
+}
+```
+
+### 415 unsupported_media_type
+
+Sent without `Content-Type: application/json`. Body: `{"error": {"code": "unsupported_media_type", "path": "/register", "reason": "expected application/json"}, "registry_version": 0}`.
+
+## TCP equivalent
+
+The framed-TCP fast-path carries the same JSON envelope under opcode `OP_REGISTER = 0x0001`. Frame layout: `[u32 length][u16 op=0x0001][u8 content_type=0x01 (json)][payload bytes]`. Strict-FIFO correlation per connection — one in-flight request at a time; no `request_id`. Success returns the same JSON body under `OP_REGISTER`; structured errors return `OP_ERROR_RESPONSE` with the same body shape as the HTTP `error` envelope. See the full [Wire spec](/http/wire-spec) for frame details.
+
+## Common questions
+
+          Why hot-reload? Doesn't that risk inconsistency?
+
+Registration is atomic at the `registry_version` boundary: either the WAL-fsynced `RegistryBump` commits and every subsequent `/push` sees the new shape, or it doesn't and the registry is unchanged. Pushes never see a half-installed pipeline. Long-lived clients can ping the data plane and check `registry_version` to invalidate their schema cache the moment a deploy lands.
+
+          Can I unregister a node?
+
+Two ways: (1) `force=true` a registration that replaces the descriptor with a new shape, or (2) restart the server with the desired registry.
+
+          What goes in `optional_fields`?
+
+Field names from `schema.fields` that may be omitted on `/push`. Pushes that omit a non-optional field return `schema_mismatch`; pushes that omit a listed optional field record the field as null. Use it for late-arriving signals (e.g. an enrichment that's eventually populated) — **not** for fields you'll always send. Aggregations over an optional field skip events where it's null.
+
+          Is `registered_descriptors` the same as my register payload?
+
+No — it's the full registry snapshot post-call, including descriptors installed by every prior `/register`. If the request was the first call against an empty server, the two will match by accident; in steady state they diverge. Treat `added` as "what this call did" and `registered_descriptors` as "what the server now knows about".
+
+## Where to go next
+
+→ **Wire spec** ([/http/wire-spec](/http/wire-spec)) — Framed-TCP layout, opcodes, status conventions, and the strict-FIFO correlation contract — every byte the server speaks.
+
+→ **@bv.event** ([/python/event](/python/event)) — The Python decorator that compiles to the event-node JSON above. Class form, def form, and the kwargs that surface as wire fields.

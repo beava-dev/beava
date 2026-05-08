@@ -1,0 +1,72 @@
+---
+title: "Windows"
+---
+
+[Docs](/docs/)
+              /
+              [Concepts](#)
+              /
+              Windows
+
+# Windows
+
+Windows let beava maintain features over recent time ranges.
+
+## Windowed aggregations
+
+Examples:
+
+- Count clicks in the last 10 minutes.
+
+- Sum spend in the last 1 hour.
+
+- Count impressions in the last 24 hours.
+
+- Track distinct users in the last 5 minutes.
+
+- Compute average price over the last day.
+
+            `
+{`@bv.table(key="campaign_id")
+def CampaignFeatures(ev: BidEvent):
+    return ev.group_by("campaign_id").agg(
+        spend_1h=bv.sum("price", window="1h", where=bv.col("event_type") == "win"),
+        wins_24h=bv.count(window="24h", where=bv.col("event_type") == "win"),
+    )`}
+            `
+
+Windows are one of the main ways beava turns raw events into useful state.
+
+## Why windows matter
+
+Applications often care most about what happened recently.
+
+A recommendation model may care about what a user clicked in the last hour. A fraud model may care about velocity in the last minute. A bidding system may care about pacing and impressions over the last 24 hours. An agent may care about recent tool calls or workflow state.
+
+**Fresh state is usually windowed state.**
+
+## Straightforward by default
+
+beava’s goal is to make common windowed aggregation straightforward.
+
+Developers should not need to build a full stream processing job just to express:
+            Count these events by key over this time range.
+
+The SDK should make windows feel like part of the feature definition.
+
+## Testing windowed features
+
+Windowed features should be testable.
+
+A good test can push a sequence of events, advance time, and assert the expected aggregate values.
+
+This matters because real-time feature bugs are often subtle. If feature owners can test the pipeline directly, they can move faster with more confidence.
+
+**Feature owners should own feature logic.**
+
+                Stuck on this one?
+
+Half the answers in our docs started as someone asking "is this a bug?" out loud. Drop into Discussions — a maintainer is usually around.
+
+                  [Ask on GitHub →](https://github.com/beava-dev/beava/discussions)
+                  [Ask on Discord](https://discord.gg/Jnx89PN9)

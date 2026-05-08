@@ -1,0 +1,117 @@
+---
+title: "Streams"
+---
+
+[Docs](/docs/)
+              /
+              [Concepts](#)
+              /
+              Events
+
+# Events
+
+An event is a fact your application produces. `@bv.event` declares the shape — beava ingests events and turns them into queryable per-key state.
+
+## What is an event?
+
+            `
+{`@bv.event
+class UserEvent:
+    user_id: str
+    item_id: str
+    event_type: str
+    ts: float`}
+            `
+
+An event is not just a transport message. It is part of the application model.
+
+It says:
+            These are the facts my application produces.
+
+## Events are inputs
+
+Tables depend on events. When an event arrives, beava updates every table that consumes it.
+
+One event type can feed many tables.
+
+For example, a `UserEvent` might feed:
+
+- User activity features
+
+- Item popularity features
+
+- Category affinity features
+
+- Session features
+
+- Fraud velocity features
+
+This keeps the event model simple while letting multiple feature views grow from the same input.
+
+## Derived events
+
+You can build a new event from an existing one without re-pushing data. A **derived event** is a filter or transform chain on top of a parent event — it has its own name and shape, and tables can depend on it just like a base event.
+
+The function form of `@bv.event` takes an upstream event and returns a chain. The function name becomes the derived event's name:
+            `
+{`@bv.event
+class Click:
+    user_id: str
+    page: str
+    amount: float
+
+@bv.event
+def Checkout(click: Click):
+    return click.filter(bv.col("page") == "/checkout")
+
+@bv.event
+def BigCheckout(checkout: Checkout):
+    return (
+        checkout
+        .filter(bv.col("amount") > 100)
+        .with_columns(bucket=bv.col("amount").cast(int) // 50)
+    )`}
+            `
+
+Push events to the parent (`Click`); beava routes matching records through the derivation chain and updates downstream tables for free. You never push to a derived event directly.
+
+Available chain methods (Polars-shaped): `filter(expr)`, `select(*cols)`, `drop(*cols)`, `rename(**mapping)`, `with_columns(**exprs)`, `cast(**type_map)`, `fillna(**defaults)`. Each returns a new derivation you can chain or register.
+
+**Use derived events to:** narrow a high-volume event to a meaningful subset (clicks → checkouts), pre-compute typed columns once instead of per-table, or split one wire-shape into multiple semantic events. They cost almost nothing — just a filter / projection on the apply path.
+
+## Good event design
+
+A good event should be:
+
+- Close to the application fact (one event = one thing that happened).
+
+- Easy to test.
+
+- Stable enough for downstream tables.
+
+- Explicit about timestamps.
+
+- Clear about entity identifiers.
+
+Avoid designing events around infrastructure first. Design them around what happened in the product. When the shape feels off, reach for a [derived event](#derived) before mutating the source.
+
+**Events are product facts. beava turns them into queryable state.**
+
+## Related reading
+
+- [Tables](/concepts/tables) — how events turn into per-key state.
+
+- [Windows](/concepts/windows) — sliding / tumbling / lifetime aggregations.
+
+- [Reads (get / batch_get)](/concepts/get-and-batch-get) — how the application reads features back by key.
+
+- [Freshness](/concepts/freshness) — what "live" actually means.
+
+- [Push events](/docs/get-started/push-events/) — the wire format for sending events in.
+
+                Stuck on this one?
+
+Half the answers in our docs started as someone asking "is this a bug?" out loud. Drop into Discussions — a maintainer is usually around.
+
+                  [Ask on GitHub →](https://github.com/beava-dev/beava/discussions)
+                  [Ask on Discord](https://discord.gg/Jnx89PN9)

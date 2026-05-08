@@ -1,0 +1,146 @@
+---
+title: "Wire spec"
+description: "TCP frame format and HTTP route table."
+---
+
+Two transports. One JSON body shape. Strict-FIFO on TCP. The bytes that move between any beava client and the server — enough to implement a third-party SDK.
+
+## Overview
+
+Beava ships two transports:
+
+- HTTP/1.1 on port 8080 — plain JSON, verb-style routes, ubiquitous tooling reach (curl / load-balancers / WAFs).
+
+- Custom-framed TCP fast-path on port 8081 — a four-byte length prefix plus a two-byte opcode, JSON payload, persistent connection, sub-millisecond P99.
+
+Both transports carry the same JSON envelope per opcode. The only differences are framing (HTTP headers vs the binary length-prefixed frame), the route/opcode mapping, and the strict-FIFO contract on TCP. Pick HTTP for reach; pick TCP for latency.
+
+Admin endpoints live on a separate port. Health, readiness, metrics and registry-introspection (/health, /ready, /metrics, /registry) are served by an admin sidecar bound to cfg.admin_addr. They are not part of the data-plane wire spec and are not exposed on the TCP port.
+
+## HTTP routes
+
+All data-plane writes and reads are `POST`. Verb-style URLs only — the event name and entity key live in the JSON body, not in path segments.
+
+| Method & path | Request body | Success body |
+| --- | --- | --- |
+| POST /ping | {} | {"pong": true, "registry_version": <n>} |
+| POST /register | {"nodes": [...], "force": false, "dry_run": false} | {"status": "ok", "registry_version": <n>, "added": [...], "already_present": [...]} — 409 on a name collision without force. |
+| POST /push | {"event": "<name>", "data": {...}} | {"ack_lsn": <n>, "idempotent_replay": false, "registry_version": <n>} |
+| POST /get | {"table": "<name>", "entity_id": "<key>", "features": [...]} | Flat row dict — e.g. {"visits": 2}. Cold-start returns {}. |
+| POST /batch_get | {"requests": [{"table","entity_id","features"?}, ...]} | {"results": [<row>, ...]} — one row per request, in submission order. |
+| POST /reset | {} | 200 with {"reset": true, "registry_version": <new>} when the server is in test mode; 403 + reset_disabled_in_production otherwise. |
+
+Errors on every route share one body shape — see [Errors](#errors) below.
+
+## TCP frame format
+
+Every TCP frame — request or response — has the same envelope. All multi-byte integers are big-endian (network byte order).
+
+          on-wire bytes
+
+```
+[u32 length BE][u16 op BE][u8 content_type][payload: length - 3 bytes]
+```
+
+| Field | Width | Meaning |
+| --- | --- | --- |
+| length | 4 bytes BE | Bytes that follow this field — i.e. op + content_type + payload.len(). Minimum value is 3 (op + content_type, empty payload). The length itself is not counted. |
+| op | 2 bytes BE | Opcode. See the table below. Request and response frames share the same opcode space; the client→server direction is implicit. |
+| content_type | 1 byte | 0x01 = JSON. Any other byte returns unsupported_content_type; the connection stays open, only the offending frame is rejected. |
+| payload | length − 3 bytes | Opcode-specific JSON body. Server enforces length ≤ tcp_max_frame_bytes + 3; default is 4 MiB payload (4 * 1024 * 1024). Frames over the limit are rejected with frame_too_large and the connection is closed. |
+
+          empty-payload OP_PING — 7 bytes total
+
+```
+# length=3 (op + ct), op=0x0000 (ping), ct=0x01 (JSON), payload=∅
+00 00 00 03  00 00  01
+```
+
+## TCP opcode table
+
+Opcodes are u16 big-endian. Opcodes outside this table return `unknown_op`.
+
+| Opcode | Name | Request payload | Response opcode & body |
+| --- | --- | --- | --- |
+| 0x0000 | OP_PING | Empty JSON ({} or zero-byte payload). | OP_GET_RESPONSE (0x0023) with {"pong": true, "registry_version": <n>}. |
+| 0x0001 | OP_REGISTER | Same JSON DAG body as POST /register: {"nodes":[...], "force"?, "dry_run"?}. | OP_GET_RESPONSE with the success body, or OP_ERROR_RESPONSE on conflict. |
+| 0x0010 | OP_PUSH | {"event": "<name>", "data": {...}} | OP_GET_RESPONSE with {"ack_lsn", "idempotent_replay", "registry_version"}. |
+| 0x0020 | OP_GET | {"table": "<name>", "entity_id": "<key>", "features": [...]} | OP_GET_RESPONSE with the flat row dict (cold-start: {}). |
+| 0x0023 | OP_GET_RESPONSE | Response-only. Generic JSON success-frame opcode shared by OP_PING, OP_REGISTER, OP_PUSH, OP_GET, OP_BATCH_GET, and OP_RESET. | Body is opcode-of-the-request-specific. |
+| 0x0024 | OP_BATCH_GET | {"requests": [{"table","entity_id","features"?}, ...]} — heterogeneous keys across tables in one frame. | OP_GET_RESPONSE with {"results": [<row>, ...]} in submission order. |
+| 0x0040 | OP_RESET | Empty JSON ({}). Test-mode-gated — if the server is not in test mode, returns OP_ERROR_RESPONSE with reset_disabled_in_production. | OP_GET_RESPONSE with {"reset": true, "registry_version": <new>}. |
+| 0xFFFF | OP_ERROR_RESPONSE | Response-only. Carries any structured error regardless of which opcode the request used. | {"error": {"code", "path", "message"}} — same shape as the HTTP error body. |
+
+## Content type byte
+
+The single-byte `content_type` field gates payload parsing. v0 ships one value: `0x01` = `CT_JSON`. Every frame the SDKs send sets this byte; server-to-client response frames also use `0x01`.
+
+Any other content-type byte returns `OP_ERROR_RESPONSE` with code `unsupported_content_type`. The connection is *not* closed — only that frame is rejected, so a misconfigured client doesn't tear down a healthy long-lived session.
+
+## Strict-FIFO contract
+
+Beava's TCP transport is **strict-FIFO**: at most one in-flight request per connection, and the server replies in the exact order it received requests. There is no `request_id` field on the wire because the order is the correlation.
+
+Concretely:
+
+- A client writes one frame, then waits for one response frame, then writes the next.
+
+- If a client writes two frames back-to-back, the server still replies in submission order — but the client must not interpret responses out of order or interleave reads from multiple application threads on the same socket.
+
+- The Python SDK's TCP transport enforces this client-side: a TCP-mode bv.App serialises send/recv on the socket, and concurrent calls from multiple threads block on a per-connection lock rather than racing the wire.
+
+**Do not multiplex on a single TCP connection.** Sharing a TCP connection across application threads or async tasks *without* a strict-FIFO mutex will interleave frames and corrupt the wire — there is no per-frame correlation ID to recover from. If you need parallelism on TCP, open multiple connections (one per thread or per task pool worker), each with its own send/recv lock.
+
+## Errors
+
+Every error — HTTP or TCP — has the same body shape:
+
+          error body
+
+```
+{
+  "error": {
+    "code":    "event_not_found",
+    "path":    "/push",
+    "message": "Unknown event 'PageView'"
+  }
+}
+```
+
+Over HTTP this body is returned with the appropriate `4xx` / `5xx` status. Over TCP it is wrapped in a frame whose opcode is `OP_ERROR_RESPONSE = 0xFFFF` regardless of which opcode the request used. The `code` field is a stable string SDK clients can match on (e.g. `event_not_found`, `invalid_event`, `unknown_table`, `reset_disabled_in_production`, `unsupported_content_type`, `unknown_op`, `frame_too_large`).
+
+## HTTP vs TCP — when to use which
+
+|  | HTTP/1.1 (port 8080) | TCP framed (port 8081) |
+| --- | --- | --- |
+| Reach | Anything that speaks HTTP — curl, browsers, load-balancers, WAFs, sidecars. | Custom protocol; you write or use a beava SDK. |
+| Latency | ~1–2 ms per RTT typical; dominated by HTTP parsing on both ends. | Sub-millisecond P99 on a warm connection. |
+| Connection model | Pooled / keep-alive. Stateless on the wire — any worker can answer. | Persistent. Strict-FIFO on a single socket; one in-flight request per connection. |
+| Payload | JSON. | JSON. |
+| Best for | Bootstrapping, ops dashboards, server-side scripts, anything behind a load-balancer. | Hot-path push/get from latency-sensitive clients (fraud-rule engines, ad-tech bidders). |
+
+## Common questions
+
+          Can I tunnel TCP through HTTP (e.g. via WebSockets)?
+
+No. The TCP fast-path is a raw length-prefixed framing — it has no upgrade dance, no HTTP framing, no WebSocket envelope. If you can't reach port 8081 directly, use the HTTP transport. Beava deliberately does not try to be both.
+
+          What's the maximum frame size?
+
+The configured `tcp_max_frame_bytes` applies to the *payload*, not the whole frame. Default is **4 MiB** (`4 * 1024 * 1024` = `4194304` bytes). The server accepts a `length` field of up to `tcp_max_frame_bytes + 3` (the `+3` covers `op + content_type`). Frames over the limit are rejected with `frame_too_large`; the connection is closed because the rest of the stream is not parseable. HTTP `POST` bodies have a parallel cap configured separately on the HTTP listener.
+
+          Is the wire format stable?
+
+The opcodes and their semantics are locked for v0. Existing opcodes never change shape; new wire features get new opcode numbers.
+
+          How do I implement a third-party SDK?
+
+Two layers. (1) A frame writer/reader: 4-byte length + 2-byte opcode + 1-byte content-type + payload. ~50 LOC in any language. (2) A JSON serialiser per opcode whose body shape is documented above. ~150 LOC for the six request opcodes (`OP_PING`, `OP_REGISTER`, `OP_PUSH`, `OP_GET`, `OP_BATCH_GET`, `OP_RESET`) plus the two response opcodes. Hold the strict-FIFO discipline (one in-flight request per socket, send/recv under a mutex) and you're done. The Python SDK's TCP transport is a good reference at ~250 LOC.
+
+## Where to go next
+
+You've got the wire. The next things are the client that speaks it and the routes that consume it:
+
+→ **App client** ([/python/app](/python/app)) — The synchronous Python client. Seven wire-mapped methods (register, push, get, batch_get, reset, ping, close), three transport modes (HTTP / TCP / embed), plus the lifecycle.
+
+→ **POST /push** ([/http/push](/http/push)) — Per-route reference for the push opcode — request body shape, response body shape, error codes, idempotency contract, and a worked example.

@@ -1,0 +1,277 @@
+---
+title: "POST /get"
+description: "Read a feature row by entity key."
+---
+
+Read one feature row by entity key. Cold-start (no events for that key yet) returns `{}` with HTTP 200 — not a 404.
+
+## Overview
+
+`POST /get` is the single-row read on the data plane. You name a registered table, give an entity key, and the server returns the latest feature row for that key as a flat JSON dict.
+
+The Redis-shaped contract matters here: **a key that has never received a matching event is just a key with no data, not an error.** The server returns HTTP 200 with body `{}`. That separates two distinct conditions:
+
+- Cold-start (HTTP 200, body {}) — the table is registered, the key parses, no events have populated this row yet. Treat it like GET on an unset Redis key.
+
+- unknown_table (HTTP 404) — the table name isn't in the registry. This is the error path. If you mistyped the table or forgot to register, you land here.
+
+Cold-start is HTTP 200, not 404. Client code that treats {} as an error will misbehave on every new entity. Branch on response == {} if you want a "no data yet" code path.
+
+## Request
+
+Headers — the server attempts JSON parse regardless of `Content-Type`, but always send the canonical header so proxies, log scrapers, and curl-pasted requests stay portable:
+
+          headers
+
+```
+Content-Type: application/json
+```
+
+Body shape:
+
+          body schema
+
+```
+{
+  "table":    "",      // required, registered table
+  "key":      "",            // required, see below
+  "features": ["f1", "f2", /* … */]  // optional filter
+}
+```
+
+- table — the registered table's name. Required. Mismatched name → 404 unknown_table.
+
+- key — the entity key as a JSON string. For composite keys (declared with key=["a","b"]), the SDK pipe-joins the segments before serialising — e.g. "alice|merchant1". The empty string "" routes to the global-aggregation sentinel for tables registered with key=[].
+
+- features — optional. When supplied, the server narrows the response to the named subset; when omitted, the full row is returned.
+
+Worked curl example:
+
+          curl
+          Copy
+
+```
+curl -sS -X POST http://localhost:8080/get \
+  -H 'Content-Type: application/json' \
+  -d '{"table": "UserTxnFeatures", "key": "alice"}'
+```
+
+## Response
+
+The success body is a **flat dict mapping feature name → value**. There is no envelope — feature names are top-level keys. Cold-start returns `{}` at HTTP 200; document this in your client wrapper because it is easy to mistake for an empty error envelope.
+
+### Standard hit
+
+Table is registered, key has events, full row requested:
+
+            request
+
+```
+{
+  "table": "UserTxnFeatures",
+  "key":   "alice"
+}
+```
+
+            200 OK
+
+```
+{
+  "tx_count_1h":            7,
+  "tx_sum_1h":              312.45,
+  "tx_mean_1h":             44.64,
+  "tx_p99_1h":              89.99,
+  "tx_unique_merchants_1h": 3
+}
+```
+
+### Cold-start
+
+Same request, key the server has never seen. **HTTP 200, not 404.**
+
+            request
+
+```
+{
+  "table": "UserTxnFeatures",
+  "key":   "newuser"
+}
+```
+
+            200 OK
+
+```
+{}
+```
+
+### Global aggregation
+
+Tables registered with `key=[]` (no group-by keys) hold a single, server-wide row. Address it with the empty-string sentinel `"key": ""`:
+
+            request
+
+```
+{
+  "table": "GlobalCounter",
+  "key":   ""
+}
+```
+
+            200 OK
+
+```
+{
+  "click_count": 12345
+}
+```
+
+## The features filter
+
+When `features` is supplied, the server walks the registered descriptor and emits only the named subset. Useful for narrow client reads — a fraud rule that needs a single counter doesn't need to ship the full 30-feature row across the wire.
+
+Same key, two requests:
+
+            full row request
+
+```
+{
+  "table": "UserStats",
+  "key":   "alice"
+}
+```
+
+            full row response
+
+```
+{
+  "visits":    2,
+  "last_path": "/checkout",
+  "sessions":  1
+}
+```
+
+            narrowed request
+
+```
+{
+  "table":    "UserStats",
+  "key":      "alice",
+  "features": ["visits"]
+}
+```
+
+            narrowed response
+
+```
+{
+  "visits": 2
+}
+```
+
+If `features` names a column that isn't registered on the table, the whole call is rejected — no partial response. The error surfaces as HTTP 500 with `code: "internal_error"` and a `reason` that names the missing feature(s). The batch-get path uses the same whole-batch-reject disposition.
+
+## Composite keys
+
+A table registered with `key=["user_id", "merchant_id"]` indexes rows on the pair. On the wire, the `key` field is still a single JSON string — the SDK pipe-joins the segments in registered order before serialising. Pipe characters inside a key value must be percent-encoded as `%7C`.
+
+          composite key on the wire
+
+```
+// table registered with key=["user_id", "merchant_id"]
+{
+  "table": "UserMerchantStats",
+  "key":   "alice|merchant1"
+}
+```
+
+The number of pipe-separated segments must exactly match the registered key arity. If it doesn't, the server returns 404 with `code: "key_parse_failure"` — distinct from `key_not_found` (cold-start; never surfaced to clients) so a malformed key looks different from a key with no data.
+
+## Errors
+
+Each error body has the shape `{"error": {"code": "", ...}}`.
+
+          404 — unknown_table
+
+```
+HTTP/1.1 404 Not Found
+Content-Type: application/json
+
+{"error":{"code":"unknown_table"}}
+```
+
+`table` isn't in the registry. Re-check the spelling and confirm `POST /register` succeeded for the descriptor.
+
+          404 — key_parse_failure
+
+```
+HTTP/1.1 404 Not Found
+Content-Type: application/json
+
+{"error":{"code":"key_parse_failure"}}
+```
+
+The pipe-joined `key` string didn't split into the right number of segments for the table's registered key arity. Check that you sent `"a|b"` for a 2-column key, not `"a"` or `"a|b|c"`.
+
+          400 — unsupported_request_shape
+
+```
+HTTP/1.1 400 Bad Request
+Content-Type: application/json
+
+{"error":{
+  "code":    "unsupported_request_shape",
+  "message": "POST /get expects {table, key, features?}"
+}}
+```
+
+The body parsed as JSON but didn't match the canonical shape — common when a client sends a multi-key shape (`{keys, features}`) or a single-feature shape (`{feature, key}`). Use the verb-style body documented above.
+
+          500 — internal_error
+
+```
+HTTP/1.1 500 Internal Server Error
+Content-Type: application/json
+
+{"error":{
+  "code":   "internal_error",
+  "reason": "missing field `key` at line 1 column 15"
+}}
+```
+
+The body was malformed JSON, missed a required field, or named a feature in `features` that the table doesn't expose. The `reason` string carries the underlying parse / lookup error. Use it to fix your request.
+
+**Content-Type:** `POST /get` does not enforce `application/json` at the route layer; a request with `Content-Type: text/plain` and a JSON body still parses. Send `application/json` anyway so proxies and WAFs don't reject it upstream.
+
+## TCP equivalent
+
+The custom-framed TCP fast-path (default port `8081`) carries the same body. `OP_GET = 0x0020` wraps a JSON payload identical to the HTTP body shape; the response comes back as `OP_GET_RESPONSE = 0x0023`. Strict-FIFO correlation on a connection — one in-flight request per socket.
+
+For multi-key reads, use `OP_BATCH_GET = 0x0024` instead of N round-trips. The Python SDK's `app.batch_get([...])` method maps to this opcode; over HTTP, the equivalent is `POST /batch_get`.
+
+Full wire format — frame header, content-type byte, JSON encoding — is documented in the [wire spec](/http/wire-spec).
+
+## Common questions
+
+          Why is cold-start `{}` instead of 404?
+
+Beava is Redis-shaped on reads. A key that hasn't received events yet isn't an exception — it's just a key with no data. Surfacing that as 404 would conflate three different conditions (cold-start, malformed key, unknown table) and force every client to inspect error bodies on the success path. `{}` at HTTP 200 keeps the happy path clean: one branch on `response == {}` if you care, otherwise treat the dict as authoritative.
+
+          Can I get just a single feature without the table boilerplate?
+
+Yes — pass `features: ["my_feature"]` on the regular `/get` body. There's no separate single-feature route; the filter is the mechanism. For multi-key fetches use `POST /batch_get`.
+
+          What happens if I pass `features` for a column that doesn't exist?
+
+The whole call is rejected — no partial response with the columns that did match. The server returns HTTP 500 with `code: "internal_error"` and a `reason` string of the form `"feature_not_found: missing=[\"bogus\"] table=UserStats"`. Same whole-batch-reject disposition as the multi-key path: clients see one consistent failure mode, not a half-populated row that silently dropped fields.
+
+          Is `POST /get` idempotent?
+
+Yes — it's a pure read. The server queries in-memory aggregate state without mutating anything. Safe to retry on transport errors; safe to fan out across clients. The only caveat is "freshness": between two reads the underlying row may have advanced, because beava applies pushes atomically on the apply thread without read-side locks.
+
+## Where to go next
+
+You've got reads. The other two HTTP endpoints close the loop:
+
+→ **POST /register** ([/http/register](/http/register)) — Register one or more event/table descriptors. The shape that POST /get later resolves "table" against.
+
+→ **POST /push** ([/http/push](/http/push)) — Push a single event. WAL-acked on return; the row that POST /get will read is updated atomically before the response comes back.

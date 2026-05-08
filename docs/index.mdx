@@ -1,0 +1,76 @@
+---
+title: "beava"
+description: "Real-time feature server for fraud, ad-tech, and behavioral analytics. Single binary, in-memory state, declarative pipeline."
+---
+
+beava is a single-binary real-time feature server. Push events over HTTP,
+declare aggregations, query features by entity key — sub-millisecond
+reads, no Kafka, no Spark, no JVM.
+
+## Where to start
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Install the server, push your first event, query the feature — in five minutes.
+  </Card>
+  <Card title="Server configuration" icon="gear" href="/server-config">
+    CLI flags, environment variables, and YAML config.
+  </Card>
+</CardGroup>
+
+## Concepts
+
+<CardGroup cols={2}>
+  <Card title="Streams" icon="bolt" href="/concepts/streams">
+    Typed event sources you push into beava.
+  </Card>
+  <Card title="Tables" icon="table" href="/concepts/tables">
+    Per-entity feature rows you query by key.
+  </Card>
+  <Card title="Windows" icon="clock" href="/concepts/windows">
+    Time-bounded aggregations.
+  </Card>
+  <Card title="Freshness" icon="zap" href="/concepts/freshness">
+    Sub-millisecond read latency contracts.
+  </Card>
+</CardGroup>
+
+## Python SDK
+
+<CardGroup cols={2}>
+  <Card title="App client" icon="terminal" href="/python/app">
+    `bv.App()` — seven wire-mapped methods.
+  </Card>
+  <Card title="@bv.event" icon="at" href="/python/event">
+    Declare event sources and derivations.
+  </Card>
+  <Card title="@bv.table" icon="at" href="/python/table">
+    Declare per-entity feature tables.
+  </Card>
+  <Card title="bv.col / bv.lit" icon="code" href="/python/col-lit">
+    Column references and literal values.
+  </Card>
+  <Card title="Operator catalogue" icon="layer-group" href="/python/operators">
+    54 aggregation primitives.
+  </Card>
+  <Card title="Errors" icon="triangle-exclamation" href="/python/errors">
+    Python exceptions and wire error codes.
+  </Card>
+</CardGroup>
+
+## HTTP API
+
+<CardGroup cols={2}>
+  <Card title="POST /push" icon="arrow-up" href="/http/push">
+    Push a single event.
+  </Card>
+  <Card title="POST /get" icon="arrow-down" href="/http/get">
+    Read a feature row by entity key.
+  </Card>
+  <Card title="POST /register" icon="signature" href="/http/register">
+    Register event sources and derivations.
+  </Card>
+  <Card title="Wire spec" icon="diagram-project" href="/http/wire-spec">
+    TCP frame format and HTTP route table.
+  </Card>
+</CardGroup>

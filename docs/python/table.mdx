@@ -1,0 +1,286 @@
+---
+title: "@bv.table"
+description: "Declare per-entity feature tables."
+---
+
+A `@bv.table` is a per-entity feature row, keyed on one or more event columns and refreshed on every push. Inside the function you build a chain that ends in `agg(...)`; the decorator captures the key shape and wraps it as a registry-ready descriptor.
+
+## Overview
+
+A table is the *output* side of an aggregation. You declare an event source with `@bv.event`, then declare a table that says “group those events by some key column(s) and roll them up into a row of features.” Each unique key gets its own row; `app.get("TableName", "alice")` returns alice’s row at sub-millisecond latency.
+
+          tiny.py
+          Copy
+
+```
+import beava as bv
+
+@bv.event
+class Click:
+    user_id: str
+    path: str
+
+@bv.table(key="user_id")
+def UserClicks(c: Click):
+    return c.group_by("user_id").agg(
+        clicks_1h=bv.count(window="1h"),
+    )
+```
+
+Three things are happening above:
+
+- The function UserClicks takes one annotated parameter — that annotation tells the decorator which event source feeds the table.
+
+- The body returns a chain expression that must end in agg(...); the decorator validates this.
+
+- The key="user_id" kwarg locks in the entity column. Every app.get("UserClicks", <user_id>) looks up that row.
+
+## Signature
+
+          signature
+
+```
+@bv.table(
+    *,
+    key: str | list[str] | tuple[str, ...] | None = None,
+)
+def Foo(e: EventName):
+    return e.group_by(...).agg(...)
+```
+
+Three call shapes are accepted:
+
+- @bv.table(key="user_id") — single-column key.
+
+- @bv.table(key=["user_id", "device_id"]) — composite key.
+
+- @bv.table (bare) or @bv.table() (empty parens) — global table; no key. Equivalent to key=[].
+
+Anything else for `key=` raises `TypeError` at decorator time — the rejection lists what was passed and what the valid shapes are.
+
+Function form only in v0. @bv.table wraps def functions; class form is reserved for @bv.event. The body returns a chain — see The chain function.
+
+## Single-column key
+
+The most common shape. Pass `key="col"` as a string; the decorator wraps it as `key_cols=["col"]` internally and emits `table_primary_key: ["col"]` on the wire (always a list, even for a single key).
+
+          single_key.py
+          Copy
+
+```
+@bv.event
+class Txn:
+    user_id: str
+    amount:  float
+    merchant: str
+
+@bv.table(key="user_id")
+def UserTxnFeatures(t: Txn):
+    return t.group_by("user_id").agg(
+        tx_count_1h=bv.count(window="1h"),
+        tx_sum_1h=bv.sum(field="amount", window="1h"),
+        tx_mean_1h=bv.mean(field="amount", window="1h"),
+        tx_unique_merchants_1h=bv.n_unique(field="merchant", window="1h"),
+    )
+```
+
+Look up a row with the key as a plain string:
+
+            request
+
+```
+app.get("UserTxnFeatures", "alice")
+```
+
+            response
+
+```
+{
+  "tx_count_1h": 3,
+  "tx_sum_1h": 42.10,
+  "tx_mean_1h": 14.03,
+  "tx_unique_merchants_1h": 2
+}
+```
+
+## Composite key
+
+Pass `key=["a", "b", ...]` when one column isn’t enough to uniquely address an entity. The chain’s `group_by(...)` arguments must mirror the key list — they’re what the server uses to bucket events at apply time.
+
+          composite_key.py
+          Copy
+
+```
+@bv.event
+class Login:
+    user_id:   str
+    device_id: str
+    ip:        str
+
+@bv.table(key=["user_id", "device_id"])
+def UserDeviceStats(l: Login):
+    return l.group_by("user_id", "device_id").agg(
+        logins_24h=bv.count(window="24h"),
+        unique_ips_24h=bv.n_unique(field="ip", window="24h"),
+    )
+```
+
+The wire shape carries `table_primary_key` as a list in declaration order, matching the `group_by` column order. To look up a composite-keyed row, pass a list to `app.get`:
+
+            request
+
+```
+app.get("UserDeviceStats", ["alice", "iphone-15"])
+```
+
+            response
+
+```
+{
+  "logins_24h": 7,
+  "unique_ips_24h": 2
+}
+```
+
+`tuple` is also accepted (`key=("user_id", "device_id")`) and normalized to a list internally. Order is meaningful — it determines the column order used to compose the entity key at lookup time.
+
+## Global table
+
+When you want a single feature row that summarizes *everything* — site-wide rolling counters, fleet-wide error rates, top-line dashboards — declare a global table. Three equivalent forms:
+
+          global.py
+          Copy
+
+```
+# All three forms produce the same descriptor — key_cols=[].
+
+@bv.table
+def SiteTotals(c: Click):
+    return c.agg(total_clicks_1h=bv.count(window="1h"))
+
+@bv.table()
+def SiteTotals2(c: Click):
+    return c.agg(total_clicks_1h=bv.count(window="1h"))
+
+@bv.table(key=[])
+def SiteTotals3(c: Click):
+    return c.agg(total_clicks_1h=bv.count(window="1h"))
+```
+
+A global table’s single row is addressed by the **empty-string sentinel entity id**. `app.get("SiteTotals")` with no `key` argument routes to that sentinel automatically:
+
+            request
+
+```
+app.get("SiteTotals")
+```
+
+            response
+
+```
+{ "total_clicks_1h": 14823 }
+```
+
+Pushes flow into a global table the same way they flow into a keyed one — fire-and-forget, processing-time, ack-on-write:
+
+          push.sh
+          Copy
+
+```
+curl http://localhost:8080/push \
+  -H "content-type: application/json" \
+  -d '{"event": "Click", "data": {"user_id": "alice", "path": "/"}}'
+```
+
+## The chain function
+
+The function body of an `@bv.table` is a *chain builder*. The decorator calls it once at registration time, passing in proxy objects resolved from your parameter annotations, and inspects the returned chain expression.
+
+Two contracts:
+
+- Every parameter must be annotated with the upstream event class (or a @bv.event-decorated derivation function). Missing annotations raise TypeError at decorator time, pointing straight at the unannotated parameter.
+
+- The return value must end in agg(...). Anything else (a bare filter, a dangling with_columns, a non-chain object) raises TypeError with the canonical rewrite hint.
+
+          chain_with_filter.py
+          Copy
+
+```
+@bv.table(key="user_id")
+def HighValueUserStats(t: Txn):
+    return (
+        t.filter(bv.col("amount") > 100.0)
+         .group_by("user_id")
+         .agg(
+             big_tx_count_24h=bv.count(window="24h"),
+             big_tx_sum_24h=bv.sum(field="amount", window="24h"),
+         )
+    )
+```
+
+Chain methods you can compose before the terminal `agg`: `filter`, `select`, `drop`, `rename`, `with_columns`, `cast`, `fillna`, `group_by`. The terminal call must be `agg(...)`; otherwise the descriptor is classified as an event-derivation (`output_kind="event"`) and belongs under [@bv.event](/python/event), not `@bv.table`.
+
+Processing-time only. Aggregation windows (window="1h", "24h", "forever", ...) are walltime-relative on the server. Beava v0 does not support event-time / watermarks; declaring an event_time field on the upstream @bv.event raises TypeError at decorator time.
+
+## Wire shape
+
+At `app.register(...)` time, every `@bv.table` descriptor is serialized into a node on the registry payload. The shape:
+
+          node JSON
+
+```
+{
+  "kind": "derivation",
+  "name": "UserTxnFeatures",
+  "output_kind": "table",
+  "upstreams": ["Txn"],
+  "ops": [
+    {
+      "op": "group_by",
+      "keys": ["user_id"],
+      "agg": {
+        "tx_count_1h": { "op": "count", "params": { "window": "1h" } },
+        "tx_sum_1h":   { "op": "sum",   "params": { "field": "amount", "window": "1h" } }
+      }
+    }
+  ],
+  "schema": { "fields": { "tx_count_1h": "i64", "tx_sum_1h": "f64" }, "optional_fields": [] },
+  "table_primary_key": ["user_id"]
+}
+```
+
+Three things to notice:
+
+- kind: "derivation" always; output_kind: "table" is the discriminator that says “this lands as a feature row,” not as an event.
+
+- table_primary_key is always a list. Single-column keys ship as ["user_id"]; composite keys ship as ["user_id", "device_id"]; global tables ship as [].
+
+- upstreams is the list of event sources this derivation reads. The flatten rules in the SDK ensure this is always a root @bv.event source name, never an intermediate __derived_ step.
+
+The full registry payload — the wrapper around `nodes`, additional flags like `force` / `dry_run`, the response body — is documented on [POST /register](/http/register).
+
+## Common questions
+
+          Can a table key contain dots or slashes?
+
+Yes — the column *name* is restricted by your `@bv.event` schema, but the column *value* at lookup time is treated as an opaque string. `app.get("UserClicks", "a.b/c")` works fine. The wire encoding is JSON, so any UTF-8 string is permitted; the empty string is the global-table sentinel and not a valid entity id for keyed tables.
+
+          What if my key column has nulls?
+
+The server treats `null` as a distinct bucket — events with a null key value land in their own row, addressable by passing `None` for that key column. If you’d rather reject them, add a `filter(bv.col("user_id").is_not_null())` step in front of the `group_by`; if you’d rather replace them, use `fillna(user_id="anonymous")` earlier in the chain.
+
+          Does the table refresh on event arrival or on read?
+
+On arrival. Every `app.push(...)` applies the event to every aggregation that names its source as an upstream — atomically, on the data plane, before the push is acked. Reads are pure lookups: `app.get` returns the row as it exists at that instant, no recompute, no fan-out, no quorum. That’s what makes batch-get sub-millisecond.
+
+          Can one table read from multiple event sources?
+
+One upstream per table. The function takes one annotated parameter and the chain builds off that one source. Joins and unions are not part of the v0 surface.
+
+## Where to go next
+
+You can declare tables; the next two stops are the operators that fill them and the client that pushes events at them:
+
+→ **Operator catalogue** ([/python/operators](/python/operators)) — The 40+ aggregation primitives — count, sum, mean, n_unique, quantiles, sketches, velocities, distances. Each one’s wire shape, params, and memory cost.
+
+→ **App client** ([/python/app](/python/app)) — The synchronous Python client. register, push, get, batch_get, plus the embed-mode lifecycle for tests.

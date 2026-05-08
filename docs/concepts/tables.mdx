@@ -1,0 +1,74 @@
+---
+title: "Tables"
+---
+
+[Docs](/docs/)
+              /
+              [Concepts](#)
+              /
+              Tables
+
+# Tables
+
+A table is the state beava maintains from one or more streams. Tables define how events are grouped, aggregated, and windowed over time.
+
+## What is a table?
+
+            `
+{`@bv.table(key="user_id")
+def UserActivityFeatures(ev: UserEvent):
+    return ev.group_by("user_id").agg(
+        clicks_1h=bv.count(window="1h", where=bv.col("event_type") == "click"),
+        views_1h=bv.count(window="1h", where=bv.col("event_type") == "view"),
+    )`}
+            `
+
+A table answers the question:
+            What state should my application be able to query by key?
+
+## Tables are application state
+
+Tables are not only analytics outputs. They are operational state that applications can use directly.
+
+A table might represent:
+
+- User behavior over the last hour.
+
+- Campaign spend in the last 24 hours.
+
+- Publisher quality over the last 24 hours.
+
+- Fraud velocity over the last 10 minutes.
+
+- Agent tool usage in the current workflow.
+
+- Product demand in the current session.
+
+**Product analytics can become product logic.**
+
+## Keys
+
+Every table has a key. The key defines how state is stored and queried.
+
+Examples:
+            `{`@bv.table(key="user_id")`}`
+            `{`@bv.table(key=("user_id", "campaign_id"))`}`
+
+Choose the key that matches the decision your application needs to make.
+
+If a recommender needs user state, key by `user_id`. If an ads system needs frequency caps per user and campaign, key by `(user_id, campaign_id)`.
+
+## Tables and ownership
+
+Tables should be easy for feature owners to read and test.
+
+The person who understands the feature should be able to understand the table definition.
+
+**Real-time features should feel like application code.**
+
+                Stuck on this one?
+
+Half the answers in our docs started as someone asking "is this a bug?" out loud. Drop into Discussions — a maintainer is usually around.
+
+                  [Ask on GitHub →](https://github.com/beava-dev/beava/discussions)
+                  [Ask on Discord](https://discord.gg/Jnx89PN9)

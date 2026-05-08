@@ -1,0 +1,228 @@
+---
+title: "@bv.event"
+description: "Declare event sources and derivations."
+---
+
+Decorate a class to declare a typed event source, or a function to derive a new event from existing sources. The decorator carries the schema and optional retention / dedupe knobs onto the wire.
+
+## Overview
+
+An **event** in beava is the typed input you push into the server. Every `app.push(...)` call references an event by name, and that name has to be registered first — either as a fresh source (class form) or as a derivation chained on top of an existing one (def form).
+
+The decorator has two shapes:
+
+- Class form — @bv.event class Click: .... Type annotations on the class body become the wire schema.
+
+- Def form — @bv.event def BigClick(click: Click): .... The function body returns a chain expression; the decorator captures it as a stable, addressable derivation.
+
+          both forms
+          Copy
+
+```
+import beava as bv
+
+# Class form — declares a fresh event source.
+@bv.event
+class Click:
+    user_id: str
+    page:    str
+
+# Def form — derives a new event from the source above.
+@bv.event
+def BigClick(click: Click):
+    return click.filter(bv.col("page") == "/checkout")
+```
+
+Processing-time only. The server stamps wall-clock time on every push. The decorator rejects an event_time class field and the event_time_field / tolerate_delay kwargs with TypeError at decorator time.
+
+## Class form
+
+Apply `@bv.event` to a plain Python class. Each annotated attribute becomes a column in the wire schema; types are mapped `str → "str"`, `int → "i64"`, `float → "f64"`, `bool → "bool"`. Anything else is coerced to `"str"`.
+
+          class form
+          Copy
+
+```
+@bv.event
+class Login:
+    user_id:    str
+    success:    bool
+    latency_ms: int
+```
+
+The decorator returns the same class with chain methods attached as static methods, so you can write `Login.filter(...)` or `Login.group_by(...).agg(...)` directly without instantiating it. The class also gains state attributes (`Login._name`, `Login._schema`, `Login._chain`, ...) that the SDK uses to walk the descriptor tree at register time.
+
+When you pass `Login` to `app.register(...)`, it serializes to:
+
+          register node
+
+```
+{
+  "kind": "event",
+  "name": "Login",
+  "schema": {
+    "fields": {
+      "user_id":    "str",
+      "success":    "bool",
+      "latency_ms": "i64"
+    },
+    "optional_fields": []
+  }
+}
+```
+
+Once registered, push events by name:
+
+          push.sh
+          Copy
+
+```
+curl -X POST http://localhost:8080/push \
+  -H "content-type: application/json" \
+  -d '{"event": "Login", "data": {"user_id": "alice", "success": true, "latency_ms": 142}}'
+```
+
+## Def form
+
+Apply `@bv.event` to a function that takes one or more decorated upstream events as parameters and returns a chain expression. The decorator captures the chain under the function's name, registering it as a derivation node on the wire.
+
+          def form
+          Copy
+
+```
+@bv.event
+class Click:
+    user_id: str
+    page:    str
+
+@bv.event
+def CheckoutClick(click: Click):
+    return click.filter(bv.col("page") == "/checkout")
+```
+
+**Why the def form exists.** The chain methods (`filter`, `select`, `with_columns`, ...) return anonymous `EventDerivation` objects with auto-generated names like `Click__derived_1`. Those auto-names are **not addressable** on the wire — the server's apply-time routing index keys derivations by their declared upstream name, and only stable names survive the round-trip. `@bv.event def` wraps a chain into a stable name (`"CheckoutClick"`) so downstream `@bv.table`s can declare it as their upstream and so you can push it by name from the client.
+
+If you pass a raw chain expression (e.g. `Click.filter(...).named("X")`) to `app.register(...)`, the SDK raises `RegistrationError` with the canonical rewrite — wrap it in `@bv.event def` instead.
+
+### Constraints on the function body
+
+- Must declare at least one parameter; each parameter's annotation must resolve to an @bv.event-decorated class or function.
+
+- Must return an EventDerivation (the result of a chain method). Returning anything else raises TypeError.
+
+- The function body runs once at decorator time with the upstream descriptors as arguments. It is not invoked per push; the server replays the chain on every event.
+
+## Optional kwargs
+
+The decorator-factory shape `@bv.event(...)` accepts per-source knobs. They are stored on the `EventSource` and forwarded to the server at register time.
+
+            keep_events_for
+
+              str | None
+
+Per-event retention window. Events older than this are eligible for compaction out of the per-entity event log. Accepts duration strings (`"30d"`, `"1h"`, `"15m"`).
+
+default `None` (server-wide default applies)
+
+            cold_after
+
+              str | None
+
+Idle threshold after which an entity that hasn't received this event is considered cold and may be evicted from hot memory. Accepts the same duration strings as `keep_events_for`.
+
+default `None` (server-wide default applies)
+
+            dedupe_key
+
+              str | None
+
+Name of a field whose value uniquely identifies a logical event. Pushes carrying a previously-seen `dedupe_key` within `dedupe_window` return `"idempotent_replay": true` and do not mutate state.
+
+default `None` (no dedupe)
+
+            dedupe_window
+
+              str | None
+
+Lookback window over which `dedupe_key` values are remembered. Required when `dedupe_key` is set.
+
+default `None`
+
+          decorator-factory shape
+          Copy
+
+```
+@bv.event(
+    keep_events_for="30d",
+    dedupe_key="id",
+    dedupe_window="5m",
+)
+class Login:
+    id:      str
+    user_id: str
+```
+
+Forbidden kwargs. event_time_field and tolerate_delay raise TypeError at decorator time — v0 has no event-time. A class field literally named event_time is also rejected.
+
+## Wire shape
+
+At register time the SDK serializes each `@bv.event` descriptor into a JSON node and posts the array as `{"nodes": [...]}` to the server. The class form emits a node with `kind: "event"`; the def form emits `kind: "derivation"` with the upstream's name and the chain ops.
+
+            class form (event)
+
+```
+{
+  "kind": "event",
+  "name": "Click",
+  "schema": {
+    "fields": {
+      "user_id": "str",
+      "page":    "str"
+    },
+    "optional_fields": []
+  }
+}
+```
+
+            def form (derivation)
+
+```
+{
+  "kind": "derivation",
+  "name": "CheckoutClick",
+  "output_kind": "event",
+  "upstreams": ["Click"],
+  "ops": [
+    { "op": "filter", "expr": "page == '/checkout'" }
+  ],
+  "schema": { "fields": {...}, "optional_fields": [] }
+}
+```
+
+The full envelope and per-field semantics are documented at [HTTP /register](/http/register).
+
+## Common questions
+
+          Can I add fields after the event is registered?
+
+Yes. Re-decorate the class with the new annotation, call `app.register(MyEvent, force=True)`, and the server hot-swaps the schema; `registry_version` increments. Existing on-disk events keep their old schema — the server reconciles missing fields as `null` on read.
+
+          What happens if I push a field that isn't in the schema?
+
+The server rejects the push with `code="schema_mismatch"`. There is no implicit schema-on-write; every field on a push has to be declared on the event. The SDK surfaces this as `RegistrationError` with the structured error body intact.
+
+          Is `dedupe_key` exact-match?
+
+Yes — exact byte-for-byte equality on the value of the named field, scoped to the `dedupe_window`. There's no fuzzy match, no normalization, and no canonicalization. If you need normalized dedupe (e.g. lowercase emails), normalize the field upstream of the push and dedupe on the normalized value.
+
+          Do I need `@bv.event def` if I already have a derivation chained inline inside a `@bv.table`?
+
+Not always. Inline chains inside the `@bv.table` body work for one-shot pipelines because the SDK flattens the chain to the root event source at register time. Use `@bv.event def` when you want a stable, addressable name — e.g. so two tables can share the same upstream derivation, or so you can push events by that name from the client.
+
+## Where to go next
+
+You've declared the inputs. The next step is to declare the per-entity feature tables that aggregate them:
+
+→ **@bv.table** ([/python/table](/python/table)) — Declare per-entity feature tables with group_by(...).agg(...). Composite keys, global tables, and the chain primitives.
+
+→ **Operator catalogue** ([/python/operators](/python/operators)) — The 40+ aggregation primitives — counters, velocities, distances, rates, distributions — that go inside an agg(...) block.

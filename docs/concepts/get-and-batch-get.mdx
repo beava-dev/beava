@@ -1,0 +1,68 @@
+---
+title: "Get and batch_get"
+---
+
+[Docs](/docs/)
+              /
+              [Concepts](#)
+              /
+              get and batch_get
+
+# get and batch_get
+
+beava serves features through simple key-based queries. `get` returns features for one (table, key). `batch_get` returns features for many (table, key) requests in one round trip.
+
+## Simple feature queries
+
+This is designed to feel familiar to developers who have used systems like Redis, while supporting feature tables generated from event streams.
+
+**Query fresh state like application state.**
+
+## When to use get
+
+Use `get` when your application needs state for one entity in one table.
+
+Examples:
+
+- Fetch user features before ranking a feed.
+
+- Fetch campaign pacing before bidding.
+
+- Fetch account risk features before approving an action.
+
+- Fetch agent workflow state before choosing the next tool.
+
+The wire call is `POST /get` with body `{`{"table": "...", "key": "..."}`}`; the response is a flat dict of feature values.
+
+## When to use batch_get
+
+Use `batch_get` when your application needs many feature rows in one decision. The requests can mix tables and keys freely; results return in the same order.
+
+Examples:
+
+- Rank 100 candidate items.
+
+- Score multiple ads for a bid request.
+
+- Check several entities involved in a transaction.
+
+- Fetch features for several tools an agent could call next.
+
+The wire call is `POST /batch_get` with body `{`{"requests": [{"table": "...", "key": "..."}, ...]}`}`; the response is an array of flat dicts in the same order.
+
+`batch_get` helps keep decision paths simple when they need more than one lookup.
+
+## Why this matters
+
+Many real-time ML systems become hard to operate because feature computation and feature serving are separated across multiple systems.
+
+beava keeps the mental model direct:
+
+**Push events. Maintain tables. Query by key.**
+
+                Stuck on this one?
+
+Half the answers in our docs started as someone asking "is this a bug?" out loud. Drop into Discussions — a maintainer is usually around.
+
+                  [Ask on GitHub →](https://github.com/beava-dev/beava/discussions)
+                  [Ask on Discord](https://discord.gg/Jnx89PN9)

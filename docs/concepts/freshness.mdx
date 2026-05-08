@@ -1,0 +1,58 @@
+---
+title: "Freshness"
+---
+
+[Docs](/docs/)
+              /
+              [Concepts](#)
+              /
+              Freshness
+
+# Freshness
+
+Freshness is the time between an event being written and its effect becoming visible in queryable state.
+
+## What freshness means
+
+For beava, freshness is not just a metric. It is part of the product philosophy.
+
+**Low-latency reads are useful; low-latency freshness changes the architecture.**
+
+If a system can serve old state quickly, it is a fast cache. If a system can make new events queryable quickly, it becomes part of the application decision path.
+
+## Read latency vs. write-to-read freshness
+
+Read latency answers:
+            How quickly can I query a feature?
+
+Write-to-read freshness answers:
+            How quickly does a new event affect the feature I query?
+
+Both matter.
+
+For personalization, bidding, fraud detection, recommendations, and agentic state, the second question can be more important than it first appears.
+
+A click that updates a recommendation after the user leaves the page is less useful. A fraud signal that updates after the transaction is approved is less useful. A bid event that updates pacing too late may not help the next decision.
+
+**Fresh enough for the decision path** means the system updates state while the application can still use it.
+
+## Why freshness can simplify architecture
+
+When write-to-read freshness is fast enough, some workloads do not need to start with a separate event bus, stream processor, serving store, and glue code.
+
+Those systems may still be useful as use cases grow. But they should not be required before the first real-time feature becomes useful.
+
+**When freshness is fast enough, the event bus becomes optional for many application workloads.**
+
+## beava’s freshness goal
+
+beava is designed for workloads where recent events should become queryable state immediately.
+
+The goal is to let teams commit events, update windowed aggregates, and serve fresh features inside latency-sensitive application paths.
+
+                Stuck on this one?
+
+Half the answers in our docs started as someone asking "is this a bug?" out loud. Drop into Discussions — a maintainer is usually around.
+
+                  [Ask on GitHub →](https://github.com/beava-dev/beava/discussions)
+                  [Ask on Discord](https://discord.gg/Jnx89PN9)
