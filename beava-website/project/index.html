@@ -430,6 +430,74 @@
       </section>
     );
 
+    // ---------- PipelineOutput ----------
+    // Live-polled JSON output panel that closes the visual loop:
+    // 13-line site_metrics.py → POST /get → this JSON shape → the hero
+    // dashboard above. Shares the /api/get endpoint with LiveMetrics; an
+    // independent fetch on a 3s cadence (LiveMetrics polls every 1s for
+    // smooth ticking) — keeps the two displays decoupled if either
+    // fails. Falls back to a static seed shape on cold start so the
+    // panel always renders something representative.
+    const PipelineOutput = () => {
+      const SEED = {
+        median_dwell_1h: 6250.0,
+        page_views_today: 14207,
+        top_page_1h: [{ value: '/', count: 412 }],
+      };
+      const [data, setData] = React.useState(null);
+      React.useEffect(() => {
+        let cancelled = false;
+        const refresh = async () => {
+          try {
+            const r = await fetch('/api/get', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ table: 'SiteMetrics', key: '' }),
+            });
+            if (cancelled || !r.ok) return;
+            const j = await r.json();
+            if (j && typeof j === 'object') setData(j);
+          } catch (_) { /* keep previous on transient failure */ }
+        };
+        refresh();
+        const id = setInterval(refresh, 3000);
+        return () => { cancelled = true; clearInterval(id); };
+      }, []);
+      const display = data || SEED;
+      const isLive = data !== null;
+      return (
+        <div style={{
+          marginTop: 18,
+          background: '#fff', border: '1px solid var(--border)',
+          borderRadius: 12, boxShadow: 'var(--shadow-sm)',
+          overflow: 'hidden',
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '8px 14px', borderBottom: '1px solid var(--border)',
+            background: 'var(--beava-paper)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--fg2)' }}>
+              <span style={{ color: 'var(--fg3)' }}>→</span>
+              <span style={{ fontWeight: 600 }}>output</span>
+              <span style={{ color: 'var(--fg3)' }}>·</span>
+              <span style={{ color: 'var(--fg3)' }}>POST /get  {`{table:"SiteMetrics", key:""}`}</span>
+            </div>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-mono)', fontSize: 11, color: isLive ? 'var(--beava-success)' : 'var(--fg3)', whiteSpace: 'nowrap' }}>
+              <span style={{ width: 6, height: 6, borderRadius: 999, background: isLive ? 'var(--beava-success)' : 'var(--border-strong)' }}/>
+              {isLive ? 'live' : 'seed'}
+            </span>
+          </div>
+          <pre style={{
+            margin: 0, padding: '14px 18px',
+            fontFamily: 'var(--font-mono)', fontSize: 13, lineHeight: 1.55,
+            color: 'var(--code-fg)', background: 'var(--code-bg)',
+            border: 0, overflowX: 'auto',
+          }}>{JSON.stringify(display, null, 2)}</pre>
+        </div>
+      );
+    };
+
     // ---------- PipelineShowcase ----------
     const PipelineShowcase = () => {
       const S = {
@@ -513,6 +581,10 @@ bv.<span style={S.fn}>get</span>(<span style={S.str}>"SiteMetrics"</span>)  <spa
                 ))}
               </div>
             </div>
+            {/* D2 — output panel beside the code (live-polled /api/get
+                 result), closes the visual loop: 13 lines of source on
+                 top, the JSON shape they produce right below it. */}
+            <PipelineOutput/>
             <p style={{ fontFamily: 'var(--font-sans)', fontSize: 14, color: 'var(--fg3)', margin: '20px 4px 0', textAlign: 'center', fontStyle: 'italic' }}>
               No tracking cookies, no fingerprinting. Anonymous session id per visit.
             </p>
