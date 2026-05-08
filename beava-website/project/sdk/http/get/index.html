@@ -346,7 +346,7 @@ Content-Type: application/json
   <span class="tk-fn">"reason"</span>: <span class="tk-s">"missing field `key` at line 1 column 15"</span>
 <span class="tk-p">}}</span></pre>
       </div>
-      <p>The body was malformed JSON, or missed a required field, or named a feature in <code>features</code> that the table doesn't expose. The <code>reason</code> string carries the underlying serde / lookup error verbatim. Use it to fix your request.</p>
+      <p>The body was malformed JSON, missed a required field, or named a feature in <code>features</code> that the table doesn't expose. The <code>reason</code> string carries the underlying parse / lookup error. Use it to fix your request.</p>
 
       <p><strong>Content-Type:</strong> <code>POST /get</code> does not enforce <code>application/json</code> at the route layer; a request with <code>Content-Type: text/plain</code> and a JSON body still parses. Send <code>application/json</code> anyway so proxies and WAFs don't reject it upstream.</p>
 
@@ -393,12 +393,12 @@ Content-Type: application/json
       <p>You've got reads. The other two HTTP endpoints close the loop:</p>
 
       <div class="card-grid">
-        <a class="card" href="#">
+        <a class="card" href="/sdk/http/register/">
           <div class="ttl">POST /register</div>
           <p class="desc">Register one or more event/table descriptors. The shape that <code>POST /get</code> later resolves <code>"table"</code> against.</p>
           <span class="go">HTTP API reference <span class="arrow">→</span></span>
         </a>
-        <a class="card" href="#">
+        <a class="card" href="/sdk/http/push/">
           <div class="ttl">POST /push</div>
           <p class="desc">Push a single event. WAL-acked on return; the row that <code>POST /get</code> will read is updated atomically before the response comes back.</p>
           <span class="go">HTTP API reference <span class="arrow">→</span></span>

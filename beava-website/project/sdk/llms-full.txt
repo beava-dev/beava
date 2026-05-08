@@ -256,7 +256,7 @@ Redis is a key-value store you can *build* rolling counters on top of (with Lua 
 
 You've got beava running and a counter ticking. Two reasonable next stops:
 
-→ **All operators** (#) — 53 purpose-built aggregation primitives — counters, sketches, velocities, decay, recency, geo. Same agg(...) shape, different math.
+→ **All operators** (/sdk/python/operators/) — 53 purpose-built aggregation primitives — counters, sketches, velocities, decay, recency, geo. Same agg(...) shape, different math.
 
 → **Concepts** (/docs/) — Events vs tables, embed mode, lifetime aggregation, processing-time semantics, global aggregation. The five ideas you need to be productive.
 
@@ -929,9 +929,9 @@ No — one transport per `App`. Construct two `App` instances if you need to tal
 
 You've got the client. The next thing to learn is what to register:
 
-→ **@bv.event** (#) — Declare event sources — the typed inputs you push into beava. Covers the class form, the def form, and the optional kwargs (dedupe, retention, cold-after).
+→ **@bv.event** (/sdk/python/event/) — Declare event sources — the typed inputs you push into beava. Covers the class form, the def form, and the optional kwargs (dedupe, retention, cold-after).
 
-→ **@bv.table** (#) — Declare per-entity feature tables with group_by(...).agg(...). Composite keys, global tables, and the chain primitives.
+→ **@bv.table** (/sdk/python/table/) — Declare per-entity feature tables with group_by(...).agg(...). Composite keys, global tables, and the chain primitives.
 
 ========================================================================
 
@@ -1160,9 +1160,9 @@ Not always. Inline chains inside the `@bv.table` body work for one-shot pipeline
 
 You've declared the inputs. The next step is to declare the per-entity feature tables that aggregate them:
 
-→ **@bv.table** (#) — Declare per-entity feature tables with group_by(...).agg(...). Composite keys, global tables, and the chain primitives.
+→ **@bv.table** (/sdk/python/table/) — Declare per-entity feature tables with group_by(...).agg(...). Composite keys, global tables, and the chain primitives.
 
-→ **Operator catalogue** (#) — The 40+ aggregation primitives — counters, velocities, distances, rates, distributions — that go inside an agg(...) block.
+→ **Operator catalogue** (/sdk/python/operators/) — The 40+ aggregation primitives — counters, velocities, distances, rates, distributions — that go inside an agg(...) block.
 
 ========================================================================
 
@@ -1449,7 +1449,7 @@ One upstream per table. The function takes one annotated parameter and the chain
 
 You can declare tables; the next two stops are the operators that fill them and the client that pushes events at them:
 
-→ **Operator catalogue** (#) — The 40+ aggregation primitives — count, sum, mean, n_unique, quantiles, sketches, velocities, distances. Each one&rsquo;s wire shape, params, and memory cost.
+→ **Operator catalogue** (/sdk/python/operators/) — The 40+ aggregation primitives — count, sum, mean, n_unique, quantiles, sketches, velocities, distances. Each one&rsquo;s wire shape, params, and memory cost.
 
 → **App client** (/sdk/python/app/) — The synchronous Python client. register, push, get, batch_get, plus the embed-mode lifecycle for tests.
 
@@ -1660,9 +1660,9 @@ Yes. `_Expr` subclasses are frozen dataclasses — the AST is immutable, so a si
 
 You know how to reference and constrain. The next thing to learn is what to apply expressions to:
 
-→ **Operator catalogue** (#) — Every aggregation primitive — count, sum, mean, n_unique, top_k, ewma, plus the windowed and time-decay operators — and their where= / field= conventions.
+→ **Operator catalogue** (/sdk/python/operators/) — Every aggregation primitive — count, sum, mean, n_unique, top_k, ewma, plus the windowed and time-decay operators — and their where= / field= conventions.
 
-→ **@bv.table** (#) — Per-entity feature tables built with group_by(...).agg(...). Composite keys, global tables, and the chain primitives that consume your bv.col / bv.lit expressions.
+→ **@bv.table** (/sdk/python/table/) — Per-entity feature tables built with group_by(...).agg(...). Composite keys, global tables, and the chain primitives that consume your bv.col / bv.lit expressions.
 
 ========================================================================
 
@@ -2924,7 +2924,7 @@ Errors don't read in isolation. The two pages you'll cross-reference most:
 
 → **App client** (/sdk/python/app/) — The seven wire-mapped bv.App methods, each with its own Raises section keyed to the codes above. Start there if you're tracing where a specific error came from.
 
-→ **Wire spec** (#) — Full HTTP / TCP request and response shapes per endpoint, with status codes, frame layouts, and content-type matrix. Useful for non-Python clients reading the wire codes raw.
+→ **Wire spec** (/sdk/http/wire-spec/) — Full HTTP / TCP request and response shapes per endpoint, with status codes, frame layouts, and content-type matrix. Useful for non-Python clients reading the wire codes raw.
 
 ========================================================================
 
@@ -3151,7 +3151,7 @@ Yes — `ack_lsn` is the WAL offset, persisted to disk before the server returns
 
 You've sent your first event. The companion endpoints round out the data plane:
 
-→ **POST /get** (#) — Read a single feature row by entity key. JSON request, JSON response — pairs naturally with /push for the push-then-query loop. Reference page lands next.
+→ **POST /get** (/sdk/http/get/) — Read a single feature row by entity key. JSON request, JSON response — pairs naturally with /push for the push-then-query loop.
 
 → **App client** (/sdk/python/app/) — Python wrapper around /push, /get, /register, and the rest. Same wire shapes, with type hints and a context-manager lifecycle.
 
@@ -3397,7 +3397,7 @@ Content-Type: application/json
 }}
 ```
 
-The body was malformed JSON, or missed a required field, or named a feature in `features` that the table doesn't expose. The `reason` string carries the underlying serde / lookup error verbatim. Use it to fix your request.
+The body was malformed JSON, missed a required field, or named a feature in `features` that the table doesn't expose. The `reason` string carries the underlying parse / lookup error. Use it to fix your request.
 
 **Content-Type:** `POST /get` does not enforce `application/json` at the route layer; a request with `Content-Type: text/plain` and a JSON body still parses. Send `application/json` anyway so proxies and WAFs don't reject it upstream.
 
@@ -3431,9 +3431,9 @@ Yes — it's a pure read. The server queries in-memory aggregate state without m
 
 You've got reads. The other two HTTP endpoints close the loop:
 
-→ **POST /register** (#) — Register one or more event/table descriptors. The shape that POST /get later resolves "table" against.
+→ **POST /register** (/sdk/http/register/) — Register one or more event/table descriptors. The shape that POST /get later resolves "table" against.
 
-→ **POST /push** (#) — Push a single event. WAL-acked on return; the row that POST /get will read is updated atomically before the response comes back.
+→ **POST /push** (/sdk/http/push/) — Push a single event. WAL-acked on return; the row that POST /get will read is updated atomically before the response comes back.
 
 ========================================================================
 
@@ -3783,9 +3783,9 @@ No — it's the full registry snapshot post-call, including descriptors installe
 
 ## Where to go next
 
-→ **Wire spec** (#) — Framed-TCP layout, opcodes, status conventions, and the strict-FIFO correlation contract — every byte the server speaks.
+→ **Wire spec** (/sdk/http/wire-spec/) — Framed-TCP layout, opcodes, status conventions, and the strict-FIFO correlation contract — every byte the server speaks.
 
-→ **@bv.event** (#) — The Python decorator that compiles to the event-node JSON above. Class form, def form, and the kwargs that surface as wire fields.
+→ **@bv.event** (/sdk/python/event/) — The Python decorator that compiles to the event-node JSON above. Class form, def form, and the kwargs that surface as wire fields.
 
 ========================================================================
 
