@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>get and mget · beava docs</title>
+  <title>get and batch_get · beava docs</title>
   <meta name="description" content="beava serves features through simple key-based queries. Push events. Maintain tables. Query by key.">
   <link rel="stylesheet" href="../../../styles/colors_and_type.css">
   <link rel="stylesheet" href="../../../styles/site.css">
@@ -31,7 +31,7 @@
     const TOC = [
       { id: 'simple', label: 'Simple feature queries' },
       { id: 'when-get', label: 'When to use get' },
-      { id: 'when-mget', label: 'When to use mget' },
+      { id: 'when-batch-get', label: 'When to use batch_get' },
       { id: 'why', label: 'Why this matters' },
     ];
 
@@ -39,7 +39,7 @@
       <>
         <SiteHeader active="docs" search maxWidth={1400}/>
         <div className="bv-docs-shell">
-          <DocsSidebar active="get and mget"/>
+          <DocsSidebar active="get and batch_get"/>
 
           <main className="bv-content">
             <div className="bv-crumbs">
@@ -47,19 +47,19 @@
               <span className="bv-crumb-sep">/</span>
               <a href="#">Concepts</a>
               <span className="bv-crumb-sep">/</span>
-              <span className="bv-crumb-cur">get and mget</span>
+              <span className="bv-crumb-cur">get and batch_get</span>
             </div>
 
-            <h1><code>get</code> and <code>mget</code></h1>
+            <h1><code>get</code> and <code>batch_get</code></h1>
 
-            <p className="bv-lede">beava serves features through simple key-based queries. <code>get</code> returns features for one key. <code>mget</code> returns features for many keys.</p>
+            <p className="bv-lede">beava serves features through simple key-based queries. <code>get</code> returns features for one (table, key). <code>batch_get</code> returns features for many (table, key) requests in one round trip.</p>
 
             <h2 id="simple">Simple feature queries</h2>
             <p>This is designed to feel familiar to developers who have used systems like Redis, while supporting feature tables generated from event streams.</p>
             <p><strong>Query fresh state like application state.</strong></p>
 
             <h2 id="when-get">When to use <code>get</code></h2>
-            <p>Use <code>get</code> when your application needs state for one entity.</p>
+            <p>Use <code>get</code> when your application needs state for one entity in one table.</p>
             <p>Examples:</p>
             <ul>
               <li>Fetch user features before ranking a feed.</li>
@@ -67,9 +67,10 @@
               <li>Fetch account risk features before approving an action.</li>
               <li>Fetch agent workflow state before choosing the next tool.</li>
             </ul>
+            <p>The wire call is <code>POST /get</code> with body <code>{`{"table": "...", "key": "..."}`}</code>; the response is a flat dict of feature values.</p>
 
-            <h2 id="when-mget">When to use <code>mget</code></h2>
-            <p>Use <code>mget</code> when your application needs many feature rows in one decision.</p>
+            <h2 id="when-batch-get">When to use <code>batch_get</code></h2>
+            <p>Use <code>batch_get</code> when your application needs many feature rows in one decision. The requests can mix tables and keys freely; results return in the same order.</p>
             <p>Examples:</p>
             <ul>
               <li>Rank 100 candidate items.</li>
@@ -77,7 +78,8 @@
               <li>Check several entities involved in a transaction.</li>
               <li>Fetch features for several tools an agent could call next.</li>
             </ul>
-            <p><code>mget</code> helps keep decision paths simple when they need more than one lookup.</p>
+            <p>The wire call is <code>POST /batch_get</code> with body <code>{`{"requests": [{"table": "...", "key": "..."}, ...]}`}</code>; the response is an array of flat dicts in the same order.</p>
+            <p><code>batch_get</code> helps keep decision paths simple when they need more than one lookup.</p>
 
             <h2 id="why">Why this matters</h2>
             <p>Many real-time ML systems become hard to operate because feature computation and feature serving are separated across multiple systems.</p>
@@ -100,7 +102,7 @@
             <Pager auto/>
           </main>
 
-          <DocsTOC items={TOC} editHref="https://github.com/beava-dev/beava-website/edit/main/project/docs/concepts/get-and-mget/index.html"/>
+          <DocsTOC items={TOC} editHref="https://github.com/beava-dev/beava-website/edit/main/project/docs/concepts/get-and-batch-get/index.html"/>
         </div>
         <SiteFooter maxWidth={1400}/>
       </>

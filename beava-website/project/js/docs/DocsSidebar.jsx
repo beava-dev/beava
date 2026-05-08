@@ -15,7 +15,7 @@ const Chev = () => (
 //
 // Hidden-but-on-disk:
 //   Getting started — /docs/install/, /docs/get-started/query-features/
-//   Concepts        — /docs/concepts/get-and-mget/, /docs/concepts/windows/,
+//   Concepts        — /docs/concepts/get-and-batch-get/, /docs/concepts/windows/,
 //                     /docs/concepts/freshness/, /docs/concepts/embed-mode/,
 //                     /docs/concepts/global-aggregation/
 //   Vision          — /docs/vision/open-source/, /docs/vision/benchmarks/
