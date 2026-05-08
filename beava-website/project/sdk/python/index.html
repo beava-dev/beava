@@ -152,7 +152,7 @@
 <span class="tk-k">curl</span> -X POST http://localhost:8080/ping
 <span class="tk-c"># → {"pong":true,"registry_version":0}</span></pre>
           </div>
-          <p>Port <code>8080</code> is the HTTP data plane (push, get, batch_get, register, ping). Port <code>8081</code> is the framed-TCP fast-path (sub-millisecond, JSON or msgpack content). Admin endpoints (<code>/health</code>, <code>/ready</code>, <code>/metrics</code>, <code>/registry</code>) live on a separate sidecar port that you opt into via the <code>--http-addr</code> / <code>--config</code> flags.</p>
+          <p>Port <code>8080</code> is the HTTP data plane (push, get, batch_get, register, ping). Port <code>8081</code> is the framed-TCP fast-path (sub-millisecond JSON). Admin endpoints (<code>/health</code>, <code>/ready</code>, <code>/metrics</code>, <code>/registry</code>) live on a separate sidecar port that you opt into via the <code>--http-addr</code> / <code>--config</code> flags.</p>
         </div>
 
         <div class="tabs-panel" id="t-cargo">

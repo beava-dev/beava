@@ -227,7 +227,7 @@
         <li><code>name</code> — string. The node identifier; for <code>output_kind: "table"</code> this is also the <code>table</code> name on <code>/get</code>.</li>
         <li><code>output_kind</code> — <code>"table"</code> or <code>"event"</code>.</li>
         <li><code>upstreams</code> — array of strings. Names of nodes (events or derivations) this node consumes. Compile-time-resolved against the registry.</li>
-        <li><code>ops</code> — array of operator objects. Each operator carries an <code>op</code> name and a <code>params</code> object; operator-specific shapes are documented in the <a href="#">Operator catalogue (planned)</a>.</li>
+        <li><code>ops</code> — array of operator objects. Each operator carries an <code>op</code> name and a <code>params</code> object; operator-specific shapes are documented in the <a href="/sdk/python/operators/">Operator catalogue</a>.</li>
         <li><code>schema</code> — optional. Required for <code>output_kind: "event"</code> derivations (declares the output event's field types); inferred for tables.</li>
         <li><code>table_primary_key</code> — array of field names. <strong>Required when <code>output_kind: "table"</code>.</strong> An empty array (<code>[]</code>) declares a global aggregation — a single feature row keyed by the empty-string sentinel (per ADR-003).</li>
       </ul>
@@ -421,7 +421,7 @@
 
       <!-- =============== TCP =============== -->
       <h2 id="tcp">TCP equivalent</h2>
-      <p>The framed-TCP fast-path carries the same JSON envelope under opcode <code>OP_REGISTER = 0x0001</code>. Frame layout: <code>[u32 length][u16 op=0x0001][u8 content_type=0x01 (json)][payload bytes]</code>. Strict-FIFO correlation per connection — one in-flight request at a time; no <code>request_id</code>. Success returns the same JSON body under <code>OP_REGISTER</code>; structured errors return <code>OP_ERROR_RESPONSE</code> with the same body shape as the HTTP <code>error</code> envelope. See the full <a href="#">Wire spec (planned)</a> for frame details.</p>
+      <p>The framed-TCP fast-path carries the same JSON envelope under opcode <code>OP_REGISTER = 0x0001</code>. Frame layout: <code>[u32 length][u16 op=0x0001][u8 content_type=0x01 (json)][payload bytes]</code>. Strict-FIFO correlation per connection — one in-flight request at a time; no <code>request_id</code>. Success returns the same JSON body under <code>OP_REGISTER</code>; structured errors return <code>OP_ERROR_RESPONSE</code> with the same body shape as the HTTP <code>error</code> envelope. See the full <a href="/sdk/http/wire-spec/">Wire spec</a> for frame details.</p>
 
       <!-- =============== FAQ =============== -->
       <h2 id="faq">Common questions</h2>
@@ -459,12 +459,12 @@
         <a class="card" href="#">
           <div class="ttl">Wire spec</div>
           <p class="desc">Framed-TCP layout, opcodes, status conventions, and the strict-FIFO correlation contract — every byte the server speaks.</p>
-          <span class="go">Wire spec (planned) <span class="arrow">→</span></span>
+          <span class="go">Wire spec <span class="arrow">→</span></span>
         </a>
         <a class="card" href="#">
           <div class="ttl">@bv.event</div>
           <p class="desc">The Python decorator that compiles to the event-node JSON above. Class form, def form, and the kwargs that surface as wire fields.</p>
-          <span class="go">@bv.event (planned) <span class="arrow">→</span></span>
+          <span class="go">@bv.event <span class="arrow">→</span></span>
         </a>
       </div>
 

@@ -356,7 +356,7 @@ Content-Type: application/json
 
       <p>For multi-key reads, use <code>OP_BATCH_GET = 0x0024</code> instead of N round-trips. The Python SDK's <code>app.batch_get([...])</code> method maps to this opcode; over HTTP, the equivalent is <code>POST /batch_get</code>.</p>
 
-      <p>Full wire format — frame header, content-type byte, msgpack vs JSON encoding — is documented in the <a href="#">wire spec (planned)</a>.</p>
+      <p>Full wire format — frame header, content-type byte, JSON encoding — is documented in the <a href="/sdk/http/wire-spec/">wire spec</a>.</p>
 
       <!-- =============== FAQ =============== -->
       <h2 id="faq">Common questions</h2>
@@ -371,7 +371,7 @@ Content-Type: application/json
         <details>
           <summary>Can I get just a single feature without the table boilerplate?</summary>
           <div class="acc-body">
-            <p>Yes — pass <code>features: ["my_feature"]</code> on the regular <code>/get</code> body. There's no separate single-feature route; the filter is the mechanism. For multi-key fetches of one feature, the TCP fast-path's <code>OP_GET_MULTI = 0x0022</code> exists for ad-tech-style fanout reads, but the HTTP surface stays unified through <code>POST /get</code> + <code>POST /batch_get</code>.</p>
+            <p>Yes — pass <code>features: ["my_feature"]</code> on the regular <code>/get</code> body. There's no separate single-feature route; the filter is the mechanism. For multi-key fetches use <code>POST /batch_get</code>.</p>
           </div>
         </details>
         <details>
@@ -396,12 +396,12 @@ Content-Type: application/json
         <a class="card" href="#">
           <div class="ttl">POST /register</div>
           <p class="desc">Register one or more event/table descriptors. The shape that <code>POST /get</code> later resolves <code>"table"</code> against.</p>
-          <span class="go">HTTP API reference (planned) <span class="arrow">→</span></span>
+          <span class="go">HTTP API reference <span class="arrow">→</span></span>
         </a>
         <a class="card" href="#">
           <div class="ttl">POST /push</div>
           <p class="desc">Push a single event. WAL-acked on return; the row that <code>POST /get</code> will read is updated atomically before the response comes back.</p>
-          <span class="go">HTTP API reference (planned) <span class="arrow">→</span></span>
+          <span class="go">HTTP API reference <span class="arrow">→</span></span>
         </a>
       </div>
 

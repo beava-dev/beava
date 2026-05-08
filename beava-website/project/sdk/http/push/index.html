@@ -90,7 +90,7 @@
       <ul>
         <li><strong>Default port:</strong> <code>8080</code> (the data-plane HTTP listener; configure via the server's <code>http_addr</code>).</li>
         <li><strong>Status:</strong> <code>200 OK</code> on success; structured 4xx on validation failure (see <a href="#errors">Errors</a>).</li>
-        <li><strong>One event per request.</strong> For batched fast-path ingest, use <code>OP_PUSH_MANY</code> over framed TCP.</li>
+        <li><strong>One event per request.</strong></li>
       </ul>
 
       <div class="callout note">
@@ -105,7 +105,7 @@
 
       <h3 id="request-headers">Headers</h3>
       <ul>
-        <li><code>Content-Type: application/json</code> — the only supported content type on the HTTP transport. The msgpack fast-path is TCP-only (<code>CT_MSGPACK = 0x02</code> on framed TCP); HTTP <code>/push</code> always parses the body as JSON.</li>
+        <li><code>Content-Type: application/json</code> — the only supported content type. <code>/push</code> always parses the body as JSON.</li>
       </ul>
 
       <h3 id="request-body">Body</h3>
@@ -348,10 +348,9 @@ ack <span class="tk-p">=</span> app<span class="tk-p">.</span>push<span class="t
         <div class="codeblock-head">
           <span class="filename">tcp frame</span>
         </div>
-<pre><span class="tk-p">[</span><span class="tk-t">u32 length BE</span><span class="tk-p">][</span><span class="tk-t">u16 op = 0x0010</span><span class="tk-p">][</span><span class="tk-t">u8 content_type</span><span class="tk-p">][</span>payload<span class="tk-p">]</span>
+<pre><span class="tk-p">[</span><span class="tk-t">u32 length BE</span><span class="tk-p">][</span><span class="tk-t">u16 op = 0x0010</span><span class="tk-p">][</span><span class="tk-t">u8 content_type = 0x01</span><span class="tk-p">][</span>payload<span class="tk-p">]</span>
 
-content_type<span class="tk-p">:</span>  <span class="tk-n">0x01</span> = CT_JSON    <span class="tk-c">// {"event":"Txn","data":{...}}</span>
-              <span class="tk-n">0x02</span> = CT_MSGPACK <span class="tk-c">// msgpack-encoded {event, data} (TCP only)</span></pre>
+payload<span class="tk-p">:</span>  JSON <span class="tk-c">// {"event":"Txn","data":{...}}</span></pre>
       </div>
 
       <p>TCP is strict-FIFO with one in-flight request per connection — the server replies in the same order it received requests. HTTP <code>/push</code> always parses bodies as JSON. The full opcode catalogue and frame state machine live on the <a href="/sdk/http/wire-spec/">wire spec</a> page.</p>
@@ -369,7 +368,7 @@ content_type<span class="tk-p">:</span>  <span class="tk-n">0x01</span> = CT_JSO
         <details>
           <summary>Can I push multiple events in one request?</summary>
           <div class="acc-body">
-            <p>Not over HTTP — <code>POST /push</code> is single-event. For batched ingest, use the framed-TCP fast-path with <code>OP_PUSH_MANY = 0x0012</code>; the body is a length-prefixed array of <code>{event, data}</code> objects and the server returns one ack per event in order. HTTP-level batching is intentionally absent: HTTP/1.1 keep-alive plus per-request acks already amortizes connection overhead well below the WAL throughput ceiling.</p>
+            <p>No — <code>POST /push</code> is single-event. HTTP-level batching is intentionally absent: HTTP/1.1 keep-alive plus per-request acks already amortizes connection overhead well below the WAL throughput ceiling. Open one connection, fire many <code>POST /push</code> requests on it.</p>
           </div>
         </details>
         <details>
@@ -388,7 +387,7 @@ content_type<span class="tk-p">:</span>  <span class="tk-n">0x01</span> = CT_JSO
         <a class="card" href="#">
           <div class="ttl">POST /get</div>
           <p class="desc">Read a single feature row by entity key. JSON request, JSON response — pairs naturally with <code>/push</code> for the push-then-query loop. Reference page lands next.</p>
-          <span class="go">HTTP API reference (planned) <span class="arrow">→</span></span>
+          <span class="go">HTTP API reference <span class="arrow">→</span></span>
         </a>
         <a class="card" href="/sdk/python/app/">
           <div class="ttl">App client</div>

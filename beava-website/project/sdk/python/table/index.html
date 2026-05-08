@@ -321,7 +321,7 @@
     <span class="tk-p">)</span></pre>
       </div>
 
-      <p>Chain methods you can compose before the terminal <code>agg</code>: <code>filter</code>, <code>select</code>, <code>drop</code>, <code>rename</code>, <code>with_columns</code>, <code>cast</code>, <code>fillna</code>, <code>group_by</code>. The terminal call must be <code>agg(...)</code>; otherwise the descriptor is classified as an event-derivation (<code>output_kind=&quot;event&quot;</code>) and belongs under <a href="#"><code>@bv.event</code> (planned)</a>, not <code>@bv.table</code>.</p>
+      <p>Chain methods you can compose before the terminal <code>agg</code>: <code>filter</code>, <code>select</code>, <code>drop</code>, <code>rename</code>, <code>with_columns</code>, <code>cast</code>, <code>fillna</code>, <code>group_by</code>. The terminal call must be <code>agg(...)</code>; otherwise the descriptor is classified as an event-derivation (<code>output_kind=&quot;event&quot;</code>) and belongs under <a href="/sdk/python/event/"><code>@bv.event</code></a>, not <code>@bv.table</code>.</p>
 
       <div class="callout note">
         <span class="ic">
@@ -365,7 +365,7 @@
         <li><code>upstreams</code> is the list of event sources this derivation reads. The flatten rules in the SDK ensure this is always a root <code>@bv.event</code> source name, never an intermediate <code>__derived_</code> step.</li>
       </ul>
 
-      <p>The full registry payload — the wrapper around <code>nodes</code>, additional flags like <code>force</code> / <code>dry_run</code>, the response body — is documented on <a href="#">POST /register (planned)</a>.</p>
+      <p>The full registry payload — the wrapper around <code>nodes</code>, additional flags like <code>force</code> / <code>dry_run</code>, the response body — is documented on <a href="/sdk/http/register/">POST /register</a>.</p>
 
       <!-- =============== FAQ =============== -->
       <h2 id="faq">Common questions</h2>
@@ -405,7 +405,7 @@
         <a class="card" href="#">
           <div class="ttl">Operator catalogue</div>
           <p class="desc">The 40+ aggregation primitives — <code>count</code>, <code>sum</code>, <code>mean</code>, <code>n_unique</code>, quantiles, sketches, velocities, distances. Each one&rsquo;s wire shape, params, and memory cost.</p>
-          <span class="go">Catalogue (planned) <span class="arrow">→</span></span>
+          <span class="go">Catalogue <span class="arrow">→</span></span>
         </a>
         <a class="card" href="/sdk/python/app/">
           <div class="ttl">App client</div>

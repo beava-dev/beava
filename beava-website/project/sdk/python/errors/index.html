@@ -358,7 +358,7 @@ app <span class="tk-p">=</span> bv<span class="tk-p">.</span>App<span class="tk-
         <h3 id="unsupported-content-type" data-toc-label="unsupported_content_type" class="name">unsupported_content_type</h3>
 <div class="sig">HTTP 415 · TCP fast-path</div>
       </div>
-      <p>The frame's <code>content_type</code> byte isn't in the supported set (<code>application/json</code>, <code>application/msgpack</code>).</p>
+      <p>The frame's <code>content_type</code> byte isn't <code>0x01</code> (JSON) — the only supported value in v0.</p>
 
       <div class="method-head">
         <h3 id="unsupported-media-type" data-toc-label="unsupported_media_type" class="name">unsupported_media_type</h3>
@@ -453,7 +453,7 @@ app <span class="tk-p">=</span> bv<span class="tk-p">.</span>App<span class="tk-
           <span class="go">App reference <span class="arrow">→</span></span>
         </a>
         <a class="card" href="#">
-          <div class="ttl">Wire spec (planned)</div>
+          <div class="ttl">Wire spec</div>
           <p class="desc">Full HTTP / TCP request and response shapes per endpoint, with status codes, frame layouts, and content-type matrix. Useful for non-Python clients reading the wire codes raw.</p>
           <span class="go">Wire reference <span class="arrow">→</span></span>
         </a>

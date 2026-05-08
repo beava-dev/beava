@@ -69,7 +69,7 @@ curl -X POST http://localhost:8080/ping
 # → {"pong":true,"registry_version":0}
 ```
 
-Port `8080` is the HTTP data plane (push, get, batch_get, register, ping). Port `8081` is the framed-TCP fast-path (sub-millisecond, JSON or msgpack content). Admin endpoints (`/health`, `/ready`, `/metrics`, `/registry`) live on a separate sidecar port that you opt into via the `--http-addr` / `--config` flags.
+Port `8080` is the HTTP data plane (push, get, batch_get, register, ping). Port `8081` is the framed-TCP fast-path (sub-millisecond JSON). Admin endpoints (`/health`, `/ready`, `/metrics`, `/registry`) live on a separate sidecar port that you opt into via the `--http-addr` / `--config` flags.
 
               terminal
               Copy
@@ -1160,9 +1160,9 @@ Not always. Inline chains inside the `@bv.table` body work for one-shot pipeline
 
 You've declared the inputs. The next step is to declare the per-entity feature tables that aggregate them:
 
-→ **@bv.table (planned)** (#) — Declare per-entity feature tables with group_by(...).agg(...). Composite keys, global tables, and the chain primitives.
+→ **@bv.table** (#) — Declare per-entity feature tables with group_by(...).agg(...). Composite keys, global tables, and the chain primitives.
 
-→ **Operator catalogue (planned)** (#) — The 40+ aggregation primitives — counters, velocities, distances, rates, distributions — that go inside an agg(...) block.
+→ **Operator catalogue** (#) — The 40+ aggregation primitives — counters, velocities, distances, rates, distributions — that go inside an agg(...) block.
 
 ========================================================================
 
@@ -1386,7 +1386,7 @@ def HighValueUserStats(t: Txn):
     )
 ```
 
-Chain methods you can compose before the terminal `agg`: `filter`, `select`, `drop`, `rename`, `with_columns`, `cast`, `fillna`, `group_by`. The terminal call must be `agg(...)`; otherwise the descriptor is classified as an event-derivation (`output_kind="event"`) and belongs under @bv.event (planned) (#), not `@bv.table`.
+Chain methods you can compose before the terminal `agg`: `filter`, `select`, `drop`, `rename`, `with_columns`, `cast`, `fillna`, `group_by`. The terminal call must be `agg(...)`; otherwise the descriptor is classified as an event-derivation (`output_kind="event"`) and belongs under @bv.event (/sdk/python/event/), not `@bv.table`.
 
 **Processing-time only.** Aggregation windows (`window="1h"`, `"24h"`, `"forever"`, ...) are walltime-relative on the server. Beava v0 does not support event-time / watermarks; declaring an `event_time` field on the upstream `@bv.event` raises `TypeError` at decorator time.
 
@@ -1425,7 +1425,7 @@ Three things to notice:
 
 - upstreams is the list of event sources this derivation reads. The flatten rules in the SDK ensure this is always a root @bv.event source name, never an intermediate __derived_ step.
 
-The full registry payload — the wrapper around `nodes`, additional flags like `force` / `dry_run`, the response body — is documented on POST /register (planned) (#).
+The full registry payload — the wrapper around `nodes`, additional flags like `force` / `dry_run`, the response body — is documented on POST /register (/sdk/http/register/).
 
 ## Common questions
 
@@ -2850,7 +2850,7 @@ The HTTP/1.1 layer rejected the request before it reached an application handler
 
 HTTP 415 · TCP fast-path
 
-The frame's `content_type` byte isn't in the supported set (`application/json`, `application/msgpack`).
+The frame's `content_type` byte isn't `0x01` (JSON) — the only supported value in v0.
 
 ### unsupported_media_type
 
@@ -2928,7 +2928,7 @@ Errors don't read in isolation. The two pages you'll cross-reference most:
 
 → **App client** (/sdk/python/app/) — The seven wire-mapped bv.App methods, each with its own Raises section keyed to the codes above. Start there if you're tracing where a specific error came from.
 
-→ **Wire spec (planned)** (#) — Full HTTP / TCP request and response shapes per endpoint, with status codes, frame layouts, and content-type matrix. Useful for non-Python clients reading the wire codes raw.
+→ **Wire spec** (#) — Full HTTP / TCP request and response shapes per endpoint, with status codes, frame layouts, and content-type matrix. Useful for non-Python clients reading the wire codes raw.
 
 ========================================================================
 
@@ -2947,7 +2947,7 @@ Push a single event. ACK includes the WAL log offset and the registry version st
 
 - Status: 200 OK on success; structured 4xx on validation failure (see Errors (#errors)).
 
-- One event per request. For batched fast-path ingest, use OP_PUSH_MANY over framed TCP.
+- One event per request.
 
 **Verb-style body, not path-style.** The event name lives *inside* the JSON body under the `event` key — never in the URL path. Always `POST /push`; never `POST /push/Foo`.
 
@@ -2955,7 +2955,7 @@ Push a single event. ACK includes the WAL log offset and the registry version st
 
 ### Headers
 
-- Content-Type: application/json — the only supported content type on the HTTP transport. The msgpack fast-path is TCP-only (CT_MSGPACK = 0x02 on framed TCP); HTTP /push always parses the body as JSON.
+- Content-Type: application/json — the only supported content type. /push always parses the body as JSON.
 
 ### Body
 
@@ -3130,10 +3130,9 @@ The framed-TCP fast-path carries the same JSON envelope under opcode `OP_PUSH = 
           tcp frame
 
 ```
-[u32 length BE][u16 op = 0x0010][u8 content_type][payload]
+[u32 length BE][u16 op = 0x0010][u8 content_type = 0x01][payload]
 
-content_type:  0x01 = CT_JSON    // {"event":"Txn","data":{...}}
-              0x02 = CT_MSGPACK // msgpack-encoded {event, data} (TCP only)
+payload:  JSON // {"event":"Txn","data":{...}}
 ```
 
 TCP is strict-FIFO with one in-flight request per connection — the server replies in the same order it received requests. HTTP `/push` always parses bodies as JSON. The full opcode catalogue and frame state machine live on the wire spec (/sdk/http/wire-spec/) page.
@@ -3146,7 +3145,7 @@ It's always `false` in that case — the server only consults the dedupe cache w
 
           Can I push multiple events in one request?
 
-Not over HTTP — `POST /push` is single-event. For batched ingest, use the framed-TCP fast-path with `OP_PUSH_MANY = 0x0012`; the body is a length-prefixed array of `{event, data}` objects and the server returns one ack per event in order. HTTP-level batching is intentionally absent: HTTP/1.1 keep-alive plus per-request acks already amortizes connection overhead well below the WAL throughput ceiling.
+No — `POST /push` is single-event. HTTP-level batching is intentionally absent: HTTP/1.1 keep-alive plus per-request acks already amortizes connection overhead well below the WAL throughput ceiling. Open one connection, fire many `POST /push` requests on it.
 
           Is `ack_lsn` durable across restarts?
 
@@ -3412,7 +3411,7 @@ The custom-framed TCP fast-path (default port `8081`) carries the same body. `OP
 
 For multi-key reads, use `OP_BATCH_GET = 0x0024` instead of N round-trips. The Python SDK's `app.batch_get([...])` method maps to this opcode; over HTTP, the equivalent is `POST /batch_get`.
 
-Full wire format — frame header, content-type byte, msgpack vs JSON encoding — is documented in the wire spec (planned) (#).
+Full wire format — frame header, content-type byte, JSON encoding — is documented in the wire spec (/sdk/http/wire-spec/).
 
 ## Common questions
 
@@ -3422,7 +3421,7 @@ Beava is Redis-shaped on reads. A key that hasn't received events yet isn't an e
 
           Can I get just a single feature without the table boilerplate?
 
-Yes — pass `features: ["my_feature"]` on the regular `/get` body. There's no separate single-feature route; the filter is the mechanism. For multi-key fetches of one feature, the TCP fast-path's `OP_GET_MULTI = 0x0022` exists for ad-tech-style fanout reads, but the HTTP surface stays unified through `POST /get` + `POST /batch_get`.
+Yes — pass `features: ["my_feature"]` on the regular `/get` body. There's no separate single-feature route; the filter is the mechanism. For multi-key fetches use `POST /batch_get`.
 
           What happens if I pass `features` for a column that doesn't exist?
 
@@ -3573,7 +3572,7 @@ A derivation is a chain of operators applied to one or more upstream nodes. `out
 
 - upstreams — array of strings. Names of nodes (events or derivations) this node consumes. Compile-time-resolved against the registry.
 
-- ops — array of operator objects. Each operator carries an op name and a params object; operator-specific shapes are documented in the Operator catalogue (planned) (#).
+- ops — array of operator objects. Each operator carries an op name and a params object; operator-specific shapes are documented in the Operator catalogue (/sdk/python/operators/).
 
 - schema — optional. Required for output_kind: "event" derivations (declares the output event's field types); inferred for tables.
 
@@ -3766,7 +3765,7 @@ Sent without `Content-Type: application/json`. Body: `{"error": {"code": "unsupp
 
 ## TCP equivalent
 
-The framed-TCP fast-path carries the same JSON envelope under opcode `OP_REGISTER = 0x0001`. Frame layout: `[u32 length][u16 op=0x0001][u8 content_type=0x01 (json)][payload bytes]`. Strict-FIFO correlation per connection — one in-flight request at a time; no `request_id`. Success returns the same JSON body under `OP_REGISTER`; structured errors return `OP_ERROR_RESPONSE` with the same body shape as the HTTP `error` envelope. See the full Wire spec (planned) (#) for frame details.
+The framed-TCP fast-path carries the same JSON envelope under opcode `OP_REGISTER = 0x0001`. Frame layout: `[u32 length][u16 op=0x0001][u8 content_type=0x01 (json)][payload bytes]`. Strict-FIFO correlation per connection — one in-flight request at a time; no `request_id`. Success returns the same JSON body under `OP_REGISTER`; structured errors return `OP_ERROR_RESPONSE` with the same body shape as the HTTP `error` envelope. See the full Wire spec (/sdk/http/wire-spec/) for frame details.
 
 ## Common questions
 
@@ -3803,13 +3802,13 @@ Two transports. One JSON body shape. Strict-FIFO on TCP. This page is the canoni
 
 ## Overview
 
-Beava ships two transports out of the box:
+Beava ships two transports:
 
-- HTTP/1.1 on the data-plane port (default 8080) — plain JSON, verb-style routes, ubiquitous tooling reach (curl / load-balancers / WAFs).
+- HTTP/1.1 on port 8080 — plain JSON, verb-style routes, ubiquitous tooling reach (curl / load-balancers / WAFs).
 
-- Custom-framed TCP fast-path on the data-plane port (default 8081) — a four-byte length prefix plus a two-byte opcode, JSON or msgpack payload, persistent connection, sub-millisecond P99.
+- Custom-framed TCP fast-path on port 8081 — a four-byte length prefix plus a two-byte opcode, JSON payload, persistent connection, sub-millisecond P99.
 
-Both transports carry the *same* JSON envelope per opcode. The only differences are framing (HTTP headers vs the binary length-prefixed frame), the route/opcode mapping, and the strict-FIFO contract on TCP. Pick HTTP for reach; pick TCP for latency.
+Both transports carry the same JSON envelope per opcode. The only differences are framing (HTTP headers vs the binary length-prefixed frame), the route/opcode mapping, and the strict-FIFO contract on TCP. Pick HTTP for reach; pick TCP for latency.
 
 **Admin endpoints live on a separate port.** Health, readiness, metrics and registry-introspection (`/health`, `/ready`, `/metrics`, `/registry`) are served by an admin sidecar bound to `cfg.admin_addr`. They are not part of the data-plane wire spec and are not exposed on the TCP port.
 
@@ -3822,15 +3821,11 @@ All data-plane writes and reads are `POST`. Verb-style URLs only — the event n
 | POST /ping | {} | {"pong": true, "registry_version": <n>} |
 | POST /register | {"nodes": [...], "force": false, "dry_run": false} | {"status": "ok", "registry_version": <n>, "added": [...], "already_present": [...]} — 409 on a name collision without force. |
 | POST /push | {"event": "<name>", "data": {...}} | {"ack_lsn": <n>, "idempotent_replay": false, "registry_version": <n>} |
-| POST /push-sync | {"event": "<name>", "data": {...}} | Same shape as /push — but the response only returns once the WAL fsync covering this event has completed. |
-| POST /push-batch/:event | {"events": [{...}, ...]} | Per-event ack array. Path-style (:event) — kept for in-tree tests; the verb-style equivalent is reserved. |
 | POST /get | {"table": "<name>", "entity_id": "<key>", "features": [...]} | Flat row dict — e.g. {"visits": 2}. Cold-start returns {}. |
 | POST /batch_get | {"requests": [{"table","entity_id","features"?}, ...]} | {"results": [<row>, ...]} — one row per request, in submission order. |
 | POST /reset | {} | 200 with {"reset": true, "registry_version": <new>} when the server is in test mode; 403 + reset_disabled_in_production otherwise. |
 
 Errors on every route share one body shape — see Errors (#errors) below.
-
-**Legacy path-style routes still resolve** for in-tree backward-compat — `POST /push/:event_name`, `POST /push-sync/:event_name`, and `GET /get/:feature/:key` all work. New code should use the verb-style routes above; the path-style forms are not documented for third-party SDK authors.
 
 ## TCP frame format
 
@@ -3846,8 +3841,8 @@ Every TCP frame — request or response — has the same envelope. All multi-byt
 | --- | --- | --- |
 | length | 4 bytes BE | Bytes that follow this field — i.e. op + content_type + payload.len(). Minimum value is 3 (op + content_type, empty payload). The length itself is not counted. |
 | op | 2 bytes BE | Opcode. See the table below. Request and response frames share the same opcode space; the client→server direction is implicit. |
-| content_type | 1 byte | 0x01 for JSON (the v0 default); 0x02 for msgpack (reserved). Frames with any other byte return unsupported_content_type — the connection stays open, only that frame is rejected. |
-| payload | length − 3 bytes | Opcode-specific JSON (or msgpack) body. Server enforces length ≤ tcp_max_frame_bytes + 3; default is 4 MiB payload (4 * 1024 * 1024). Frames over the limit are rejected with frame_too_large and the connection is closed. |
+| content_type | 1 byte | 0x01 = JSON. Any other byte returns unsupported_content_type; the connection stays open, only the offending frame is rejected. |
+| payload | length − 3 bytes | Opcode-specific JSON body. Server enforces length ≤ tcp_max_frame_bytes + 3; default is 4 MiB payload (4 * 1024 * 1024). Frames over the limit are rejected with frame_too_large and the connection is closed. |
 
           empty-payload OP_PING — 7 bytes total
 
@@ -3864,11 +3859,9 @@ Opcodes are u16 big-endian. Opcodes outside this table return `unknown_op`.
 | --- | --- | --- | --- |
 | 0x0000 | OP_PING | Empty JSON ({} or zero-byte payload). | OP_GET_RESPONSE (0x0023) with {"pong": true, "registry_version": <n>}. |
 | 0x0001 | OP_REGISTER | Same JSON DAG body as POST /register: {"nodes":[...], "force"?, "dry_run"?}. | OP_GET_RESPONSE with the success body, or OP_ERROR_RESPONSE on conflict. |
-| 0x0010 | OP_PUSH | {"event": "<name>", "data": {...}} (or "body" as a synonym for data). | OP_GET_RESPONSE with {"ack_lsn", "idempotent_replay", "registry_version"}. |
-| 0x0020 | OP_GET | {"table": "<name>", "entity_id": "<key>", "features": [...]}. | OP_GET_RESPONSE with the flat row dict (cold-start: {}). |
-| 0x0021 | OP_MGET | Many keys, one feature: {"feature": "<name>", "keys": [...]}. | OP_GET_RESPONSE with {"results": [...]}. |
-| 0x0022 | OP_GET_MULTI | Multi-descriptor batched read. | OP_GET_RESPONSE. |
-| 0x0023 | OP_GET_RESPONSE | Response-only. Generic JSON success-frame opcode shared by OP_PING, OP_REGISTER, OP_PUSH, the OP_GET family, OP_BATCH_GET, and OP_RESET. | Body is opcode-of-the-request-specific. |
+| 0x0010 | OP_PUSH | {"event": "<name>", "data": {...}} | OP_GET_RESPONSE with {"ack_lsn", "idempotent_replay", "registry_version"}. |
+| 0x0020 | OP_GET | {"table": "<name>", "entity_id": "<key>", "features": [...]} | OP_GET_RESPONSE with the flat row dict (cold-start: {}). |
+| 0x0023 | OP_GET_RESPONSE | Response-only. Generic JSON success-frame opcode shared by OP_PING, OP_REGISTER, OP_PUSH, OP_GET, OP_BATCH_GET, and OP_RESET. | Body is opcode-of-the-request-specific. |
 | 0x0024 | OP_BATCH_GET | {"requests": [{"table","entity_id","features"?}, ...]} — heterogeneous keys across tables in one frame. | OP_GET_RESPONSE with {"results": [<row>, ...]} in submission order. |
 | 0x0040 | OP_RESET | Empty JSON ({}). Test-mode-gated — if the server is not in test mode, returns OP_ERROR_RESPONSE with reset_disabled_in_production. | OP_GET_RESPONSE with {"reset": true, "registry_version": <new>}. |
 | 0xFFFF | OP_ERROR_RESPONSE | Response-only. Carries any structured error regardless of which opcode the request used. | {"error": {"code", "path", "message"}} — same shape as the HTTP error body. |
@@ -3918,7 +3911,7 @@ Over HTTP this body is returned with the appropriate `4xx` / `5xx` status. Over 
 | Reach | Anything that speaks HTTP — curl, browsers, load-balancers, WAFs, sidecars. | Custom protocol; you write or use a beava SDK. |
 | Latency | ~1–2 ms per RTT typical; dominated by HTTP parsing on both ends. | Sub-millisecond P99 on a warm connection. |
 | Connection model | Pooled / keep-alive. Stateless on the wire — any worker can answer. | Persistent. Strict-FIFO on a single socket; one in-flight request per connection. |
-| Payload | JSON only. | JSON (default); msgpack on the read fast-path is reserved. |
+| Payload | JSON. | JSON. |
 | Best for | Bootstrapping, ops dashboards, server-side scripts, anything behind a load-balancer. | Hot-path push/get from latency-sensitive clients (fraud-rule engines, ad-tech bidders). |
 
 ## Common questions
@@ -3937,7 +3930,7 @@ The opcodes and their semantics are locked for v0. Existing opcodes never change
 
           How do I implement a third-party SDK?
 
-Two layers. (1) A frame writer/reader: 4-byte length + 2-byte opcode + 1-byte content-type + payload. ~50 LOC in any language. (2) A JSON serialiser per opcode whose body shape is documented above. ~150 LOC for the seven public opcodes. Hold the strict-FIFO discipline (one in-flight request per socket, send/recv under a mutex) and you're done. The Python SDK's TCP transport is a good reference at ~250 LOC.
+Two layers. (1) A frame writer/reader: 4-byte length + 2-byte opcode + 1-byte content-type + payload. ~50 LOC in any language. (2) A JSON serialiser per opcode whose body shape is documented above. ~150 LOC for the six request opcodes (`OP_PING`, `OP_REGISTER`, `OP_PUSH`, `OP_GET`, `OP_BATCH_GET`, `OP_RESET`) plus the two response opcodes. Hold the strict-FIFO discipline (one in-flight request per socket, send/recv under a mutex) and you're done. The Python SDK's TCP transport is a good reference at ~250 LOC.
 
 ## Where to go next
 
@@ -3945,4 +3938,4 @@ You've got the wire. The next things are the client that speaks it and the route
 
 → **App client** (/sdk/python/app/) — The synchronous Python client. Seven wire-mapped methods (register, push, get, batch_get, reset, ping, close), three transport modes (HTTP / TCP / embed), plus the lifecycle.
 
-→ **POST /push** (#) — Per-route reference for the push opcode — request body shape, response body shape, error codes, idempotency contract, and a worked example. (planned)
+→ **POST /push** (/sdk/http/push/) — Per-route reference for the push opcode — request body shape, response body shape, error codes, idempotency contract, and a worked example.
