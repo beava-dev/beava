@@ -9,7 +9,13 @@
 #
 # Triggers:
 #   - push tag v*       → full build + PyPI publish
-#   - workflow_dispatch → full build, no publish (verification path)
+#   - workflow_dispatch → full build, no publish (verification path; only
+#                         works once the workflow file lives on the
+#                         default branch)
+#   - pull_request      → full build, no publish (pre-merge gate; scoped
+#                         to PRs that touch python/ packaging or this
+#                         workflow itself, so unrelated PRs don't pay
+#                         the 30-minute matrix cost)
 #
 # First-time PyPI publish (establishing the `beava` project): configure a
 # Trusted Publisher on PyPI ahead of time as a "pending publisher" tied to
@@ -25,6 +31,13 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "python/**"
+      - "crates/beava-server/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/release-wheels.yml"
 
 concurrency:
   group: release-wheels-${{ github.ref }}
