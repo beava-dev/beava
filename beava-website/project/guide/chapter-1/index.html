@@ -582,36 +582,11 @@
       );
     };
 
-    // AskClaude tip — reuses the pattern from the fraud recipe. Sits below
-    // a pipeline block, says "you can skip writing this and just ask Claude."
-    const AskClaude = ({ command, blurb }) => (
-      <div style={{
-        marginTop: 18,
-        padding: '20px 24px',
-        background: 'var(--beava-orange-wash)',
-        border: '1px solid #f1d8c2',
-        borderRadius: 14,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-          <span style={{
-            fontFamily: 'var(--font-accent)',
-            fontSize: 22, fontWeight: 700,
-            color: 'var(--accent)',
-            transform: 'rotate(-2deg)',
-            display: 'inline-block',
-          }}>
-            Or just ask Claude →
-          </span>
-        </div>
-        <pre className="code-well" style={{ fontSize: 13, padding: '14px 16px', lineHeight: 1.5, margin: 0 }}>
-          <span className="cmt"># in Claude Code, Cursor, or Codex</span>{'\n'}
-          {command}
-        </pre>
-        <div style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--fg2)', marginTop: 10, textWrap: 'pretty' }}>
-          {blurb} <a href="#" style={{ color: 'var(--accent)', fontWeight: 600, textDecoration: 'none' }}>Install the skill →</a>
-        </div>
-      </div>
-    );
+    // AskClaude — removed per product direction (skill not yet shipped).
+    // Component is now a no-op so existing call sites compile but render
+    // nothing. Drop the call sites + this stub once the surrounding
+    // sections are next-pass-rewritten.
+    const AskClaude = () => null;
 
     const CodeBlock = ({ tokens, fontSize = 13 }) => {
       // Copy target + user-drag selection both exclude annotations. The
@@ -1490,14 +1465,14 @@
             <div style={{ maxWidth: 1040, margin: '0 auto' }}>
               <Eyebrow style={{ marginBottom: 12 }}>Next</Eyebrow>
               <h2 style={{ fontFamily: 'var(--font-serif)', fontWeight: 600, fontSize: 'clamp(22px, 2.8vw, 28px)', lineHeight: 1.2, color: 'var(--fg1)', margin: '0 0 20px' }}>
-                Pick a recipe and build for real.
+                Build for real.
               </h2>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                 <Button variant="primary" size="md" href="/guide/" icon={<Icon name="arrow" size={14}/>}>
                   Back to the guidebook
                 </Button>
-                <Button variant="secondary" size="md" href="/guide/recipes/fraud/" iconLeft={<Icon name="book" size={14}/>}>
-                  Read the fraud recipe
+                <Button variant="secondary" size="md" href="/sdk/python/" iconLeft={<Icon name="book" size={14}/>}>
+                  Read the SDK reference
                 </Button>
                 <Button variant="ghost" size="md" href="https://github.com/beava-dev/beava" iconLeft={<Icon name="github" size={14}/>}>
                   Star on GitHub
