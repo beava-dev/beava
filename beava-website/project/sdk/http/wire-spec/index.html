@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wire spec · beava HTTP API</title>
+<meta name="description" content="Beava ships two transports — HTTP/1.1 on port 8080 and a custom-framed TCP fast-path on port 8081. Both carry the same JSON envelope per opcode. Reference for routes, frame format, and opcodes.">
+<link rel="stylesheet" href="/styles/colors_and_type.css">
+<link rel="stylesheet" href="/styles/site.css">
+<link rel="stylesheet" href="/styles/sdk-shell.css">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+<link rel="shortcut icon" href="/assets/favicon.ico">
+<style>
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--fg1); font-family: var(--font-sans); }
+
+  /* Reference-page hero — tighter than the Quickstart's landing-style
+     hero. No mascot; eyebrow + h1 + lede in a single column. */
+  .ref-hero {
+    margin: 0 0 28px;
+    padding-bottom: 26px;
+    border-bottom: 1px solid var(--border);
+  }
+  .ref-hero .eyebrow {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-family: var(--font-mono); font-weight: 600; font-size: 12px;
+    color: var(--fg3);
+    margin-bottom: 14px;
+  }
+  .ref-hero .eyebrow .pill {
+    display: inline-block;
+    font-family: var(--font-mono); font-size: 10.5px; font-weight: 600;
+    color: var(--accent); background: var(--beava-orange-wash);
+    padding: 2px 8px; border-radius: 999px;
+    letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .ref-hero h1 {
+    font-family: var(--font-serif); font-weight: 700;
+    font-size: 44px; line-height: 1.05; letter-spacing: -0.025em;
+    color: var(--fg1);
+    margin: 0 0 14px;
+  }
+  .ref-hero h1 code {
+    font-family: var(--font-mono); font-weight: 700; font-size: 0.78em;
+    background: var(--beava-paper); border: 1px solid var(--border-inset);
+    padding: 2px 9px; border-radius: 8px; color: var(--accent);
+    letter-spacing: 0;
+  }
+  .ref-hero .lede {
+    font-family: var(--font-serif);
+    font-size: 19px; line-height: 1.5;
+    color: var(--fg2); font-weight: 400;
+    margin: 0; max-width: 60ch;
+  }
+
+  /* Wire-spec dense reference tables — opcode list, route list, content-type
+     list. Slightly tighter than the doc-default; a 2-3 column grid. */
+  .wire-table {
+    width: 100%; border-collapse: collapse;
+    margin: 14px 0 22px;
+    font-size: 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .wire-table th, .wire-table td {
+    padding: 10px 14px;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--border);
+  }
+  .wire-table tr:last-child td { border-bottom: none; }
+  .wire-table th {
+    background: var(--beava-paper);
+    font-family: var(--font-mono); font-size: 12px; font-weight: 600;
+    color: var(--fg3); letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .wire-table td.mono, .wire-table td code {
+    font-family: var(--font-mono); font-size: 13px;
+  }
+  .wire-table td.op { white-space: nowrap; font-family: var(--font-mono); font-weight: 600; color: var(--accent); }
+  .wire-table td.note { color: var(--fg2); }
+  .wire-table td.status-impl { color: var(--fg2); }
+  .wire-table td.status-reserved { color: var(--fg3); font-style: italic; }
+</style>
+</head>
+<body class="beava">
+
+  <div id="bv-site-header"></div>
+
+  <div class="shell">
+
+    <!-- ============ SIDEBAR ============ -->
+    <aside class="sidebar">
+      <div id="bv-sdk-sidebar"></div>
+    </aside>
+
+    <!-- ============ MAIN ============
+         `data-pagefind-body` tells the Pagefind crawler this is the
+         main content region to index for search. Sidebar / TOC / nav
+         are excluded by build-search.mjs's excludeSelectors list. -->
+    <main class="content" data-pagefind-body>
+
+      <div class="crumbs">
+        <a href="/">beava</a><span class="sep">/</span>
+        <a href="/sdk/python/">SDK reference</a><span class="sep">/</span>
+        <span class="cur">Wire spec</span>
+      </div>
+
+      <header class="ref-hero">
+        <div class="eyebrow">
+          <span class="pill">HTTP API</span>
+          <span><code>beava-core::wire</code></span>
+        </div>
+        <h1>Wire spec</h1>
+        <p class="lede">Two transports. One JSON body shape. Strict-FIFO on TCP. This page is the canonical reference for the bytes that move between any beava client and the server — implement a third-party SDK from this alone.</p>
+      </header>
+
+      <!-- =============== OVERVIEW =============== -->
+      <h2 id="overview">Overview</h2>
+      <p>Beava ships two transports out of the box:</p>
+      <ul>
+        <li><strong>HTTP/1.1</strong> on the data-plane port (default <code>8080</code>) — plain JSON, verb-style routes, ubiquitous tooling reach (curl / load-balancers / WAFs).</li>
+        <li><strong>Custom-framed TCP fast-path</strong> on the data-plane port (default <code>8081</code>) — a four-byte length prefix plus a two-byte opcode, JSON or msgpack payload, persistent connection, sub-millisecond P99.</li>
+      </ul>
+      <p>Both transports carry the <em>same</em> JSON envelope per opcode. The only differences are framing (HTTP headers vs the binary length-prefixed frame), the route/opcode mapping, and the strict-FIFO contract on TCP. Pick HTTP for reach; pick TCP for latency.</p>
+
+      <div class="callout note">
+        <span class="ic">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        </span>
+        <p><strong>Admin endpoints live on a separate port.</strong> Health, readiness, metrics and registry-introspection (<code>/health</code>, <code>/ready</code>, <code>/metrics</code>, <code>/registry</code>) are served by an admin sidecar bound to <code>cfg.admin_addr</code>. They are not part of the data-plane wire spec and are not exposed on the TCP port.</p>
+      </div>
+
+      <!-- =============== HTTP ROUTES =============== -->
+      <h2 id="http">HTTP routes</h2>
+      <p>All data-plane writes and reads are <code>POST</code>. Verb-style URLs only — the event name and entity key live in the JSON body, not in path segments.</p>
+
+      <table class="wire-table">
+        <thead>
+          <tr>
+            <th>Method &amp; path</th>
+            <th>Request body</th>
+            <th>Success body</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="mono">POST /ping</td>
+            <td><code>{}</code></td>
+            <td><code>{"pong": true, "registry_version": &lt;n&gt;}</code></td>
+          </tr>
+          <tr>
+            <td class="mono">POST /register</td>
+            <td><code>{"nodes": [...], "force": false, "dry_run": false}</code></td>
+            <td><code>{"status": "ok", "registry_version": &lt;n&gt;, "added": [...], "already_present": [...]}</code> — <code>409</code> on a name collision without <code>force</code>.</td>
+          </tr>
+          <tr>
+            <td class="mono">POST /push</td>
+            <td><code>{"event": "&lt;name&gt;", "data": {...}}</code></td>
+            <td><code>{"ack_lsn": &lt;n&gt;, "idempotent_replay": false, "registry_version": &lt;n&gt;}</code></td>
+          </tr>
+          <tr>
+            <td class="mono">POST /push-sync</td>
+            <td><code>{"event": "&lt;name&gt;", "data": {...}}</code></td>
+            <td>Same shape as <code>/push</code> — but the response only returns once the WAL <code>fsync</code> covering this event has completed.</td>
+          </tr>
+          <tr>
+            <td class="mono">POST /push-batch/:event</td>
+            <td><code>{"events": [{...}, ...]}</code></td>
+            <td>Per-event ack array. Path-style (<code>:event</code>) — kept for in-tree tests; the verb-style equivalent is reserved.</td>
+          </tr>
+          <tr>
+            <td class="mono">POST /get</td>
+            <td><code>{"table": "&lt;name&gt;", "entity_id": "&lt;key&gt;", "features": [...]}</code></td>
+            <td>Flat row dict — e.g. <code>{"visits": 2}</code>. Cold-start returns <code>{}</code>.</td>
+          </tr>
+          <tr>
+            <td class="mono">POST /batch_get</td>
+            <td><code>{"requests": [{"table","entity_id","features"?}, ...]}</code></td>
+            <td><code>{"results": [&lt;row&gt;, ...]}</code> — one row per request, in submission order.</td>
+          </tr>
+          <tr>
+            <td class="mono">POST /reset</td>
+            <td><code>{}</code></td>
+            <td><code>200</code> with <code>{"reset": true, "registry_version": &lt;new&gt;}</code> when the server is in test mode; <code>403</code> + <code>reset_disabled_in_production</code> otherwise.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>Errors on every route share one body shape — see <a href="#errors">Errors</a> below.</p>
+
+      <div class="callout note">
+        <span class="ic">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        </span>
+        <p><strong>Legacy path-style routes still resolve</strong> for in-tree backward-compat — <code>POST /push/:event_name</code>, <code>POST /push-sync/:event_name</code>, and <code>GET /get/:feature/:key</code> all work. New code should use the verb-style routes above; the path-style forms are not documented for third-party SDK authors.</p>
+      </div>
+
+      <!-- =============== TCP FRAME FORMAT =============== -->
+      <h2 id="tcp-frame">TCP frame format</h2>
+      <p>Every TCP frame — request or response — has the same envelope. All multi-byte integers are big-endian (network byte order).</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">on-wire bytes</span>
+        </div>
+<pre>[u32 length BE][u16 op BE][u8 content_type][payload: length - 3 bytes]</pre>
+      </div>
+
+      <table class="wire-table">
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Width</th>
+            <th>Meaning</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="mono">length</td>
+            <td>4 bytes BE</td>
+            <td>Bytes that follow this field — i.e. <code>op + content_type + payload.len()</code>. Minimum value is <code>3</code> (op + content_type, empty payload). The length itself is not counted.</td>
+          </tr>
+          <tr>
+            <td class="mono">op</td>
+            <td>2 bytes BE</td>
+            <td>Opcode. See the table below. Request and response frames share the same opcode space; the client→server direction is implicit.</td>
+          </tr>
+          <tr>
+            <td class="mono">content_type</td>
+            <td>1 byte</td>
+            <td><code>0x01</code> for JSON (the v0 default); <code>0x02</code> for msgpack (reserved). Frames with any other byte return <code>unsupported_content_type</code> — the connection stays open, only that frame is rejected.</td>
+          </tr>
+          <tr>
+            <td class="mono">payload</td>
+            <td>length − 3 bytes</td>
+            <td>Opcode-specific JSON (or msgpack) body. Server enforces <code>length ≤ tcp_max_frame_bytes + 3</code>; default is <strong>4 MiB</strong> payload (<code>4 * 1024 * 1024</code>). Frames over the limit are rejected with <code>frame_too_large</code> and the connection is closed.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">empty-payload OP_PING — 7 bytes total</span>
+        </div>
+<pre><span class="tk-c"># length=3 (op + ct), op=0x0000 (ping), ct=0x01 (JSON), payload=∅</span>
+00 00 00 03  00 00  01</pre>
+      </div>
+
+      <!-- =============== TCP OPCODES =============== -->
+      <h2 id="opcodes">TCP opcode table</h2>
+      <p>Source of truth: <code>crates/beava-core/src/wire.rs</code>. Opcodes are u16 big-endian. Reserved opcodes parse but the server rejects them with <code>op_not_implemented</code>; opcodes outside this table return <code>unknown_op</code>.</p>
+
+      <table class="wire-table">
+        <thead>
+          <tr>
+            <th>Opcode</th>
+            <th>Name</th>
+            <th>Status</th>
+            <th>Request payload</th>
+            <th>Response opcode &amp; body</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="op">0x0000</td>
+            <td><code>OP_PING</code></td>
+            <td class="status-impl">Implemented</td>
+            <td>Empty JSON (<code>{}</code> or zero-byte payload).</td>
+            <td><code>OP_GET_RESPONSE (0x0023)</code> with <code>{"pong": true, "registry_version": &lt;n&gt;}</code>.</td>
+          </tr>
+          <tr>
+            <td class="op">0x0001</td>
+            <td><code>OP_REGISTER</code></td>
+            <td class="status-impl">Implemented</td>
+            <td>Same JSON DAG body as <code>POST /register</code>: <code>{"nodes":[...], "force"?, "dry_run"?}</code>.</td>
+            <td><code>OP_GET_RESPONSE</code> with the success body, or <code>OP_ERROR_RESPONSE</code> on conflict.</td>
+          </tr>
+          <tr>
+            <td class="op">0x0010</td>
+            <td><code>OP_PUSH</code></td>
+            <td class="status-impl">Implemented</td>
+            <td><code>{"event": "&lt;name&gt;", "data": {...}}</code> (or <code>"body"</code> as a synonym for <code>data</code>).</td>
+            <td><code>OP_GET_RESPONSE</code> with <code>{"ack_lsn", "idempotent_replay", "registry_version"}</code>.</td>
+          </tr>
+          <tr>
+            <td class="op">0x0011</td>
+            <td><code>OP_PUSH_SYNC</code></td>
+            <td class="status-reserved">Reserved</td>
+            <td>Same shape as <code>OP_PUSH</code>; reserved for the synchronous-push wire variant. Today, sync-push is reachable through HTTP <code>POST /push-sync</code>.</td>
+            <td><code>OP_ERROR_RESPONSE</code> with <code>op_not_implemented</code>.</td>
+          </tr>
+          <tr>
+            <td class="op">0x0012</td>
+            <td><code>OP_PUSH_MANY</code></td>
+            <td class="status-reserved">Reserved</td>
+            <td>Batched push over TCP. Reserved.</td>
+            <td><code>OP_ERROR_RESPONSE</code> with <code>op_not_implemented</code>.</td>
+          </tr>
+          <tr>
+            <td class="op">0x0020</td>
+            <td><code>OP_GET</code></td>
+            <td class="status-impl">Implemented</td>
+            <td><code>{"table": "&lt;name&gt;", "entity_id": "&lt;key&gt;", "features": [...]}</code>.</td>
+            <td><code>OP_GET_RESPONSE</code> with the flat row dict (cold-start: <code>{}</code>).</td>
+          </tr>
+          <tr>
+            <td class="op">0x0021</td>
+            <td><code>OP_MGET</code></td>
+            <td class="status-impl">Implemented</td>
+            <td>Many keys, one feature: <code>{"feature": "&lt;name&gt;", "keys": [...]}</code>.</td>
+            <td><code>OP_GET_RESPONSE</code> with <code>{"results": [...]}</code>.</td>
+          </tr>
+          <tr>
+            <td class="op">0x0022</td>
+            <td><code>OP_GET_MULTI</code></td>
+            <td class="status-impl">Implemented</td>
+            <td>Multi-descriptor batched read.</td>
+            <td><code>OP_GET_RESPONSE</code>.</td>
+          </tr>
+          <tr>
+            <td class="op">0x0023</td>
+            <td><code>OP_GET_RESPONSE</code></td>
+            <td class="status-impl">Implemented</td>
+            <td><em>Response-only.</em> Generic JSON success-frame opcode shared by <code>OP_PING</code>, <code>OP_REGISTER</code>, <code>OP_PUSH</code>, the <code>OP_GET</code> family, <code>OP_BATCH_GET</code>, and <code>OP_RESET</code>.</td>
+            <td>Body is opcode-of-the-request-specific.</td>
+          </tr>
+          <tr>
+            <td class="op">0x0024</td>
+            <td><code>OP_BATCH_GET</code></td>
+            <td class="status-impl">Implemented</td>
+            <td><code>{"requests": [{"table","entity_id","features"?}, ...]}</code> — heterogeneous keys across tables in one frame.</td>
+            <td><code>OP_GET_RESPONSE</code> with <code>{"results": [&lt;row&gt;, ...]}</code> in submission order.</td>
+          </tr>
+          <tr>
+            <td class="op">0x0030</td>
+            <td><code>OP_SET</code></td>
+            <td class="status-reserved">Reserved</td>
+            <td>Direct feature write. Reserved.</td>
+            <td><code>OP_ERROR_RESPONSE</code> with <code>op_not_implemented</code>.</td>
+          </tr>
+          <tr>
+            <td class="op">0x0031</td>
+            <td><code>OP_MSET</code></td>
+            <td class="status-reserved">Reserved</td>
+            <td>Batched direct writes. Reserved.</td>
+            <td><code>OP_ERROR_RESPONSE</code> with <code>op_not_implemented</code>.</td>
+          </tr>
+          <tr>
+            <td class="op">0x0040</td>
+            <td><code>OP_RESET</code></td>
+            <td class="status-impl">Implemented</td>
+            <td>Empty JSON (<code>{}</code>). Test-mode-gated — if the server is not in test mode, returns <code>OP_ERROR_RESPONSE</code> with <code>reset_disabled_in_production</code>.</td>
+            <td><code>OP_GET_RESPONSE</code> with <code>{"reset": true, "registry_version": &lt;new&gt;}</code>.</td>
+          </tr>
+          <tr>
+            <td class="op">0xFFFF</td>
+            <td><code>OP_ERROR_RESPONSE</code></td>
+            <td class="status-impl">Implemented</td>
+            <td><em>Response-only.</em> Carries any structured error regardless of which opcode the request used.</td>
+            <td><code>{"error": {"code", "path", "message"}}</code> — same shape as the HTTP error body.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout note">
+        <span class="ic">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        </span>
+        <p><strong>Two opcode ranges are reserved by removed features.</strong> <code>0x0013</code> / <code>0x0014</code> were <code>push_table</code> / <code>delete_table</code>; they were removed by the v0 events-only invariant and are now treated as <code>unknown_op</code>. Tables return in v0.1+ if/when justified by demand.</p>
+      </div>
+
+      <!-- =============== CONTENT TYPE =============== -->
+      <h2 id="content-type">Content type byte</h2>
+      <p>The single-byte <code>content_type</code> field gates payload parsing. Two values are reserved.</p>
+
+      <table class="wire-table">
+        <thead>
+          <tr>
+            <th>Byte</th>
+            <th>Name</th>
+            <th>Status</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="op">0x01</td>
+            <td><code>CT_JSON</code></td>
+            <td class="status-impl">Implemented</td>
+            <td>The v0 default. Every frame the SDKs send sets this byte. Server-to-client response frames also use <code>0x01</code>.</td>
+          </tr>
+          <tr>
+            <td class="op">0x02</td>
+            <td><code>CT_MSGPACK</code></td>
+            <td class="status-reserved">Reserved (read-fast-path only)</td>
+            <td>Reserved for the read fast-path under the <code>--enable-msgpack</code> server flag. Not implemented in v0; setting this byte today returns <code>unsupported_content_type</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>Unknown content-type bytes return <code>OP_ERROR_RESPONSE</code> with code <code>unsupported_content_type</code>. The connection is <em>not</em> closed — only that frame is rejected, so a misconfigured client doesn't tear down a healthy long-lived session.</p>
+
+      <!-- =============== STRICT-FIFO =============== -->
+      <h2 id="fifo">Strict-FIFO contract</h2>
+      <p>Beava's TCP transport is <strong>strict-FIFO</strong>: at most one in-flight request per connection, and the server replies in the exact order it received requests. There is no <code>request_id</code> field on the wire because the order is the correlation.</p>
+
+      <p>Concretely:</p>
+      <ul>
+        <li>A client writes one frame, then waits for one response frame, then writes the next.</li>
+        <li>If a client writes two frames back-to-back, the server still replies in submission order — but the client must not interpret responses out of order or interleave reads from multiple application threads on the same socket.</li>
+        <li>The Python SDK's TCP transport enforces this client-side: a TCP-mode <code>bv.App</code> serialises send/recv on the socket, and concurrent calls from multiple threads block on a per-connection lock rather than racing the wire.</li>
+      </ul>
+
+      <div class="callout warning">
+        <span class="ic">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </span>
+        <p><strong>Do not multiplex on a single TCP connection.</strong> Sharing a TCP connection across application threads or async tasks <em>without</em> a strict-FIFO mutex will interleave frames and corrupt the wire — there is no per-frame correlation ID to recover from. If you need parallelism on TCP, open multiple connections (one per thread or per task pool worker), each with its own send/recv lock.</p>
+      </div>
+
+      <!-- =============== ERRORS =============== -->
+      <h2 id="errors">Errors</h2>
+      <p>Every error — HTTP or TCP — has the same body shape:</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">error body</span>
+        </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"error"</span>: <span class="tk-p">{</span>
+    <span class="tk-fn">"code"</span>:    <span class="tk-s">"event_not_found"</span><span class="tk-p">,</span>
+    <span class="tk-fn">"path"</span>:    <span class="tk-s">"/push"</span><span class="tk-p">,</span>
+    <span class="tk-fn">"message"</span>: <span class="tk-s">"Unknown event 'PageView'"</span>
+  <span class="tk-p">}</span>
+<span class="tk-p">}</span></pre>
+      </div>
+
+      <p>Over HTTP this body is returned with the appropriate <code>4xx</code> / <code>5xx</code> status. Over TCP it is wrapped in a frame whose opcode is <code>OP_ERROR_RESPONSE = 0xFFFF</code> regardless of which opcode the request used. The <code>code</code> field is a stable string SDK clients can match on (e.g. <code>event_not_found</code>, <code>schema_mismatch</code>, <code>invalid_event</code>, <code>reset_disabled_in_production</code>, <code>unsupported_content_type</code>, <code>op_not_implemented</code>, <code>unknown_op</code>, <code>frame_too_large</code>).</p>
+
+      <!-- =============== HTTP vs TCP =============== -->
+      <h2 id="http-vs-tcp">HTTP vs TCP — when to use which</h2>
+
+      <table class="wire-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th>HTTP/1.1 (port 8080)</th>
+            <th>TCP framed (port 8081)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="mono">Reach</td>
+            <td>Anything that speaks HTTP — curl, browsers, load-balancers, WAFs, sidecars.</td>
+            <td>Custom protocol; you write or use a beava SDK.</td>
+          </tr>
+          <tr>
+            <td class="mono">Latency</td>
+            <td>~1–2 ms per RTT typical; dominated by HTTP parsing on both ends.</td>
+            <td>Sub-millisecond P99 on a warm connection.</td>
+          </tr>
+          <tr>
+            <td class="mono">Connection model</td>
+            <td>Pooled / keep-alive. Stateless on the wire — any worker can answer.</td>
+            <td>Persistent. Strict-FIFO on a single socket; one in-flight request per connection.</td>
+          </tr>
+          <tr>
+            <td class="mono">Payload</td>
+            <td>JSON only.</td>
+            <td>JSON (default); msgpack on the read fast-path is reserved.</td>
+          </tr>
+          <tr>
+            <td class="mono">Best for</td>
+            <td>Bootstrapping, ops dashboards, server-side scripts, anything behind a load-balancer.</td>
+            <td>Hot-path push/get from latency-sensitive clients (fraud-rule engines, ad-tech bidders).</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- =============== FAQ =============== -->
+      <h2 id="faq">Common questions</h2>
+
+      <div class="accordion">
+        <details>
+          <summary>Can I tunnel TCP through HTTP (e.g. via WebSockets)?</summary>
+          <div class="acc-body">
+            <p>No. The TCP fast-path is a raw length-prefixed framing — it has no upgrade dance, no HTTP framing, no WebSocket envelope. If you can't reach port 8081 directly, use the HTTP transport. Beava deliberately does not try to be both.</p>
+          </div>
+        </details>
+        <details>
+          <summary>What's the maximum frame size?</summary>
+          <div class="acc-body">
+            <p>The configured <code>tcp_max_frame_bytes</code> applies to the <em>payload</em>, not the whole frame. Default is <strong>4 MiB</strong> (<code>4 * 1024 * 1024</code> = <code>4194304</code> bytes). The server accepts a <code>length</code> field of up to <code>tcp_max_frame_bytes + 3</code> (the <code>+3</code> covers <code>op + content_type</code>). Frames over the limit are rejected with <code>frame_too_large</code>; the connection is closed because the rest of the stream is not parseable. HTTP <code>POST</code> bodies have a parallel cap configured separately on the HTTP listener.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Is the wire format stable?</summary>
+          <div class="acc-body">
+            <p>The opcodes and their semantics are locked for v0. Future versions add new opcodes in unused ranges (e.g. <code>0x0030</code>, <code>0x0031</code> are pre-reserved for direct feature writes); existing opcodes never change shape. Reserved-but-not-implemented opcodes return <code>op_not_implemented</code> with a stable error code today, so a forward-looking client can probe for support without crashing.</p>
+          </div>
+        </details>
+        <details>
+          <summary>How do I implement a third-party SDK?</summary>
+          <div class="acc-body">
+            <p>Two layers. (1) A frame writer/reader: 4-byte length + 2-byte opcode + 1-byte content-type + payload. ~50 LOC in any language. (2) A JSON serialiser per opcode whose body shape is documented above. ~150 LOC for the seven public opcodes. Hold the strict-FIFO discipline (one in-flight request per socket, send/recv under a mutex) and you're done. The Python SDK's TCP transport is a good reference at ~250 LOC.</p>
+          </div>
+        </details>
+      </div>
+
+      <!-- =============== NEXT =============== -->
+      <h2 id="next">Where to go next</h2>
+      <p>You've got the wire. The next things are the client that speaks it and the routes that consume it:</p>
+
+      <div class="card-grid">
+        <a class="card" href="/sdk/python/app/">
+          <div class="ttl">App client</div>
+          <p class="desc">The synchronous Python client. Seven wire-mapped methods (register, push, get, batch_get, reset, ping, close), three transport modes (HTTP / TCP / embed), plus the lifecycle.</p>
+          <span class="go">SDK reference <span class="arrow">→</span></span>
+        </a>
+        <a class="card" href="#">
+          <div class="ttl">POST /push</div>
+          <p class="desc">Per-route reference for the push opcode — request body shape, response body shape, error codes, idempotency contract, and a worked example. (planned)</p>
+          <span class="go">HTTP API reference <span class="arrow">→</span></span>
+        </a>
+      </div>
+
+      <!-- =============== FOOTER =============== -->
+      <div class="footer-area">
+        <div class="feedback">
+          <div class="ask">Was this page useful?</div>
+          <div class="feedback-btns">
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3z"/><line x1="7" y1="22" x2="7" y2="11"/></svg>
+              Yes
+            </button>
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3z"/><line x1="17" y1="2" x2="17" y2="13"/></svg>
+              Not really
+            </button>
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              Suggest an edit
+            </button>
+          </div>
+        </div>
+
+        <div id="bv-sdk-pager"></div>
+      </div>
+    </main>
+
+    <!-- ============ RIGHT TOC ============ -->
+    <aside class="toc">
+      <div id="bv-sdk-toc"></div>
+    </aside>
+
+  </div>
+
+  <div id="bv-site-footer"></div>
+
+  <!-- React + Babel — required by SiteHeader / SiteFooter / Sdk* -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script type="text/babel" src="/js/_shared/SiteHeader.jsx"></script>
+  <script type="text/babel" src="/js/_shared/SiteFooter.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkSidebar.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkTOC.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkPager.jsx"></script>
+
+  <script type="text/babel">
+    ReactDOM.createRoot(document.getElementById('bv-site-header'))
+      .render(<SiteHeader active="sdk" search maxWidth={1400}/>);
+    ReactDOM.createRoot(document.getElementById('bv-site-footer'))
+      .render(<SiteFooter maxWidth={1400}/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-sidebar'))
+      .render(<SdkSidebar active="http-wire-spec"/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-toc'))
+      .render(<SdkTOC editPath="sdk/http/wire-spec/index.html"/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-pager'))
+      .render(<SdkPager
+        prev={{ href: '/sdk/http/register/', label: 'POST /register' }}
+        next={{ href: '/sdk/python/app/', label: 'App client' }}
+      />);
+  </script>
+
+  <script src="/js/copy-buttons.js" defer></script>
+  <!-- Heading anchor copy-link icons. Injects a "#" affordance into every
+       <h2 id> / <h3 id> inside `.content` (matches the `.bv-content` and
+       `.docs-prose` surfaces too). Idempotent + uses MutationObserver to
+       catch React-mounted content. -->
+  <script src="/scripts/docs-headings.js" defer></script>
+</body>
+</html>

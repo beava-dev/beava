@@ -1,0 +1,537 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>POST /register · beava HTTP API</title>
+<meta name="description" content="POST /register — register event sources and derivations on a running beava server. Hot-reloadable; bumps registry_version on every successful call.">
+<link rel="stylesheet" href="/styles/colors_and_type.css">
+<link rel="stylesheet" href="/styles/site.css">
+<link rel="stylesheet" href="/styles/sdk-shell.css">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+<link rel="shortcut icon" href="/assets/favicon.ico">
+<style>
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--fg1); font-family: var(--font-sans); }
+
+  /* Reference-page hero — tighter than the Quickstart's landing-style
+     hero. No mascot; eyebrow + h1 + lede in a single column. */
+  .ref-hero {
+    margin: 0 0 28px;
+    padding-bottom: 26px;
+    border-bottom: 1px solid var(--border);
+  }
+  .ref-hero .eyebrow {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-family: var(--font-mono); font-weight: 600; font-size: 12px;
+    color: var(--fg3);
+    margin-bottom: 14px;
+  }
+  .ref-hero .eyebrow .pill {
+    display: inline-block;
+    font-family: var(--font-mono); font-size: 10.5px; font-weight: 600;
+    color: var(--accent); background: var(--beava-orange-wash);
+    padding: 2px 8px; border-radius: 999px;
+    letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .ref-hero h1 {
+    font-family: var(--font-serif); font-weight: 700;
+    font-size: 44px; line-height: 1.05; letter-spacing: -0.025em;
+    color: var(--fg1);
+    margin: 0 0 14px;
+  }
+  .ref-hero h1 code {
+    font-family: var(--font-mono); font-weight: 700; font-size: 0.78em;
+    background: var(--beava-paper); border: 1px solid var(--border-inset);
+    padding: 2px 9px; border-radius: 8px; color: var(--accent);
+    letter-spacing: 0;
+  }
+  .ref-hero .lede {
+    font-family: var(--font-serif);
+    font-size: 19px; line-height: 1.5;
+    color: var(--fg2); font-weight: 400;
+    margin: 0; max-width: 60ch;
+  }
+</style>
+</head>
+<body class="beava">
+
+  <div id="bv-site-header"></div>
+
+  <div class="shell">
+
+    <!-- ============ SIDEBAR ============ -->
+    <aside class="sidebar">
+      <div id="bv-sdk-sidebar"></div>
+    </aside>
+
+    <!-- ============ MAIN ============
+         `data-pagefind-body` tells the Pagefind crawler this is the
+         main content region to index for search. Sidebar / TOC / nav
+         are excluded by build-search.mjs's excludeSelectors list. -->
+    <main class="content" data-pagefind-body>
+
+      <div class="crumbs">
+        <a href="/">beava</a><span class="sep">/</span>
+        <a href="/sdk/python/">SDK reference</a><span class="sep">/</span>
+        <span class="cur">POST /register</span>
+      </div>
+
+      <header class="ref-hero">
+        <div class="eyebrow">
+          <span class="pill">HTTP API</span>
+          <span><code>POST /register</code></span>
+        </div>
+        <h1><code>POST /register</code></h1>
+        <p class="lede">Register event sources and derivations on a running beava server. Hot-reloadable — no restart. Each successful call bumps <code>registry_version</code>.</p>
+      </header>
+
+      <!-- =============== OVERVIEW =============== -->
+      <h2 id="overview">Overview</h2>
+      <p><code>/register</code> is the cold path that installs (or extends) the pipeline a beava server runs. The body is a list of <strong>nodes</strong>; each node is either an event source (<code>kind: "event"</code>) or a derivation (<code>kind: "derivation"</code>). Two flags control behaviour:</p>
+      <ul>
+        <li><code>dry_run: true</code> — server validates and returns a categorized diff without committing.</li>
+        <li><code>force: true</code> — replace conflicting descriptors instead of returning <code>409 force_required</code>.</li>
+      </ul>
+      <p>Successful calls increment <code>registry_version</code> by one and append a <code>RegistryBump</code> record to the WAL before the in-memory registry mutates (apply-after-fsync). All client SDKs (<code>bv.App.register(...)</code>, the TCP fast-path, raw curl) emit the same JSON envelope documented below.</p>
+
+      <!-- =============== REQUEST =============== -->
+      <h2 id="request">Request</h2>
+
+      <h3>Headers</h3>
+      <ul>
+        <li><code>Content-Type: application/json</code> — required. Anything else returns <code>415 unsupported_media_type</code>.</li>
+      </ul>
+
+      <h3>Body shape</h3>
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">envelope</span>
+        </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"nodes"</span>: <span class="tk-p">[</span> <span class="tk-c">/* one or more node objects, see below */</span> <span class="tk-p">],</span>
+  <span class="tk-fn">"force"</span>:    <span class="tk-k">false</span><span class="tk-p">,</span>   <span class="tk-c">// optional, default false</span>
+  <span class="tk-fn">"dry_run"</span>:  <span class="tk-k">false</span>    <span class="tk-c">// optional, default false</span>
+<span class="tk-p">}</span></pre>
+      </div>
+
+      <div class="callout note">
+        <span class="ic">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        </span>
+        <p><strong>The top-level field is <code>nodes</code>, not <code>descriptors</code>.</strong> Some early prototypes / external write-ups used <code>descriptors</code> — that key is rejected by the v0 server. Always send <code>{"nodes": [...]}</code>.</p>
+      </div>
+
+      <div class="params">
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">nodes</span>
+            <span class="param-tags">
+              <span class="param-tag type">array&lt;Node&gt;</span>
+              <span class="param-tag">required</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>Ordered list of nodes to install. Each entry is either an event source (<code>kind: "event"</code>) or a derivation (<code>kind: "derivation"</code>). Empty arrays are accepted and return <code>200 OK</code> with an unchanged <code>registry_version</code>.</p>
+          </div>
+        </div>
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">force</span>
+            <span class="param-tags">
+              <span class="param-tag type">bool</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>If <code>true</code>, destructive changes (renames, type changes, key-cols changes, removed aggregations) are applied — the affected descriptor is dropped along with its accumulated state, and the new shape installs cleanly. Without <code>force</code>, destructive changes return <code>409 force_required</code>.</p>
+            <p class="default">default <code>false</code></p>
+          </div>
+        </div>
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">dry_run</span>
+            <span class="param-tags">
+              <span class="param-tag type">bool</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>If <code>true</code>, the server validates the payload and returns the categorized diff under <code>{"diff": ..., "would_apply": false}</code> without mutating the registry. <code>dry_run=true, force=true</code> still resolves to dry-run — dry-run wins so a "what would this do?" probe never escalates to a real mutation.</p>
+            <p class="default">default <code>false</code></p>
+          </div>
+        </div>
+      </div>
+
+      <h3>Node kinds</h3>
+      <ul>
+        <li><code>kind: "event"</code> — an event source. The typed input shape you'll <code>POST /push</code> against.</li>
+        <li><code>kind: "derivation"</code> — a derived node. Either an event-derivation (<code>output_kind: "event"</code>, no aggregation) or a table-derivation (<code>output_kind: "table"</code>, aggregation into a per-entity feature row).</li>
+        <li>Any other <code>kind</code> — including the legacy <code>kind: "table"</code> — returns <code>400 unsupported_node_kind</code>. v0 is events-only at the top level; tables are produced by derivations.</li>
+      </ul>
+
+      <!-- =============== EVENT NODE =============== -->
+      <div class="method-head">
+        <h3 id="event-node" data-toc-label="event" class="name">Event node — <code>kind: "event"</code></h3>
+        <div class="sig">{"kind": "event", "name": "&lt;Name&gt;", "schema": {"fields": {...}, "optional_fields": [...]}}</div>
+      </div>
+      <p>An event source declares a typed payload shape that downstream <code>POST /push</code> calls have to match.</p>
+
+      <h3>Fields</h3>
+      <ul>
+        <li><code>kind</code> — literal <code>"event"</code>.</li>
+        <li><code>name</code> — string. The event-source identifier; case-sensitive, used as the <code>event_name</code> on <code>/push</code>.</li>
+        <li><code>schema.fields</code> — object mapping field name → wire type. Allowed wire types: <code>"str"</code>, <code>"i64"</code>, <code>"f64"</code>, <code>"bool"</code>.</li>
+        <li><code>schema.optional_fields</code> — array of field names that may be omitted on <code>/push</code>. Names must appear in <code>schema.fields</code>.</li>
+        <li><code>keep_events_for</code> — optional duration string (e.g. <code>"30d"</code>). Retention horizon for the raw event log; events older than this are dropped from history.</li>
+        <li><code>cold_after_ms</code> — optional integer. Per-entity cold-after threshold in milliseconds; entities idle longer than this are eligible for cold-storage tiering.</li>
+      </ul>
+
+      <h3>Example</h3>
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">event node</span>
+        </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"kind"</span>: <span class="tk-s">"event"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"name"</span>: <span class="tk-s">"Txn"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"schema"</span>: <span class="tk-p">{</span>
+    <span class="tk-fn">"fields"</span>: <span class="tk-p">{</span>
+      <span class="tk-fn">"user_id"</span>:  <span class="tk-s">"str"</span><span class="tk-p">,</span>
+      <span class="tk-fn">"card_id"</span>:  <span class="tk-s">"str"</span><span class="tk-p">,</span>
+      <span class="tk-fn">"amount"</span>:   <span class="tk-s">"f64"</span><span class="tk-p">,</span>
+      <span class="tk-fn">"merchant"</span>: <span class="tk-s">"str"</span><span class="tk-p">,</span>
+      <span class="tk-fn">"ip"</span>:        <span class="tk-s">"str"</span>
+    <span class="tk-p">},</span>
+    <span class="tk-fn">"optional_fields"</span>: <span class="tk-p">[]</span>
+  <span class="tk-p">},</span>
+  <span class="tk-fn">"keep_events_for"</span>: <span class="tk-s">"30d"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"cold_after_ms"</span>:   <span class="tk-n">86400000</span>
+<span class="tk-p">}</span></pre>
+      </div>
+
+      <!-- =============== DERIVATION NODE =============== -->
+      <div class="method-head">
+        <h3 id="derivation-node" data-toc-label="derivation" class="name">Derivation node — <code>kind: "derivation"</code></h3>
+        <div class="sig">{"kind": "derivation", "name", "output_kind": "table"|"event", "upstreams": [...], "ops": [...], "table_primary_key"?: [...]}</div>
+      </div>
+      <p>A derivation is a chain of operators applied to one or more upstream nodes. <code>output_kind</code> picks between two flavours:</p>
+      <ul>
+        <li><code>"table"</code> — aggregating derivation. Emits a per-entity row keyed by <code>table_primary_key</code>. Read with <code>POST /get</code> / <code>POST /batch_get</code>.</li>
+        <li><code>"event"</code> — event-derivation. A typed transformation of an upstream event stream (filter / map / project) with no aggregation; downstream nodes can subscribe via <code>upstreams</code>.</li>
+      </ul>
+
+      <h3>Fields</h3>
+      <ul>
+        <li><code>kind</code> — literal <code>"derivation"</code>.</li>
+        <li><code>name</code> — string. The node identifier; for <code>output_kind: "table"</code> this is also the <code>table</code> name on <code>/get</code>.</li>
+        <li><code>output_kind</code> — <code>"table"</code> or <code>"event"</code>.</li>
+        <li><code>upstreams</code> — array of strings. Names of nodes (events or derivations) this node consumes. Compile-time-resolved against the registry.</li>
+        <li><code>ops</code> — array of operator objects. Each operator carries an <code>op</code> name and a <code>params</code> object; operator-specific shapes are documented in the <a href="#">Operator catalogue (planned)</a>.</li>
+        <li><code>schema</code> — optional. Required for <code>output_kind: "event"</code> derivations (declares the output event's field types); inferred for tables.</li>
+        <li><code>table_primary_key</code> — array of field names. <strong>Required when <code>output_kind: "table"</code>.</strong> An empty array (<code>[]</code>) declares a global aggregation — a single feature row keyed by the empty-string sentinel (per ADR-003).</li>
+      </ul>
+
+      <h3>Example — table derivation (per-user)</h3>
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">derivation node — output_kind: table</span>
+        </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"kind"</span>:               <span class="tk-s">"derivation"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"name"</span>:               <span class="tk-s">"UserTxnFeatures"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"output_kind"</span>:        <span class="tk-s">"table"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"table_primary_key"</span>: <span class="tk-p">[</span><span class="tk-s">"user_id"</span><span class="tk-p">],</span>
+  <span class="tk-fn">"upstreams"</span>:         <span class="tk-p">[</span><span class="tk-s">"Txn"</span><span class="tk-p">],</span>
+  <span class="tk-fn">"ops"</span>: <span class="tk-p">[</span>
+    <span class="tk-p">{</span>
+      <span class="tk-fn">"op"</span>:   <span class="tk-s">"group_by"</span><span class="tk-p">,</span>
+      <span class="tk-fn">"keys"</span>: <span class="tk-p">[</span><span class="tk-s">"user_id"</span><span class="tk-p">],</span>
+      <span class="tk-fn">"agg"</span>: <span class="tk-p">{</span>
+        <span class="tk-fn">"tx_count_1h"</span>: <span class="tk-p">{</span> <span class="tk-fn">"op"</span>: <span class="tk-s">"count"</span><span class="tk-p">,</span> <span class="tk-fn">"params"</span>: <span class="tk-p">{</span> <span class="tk-fn">"window"</span>: <span class="tk-s">"1h"</span> <span class="tk-p">}</span> <span class="tk-p">},</span>
+        <span class="tk-fn">"tx_sum_1h"</span>:   <span class="tk-p">{</span> <span class="tk-fn">"op"</span>: <span class="tk-s">"sum"</span><span class="tk-p">,</span>   <span class="tk-fn">"params"</span>: <span class="tk-p">{</span> <span class="tk-fn">"field"</span>: <span class="tk-s">"amount"</span><span class="tk-p">,</span> <span class="tk-fn">"window"</span>: <span class="tk-s">"1h"</span> <span class="tk-p">}</span> <span class="tk-p">},</span>
+        <span class="tk-fn">"tx_p99_1h"</span>:   <span class="tk-p">{</span> <span class="tk-fn">"op"</span>: <span class="tk-s">"quantile"</span><span class="tk-p">,</span> <span class="tk-fn">"params"</span>: <span class="tk-p">{</span> <span class="tk-fn">"field"</span>: <span class="tk-s">"amount"</span><span class="tk-p">,</span> <span class="tk-fn">"q"</span>: <span class="tk-n">0.99</span><span class="tk-p">,</span> <span class="tk-fn">"window"</span>: <span class="tk-s">"1h"</span> <span class="tk-p">}</span> <span class="tk-p">}</span>
+      <span class="tk-p">}</span>
+    <span class="tk-p">}</span>
+  <span class="tk-p">]</span>
+<span class="tk-p">}</span></pre>
+      </div>
+
+      <h3>Example — table derivation (global)</h3>
+      <p>An empty <code>table_primary_key</code> + empty <code>group_by.keys</code> declares a single global counter — one feature row keyed by the empty-string sentinel. Read it back with <code>POST /get</code> and <code>key=""</code>.</p>
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">derivation node — global aggregation</span>
+        </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"kind"</span>:               <span class="tk-s">"derivation"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"name"</span>:               <span class="tk-s">"GlobalCounter"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"output_kind"</span>:        <span class="tk-s">"table"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"table_primary_key"</span>: <span class="tk-p">[],</span>
+  <span class="tk-fn">"upstreams"</span>:         <span class="tk-p">[</span><span class="tk-s">"Click"</span><span class="tk-p">],</span>
+  <span class="tk-fn">"ops"</span>: <span class="tk-p">[</span>
+    <span class="tk-p">{</span>
+      <span class="tk-fn">"op"</span>:   <span class="tk-s">"group_by"</span><span class="tk-p">,</span>
+      <span class="tk-fn">"keys"</span>: <span class="tk-p">[],</span>
+      <span class="tk-fn">"agg"</span>: <span class="tk-p">{</span>
+        <span class="tk-fn">"click_count"</span>: <span class="tk-p">{</span> <span class="tk-fn">"op"</span>: <span class="tk-s">"count"</span><span class="tk-p">,</span> <span class="tk-fn">"params"</span>: <span class="tk-p">{}</span> <span class="tk-p">}</span>
+      <span class="tk-p">}</span>
+    <span class="tk-p">}</span>
+  <span class="tk-p">]</span>
+<span class="tk-p">}</span></pre>
+      </div>
+
+      <!-- =============== RESPONSE: SUCCESS =============== -->
+      <h2 id="response-success">Response — success</h2>
+      <p><code>200 OK</code> with a flat JSON body:</p>
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">success body</span>
+        </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"status"</span>:                 <span class="tk-s">"ok"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"registry_version"</span>:       <span class="tk-n">1</span><span class="tk-p">,</span>
+  <span class="tk-fn">"added"</span>:                  <span class="tk-p">[</span><span class="tk-s">"Txn"</span><span class="tk-p">,</span> <span class="tk-s">"UserTxnFeatures"</span><span class="tk-p">],</span>
+  <span class="tk-fn">"already_present"</span>:        <span class="tk-p">[],</span>
+  <span class="tk-fn">"registered_descriptors"</span>: <span class="tk-p">[</span><span class="tk-s">"Txn"</span><span class="tk-p">,</span> <span class="tk-s">"UserTxnFeatures"</span><span class="tk-p">]</span>
+<span class="tk-p">}</span></pre>
+      </div>
+
+      <ul>
+        <li><code>status</code> — literal <code>"ok"</code> on success.</li>
+        <li><code>registry_version</code> — the post-call registry generation. Increments by one per successful registration that mutated state; unchanged on no-op / empty-payload calls.</li>
+        <li><code>added</code> — names of nodes installed by this call (in payload order).</li>
+        <li><code>already_present</code> — names from the payload that were already in the registry with the same shape; no-ops.</li>
+        <li><code>registered_descriptors</code> — full snapshot of every descriptor name in the registry post-call. <strong>Not</strong> a copy of the request payload — it's the cumulative registry, including descriptors installed by prior <code>/register</code> calls.</li>
+      </ul>
+
+      <!-- =============== DRY RUN =============== -->
+      <h2 id="dry-run">Dry-run</h2>
+      <p>Pass <code>"dry_run": true</code> to validate without committing. The server runs the same destructive-change classifier it would for a real call, and returns the categorized diff:</p>
+
+      <div class="reqres">
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">request</span>
+          </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"nodes"</span>: <span class="tk-p">[</span>
+    <span class="tk-p">{</span>
+      <span class="tk-fn">"kind"</span>:   <span class="tk-s">"event"</span><span class="tk-p">,</span>
+      <span class="tk-fn">"name"</span>:   <span class="tk-s">"Login"</span><span class="tk-p">,</span>
+      <span class="tk-fn">"schema"</span>: <span class="tk-p">{</span>
+        <span class="tk-fn">"fields"</span>: <span class="tk-p">{</span>
+          <span class="tk-fn">"user_id"</span>:   <span class="tk-s">"str"</span><span class="tk-p">,</span>
+          <span class="tk-fn">"device_id"</span>: <span class="tk-s">"str"</span>
+        <span class="tk-p">},</span>
+        <span class="tk-fn">"optional_fields"</span>: <span class="tk-p">[]</span>
+      <span class="tk-p">}</span>
+    <span class="tk-p">}</span>
+  <span class="tk-p">],</span>
+  <span class="tk-fn">"dry_run"</span>: <span class="tk-k">true</span>
+<span class="tk-p">}</span></pre>
+        </div>
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">response</span>
+          </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"diff"</span>: <span class="tk-p">{</span>
+    <span class="tk-fn">"additive"</span>: <span class="tk-p">[</span>
+      <span class="tk-p">{</span> <span class="tk-fn">"kind"</span>: <span class="tk-s">"new_descriptor"</span><span class="tk-p">,</span> <span class="tk-fn">"name"</span>: <span class="tk-s">"Login"</span> <span class="tk-p">}</span>
+    <span class="tk-p">],</span>
+    <span class="tk-fn">"destructive"</span>: <span class="tk-p">[]</span>
+  <span class="tk-p">},</span>
+  <span class="tk-fn">"would_apply"</span>: <span class="tk-k">false</span>
+<span class="tk-p">}</span></pre>
+        </div>
+      </div>
+
+      <p>If the dry-run diff has <em>any</em> destructive entries, the equivalent real call would return <code>409 force_required</code>. Use this to gate destructive deploys behind a human approval step.</p>
+
+      <!-- =============== FORCE =============== -->
+      <h2 id="force">Force replace</h2>
+      <p>Destructive changes — type changes, renames, key-cols changes, removed aggregations — drop the affected descriptor's accumulated state when applied. Without <code>force=true</code>, the server returns <code>409 force_required</code> and refuses to proceed:</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">force replace</span>
+        </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"nodes"</span>: <span class="tk-p">[</span>
+    <span class="tk-p">{</span>
+      <span class="tk-fn">"kind"</span>:   <span class="tk-s">"event"</span><span class="tk-p">,</span>
+      <span class="tk-fn">"name"</span>:   <span class="tk-s">"Txn"</span><span class="tk-p">,</span>
+      <span class="tk-fn">"schema"</span>: <span class="tk-p">{</span>
+        <span class="tk-fn">"fields"</span>: <span class="tk-p">{</span>
+          <span class="tk-fn">"user_id"</span>:  <span class="tk-s">"str"</span><span class="tk-p">,</span>
+          <span class="tk-fn">"amount"</span>:   <span class="tk-s">"i64"</span><span class="tk-p">,</span>
+          <span class="tk-fn">"currency"</span>: <span class="tk-s">"str"</span>
+        <span class="tk-p">},</span>
+        <span class="tk-fn">"optional_fields"</span>: <span class="tk-p">[]</span>
+      <span class="tk-p">}</span>
+    <span class="tk-p">}</span>
+  <span class="tk-p">],</span>
+  <span class="tk-fn">"force"</span>: <span class="tk-k">true</span>
+<span class="tk-p">}</span></pre>
+      </div>
+
+      <div class="callout note">
+        <span class="ic">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </span>
+        <p><strong><code>force=true</code> drops accumulated state.</strong> Aggregation tables tied to the replaced descriptor lose every per-entity row; pushed events resume populating an empty table. Use a dry-run first, then bake the force flag into a deliberate cutover.</p>
+      </div>
+
+      <!-- =============== ERRORS =============== -->
+      <h2 id="errors">Errors</h2>
+      <p>All error responses share the envelope <code>{"error": {"code": "&lt;code&gt;", ...}, "registry_version": &lt;u64&gt;}</code> with a non-2xx status. Codes:</p>
+
+      <h3><code>400 unsupported_node_kind</code></h3>
+      <p>A node carries a <code>kind</code> the server doesn't recognise — most commonly the legacy <code>kind: "table"</code>, which has been removed (events-only invariant; tables are produced via <code>kind: "derivation", output_kind: "table"</code>). Body includes <code>path</code> (the JSON pointer of the offending node) and <code>reason</code>.</p>
+
+      <h3><code>400 invalid_registration</code></h3>
+      <p>The body parsed but failed schema validation — missing required field, unknown wire type, malformed operator params, unresolved upstream, etc. Body includes <code>path</code> and <code>reason</code>; v0 reports the first error wins.</p>
+
+      <h3><code>409 force_required</code></h3>
+      <p>The payload would destructively mutate the registry but <code>force</code> wasn't set. Body carries the diagnostic <code>diff</code> so callers can inspect what would change before retrying with <code>force: true</code>:</p>
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">409 body</span>
+        </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"code"</span>:   <span class="tk-s">"force_required"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"reason"</span>: <span class="tk-s">"Destructive registry change requires force=true. See diff for details."</span><span class="tk-p">,</span>
+  <span class="tk-fn">"diff"</span>: <span class="tk-p">{</span>
+    <span class="tk-fn">"additive"</span>: <span class="tk-p">[],</span>
+    <span class="tk-fn">"destructive"</span>: <span class="tk-p">[</span>
+      <span class="tk-p">{</span>
+        <span class="tk-fn">"kind"</span>:  <span class="tk-s">"type_change"</span><span class="tk-p">,</span>
+        <span class="tk-fn">"field"</span>: <span class="tk-s">"Txn.amount"</span><span class="tk-p">,</span>
+        <span class="tk-fn">"from"</span>:  <span class="tk-s">"f64"</span><span class="tk-p">,</span>
+        <span class="tk-fn">"to"</span>:    <span class="tk-s">"i64"</span>
+      <span class="tk-p">}</span>
+    <span class="tk-p">]</span>
+  <span class="tk-p">}</span>
+<span class="tk-p">}</span></pre>
+      </div>
+
+      <h3><code>415 unsupported_media_type</code></h3>
+      <p>Sent without <code>Content-Type: application/json</code>. Body: <code>{"error": {"code": "unsupported_media_type", "path": "/register", "reason": "expected application/json"}, "registry_version": 0}</code>.</p>
+
+      <!-- =============== TCP =============== -->
+      <h2 id="tcp">TCP equivalent</h2>
+      <p>The framed-TCP fast-path carries the same JSON envelope under opcode <code>OP_REGISTER = 0x0001</code>. Frame layout: <code>[u32 length][u16 op=0x0001][u8 content_type=0x01 (json)][payload bytes]</code>. Strict-FIFO correlation per connection — one in-flight request at a time; no <code>request_id</code>. Success returns the same JSON body under <code>OP_REGISTER</code>; structured errors return <code>OP_ERROR_RESPONSE</code> with the same body shape as the HTTP <code>error</code> envelope. See the full <a href="#">Wire spec (planned)</a> for frame details.</p>
+
+      <!-- =============== FAQ =============== -->
+      <h2 id="faq">Common questions</h2>
+
+      <div class="accordion">
+        <details>
+          <summary>Why hot-reload? Doesn't that risk inconsistency?</summary>
+          <div class="acc-body">
+            <p>Registration is atomic at the <code>registry_version</code> boundary: either the WAL-fsynced <code>RegistryBump</code> commits and every subsequent <code>/push</code> sees the new shape, or it doesn't and the registry is unchanged. Pushes never see a half-installed pipeline. Long-lived clients can ping the data plane and check <code>registry_version</code> to invalidate their schema cache the moment a deploy lands.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Can I unregister a node?</summary>
+          <div class="acc-body">
+            <p>Not in v0. The two ways to remove a descriptor are: (1) <code>force=true</code> a registration that replaces it with a new shape, or (2) restart the server with the desired registry. Explicit unregister is on the v0.1 roadmap.</p>
+          </div>
+        </details>
+        <details>
+          <summary>What goes in <code>optional_fields</code>?</summary>
+          <div class="acc-body">
+            <p>Field names from <code>schema.fields</code> that may be omitted on <code>/push</code>. Pushes that omit a non-optional field return <code>schema_mismatch</code>; pushes that omit a listed optional field record the field as null. Use it for late-arriving signals (e.g. an enrichment that's eventually populated) — <strong>not</strong> for fields you'll always send. Aggregations over an optional field skip events where it's null.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Is <code>registered_descriptors</code> the same as my register payload?</summary>
+          <div class="acc-body">
+            <p>No — it's the full registry snapshot post-call, including descriptors installed by every prior <code>/register</code>. If the request was the first call against an empty server, the two will match by accident; in steady state they diverge. Treat <code>added</code> as "what this call did" and <code>registered_descriptors</code> as "what the server now knows about".</p>
+          </div>
+        </details>
+      </div>
+
+      <!-- =============== NEXT =============== -->
+      <h2 id="next">Where to go next</h2>
+      <div class="card-grid">
+        <a class="card" href="#">
+          <div class="ttl">Wire spec</div>
+          <p class="desc">Framed-TCP layout, opcodes, status conventions, and the strict-FIFO correlation contract — every byte the server speaks.</p>
+          <span class="go">Wire spec (planned) <span class="arrow">→</span></span>
+        </a>
+        <a class="card" href="#">
+          <div class="ttl">@bv.event</div>
+          <p class="desc">The Python decorator that compiles to the event-node JSON above. Class form, def form, and the kwargs that surface as wire fields.</p>
+          <span class="go">@bv.event (planned) <span class="arrow">→</span></span>
+        </a>
+      </div>
+
+      <!-- =============== FOOTER =============== -->
+      <div class="footer-area">
+        <div class="feedback">
+          <div class="ask">Was this page useful?</div>
+          <div class="feedback-btns">
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3z"/><line x1="7" y1="22" x2="7" y2="11"/></svg>
+              Yes
+            </button>
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3z"/><line x1="17" y1="2" x2="17" y2="13"/></svg>
+              Not really
+            </button>
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              Suggest an edit
+            </button>
+          </div>
+        </div>
+
+        <div id="bv-sdk-pager"></div>
+      </div>
+    </main>
+
+    <!-- ============ RIGHT TOC ============ -->
+    <aside class="toc">
+      <div id="bv-sdk-toc"></div>
+    </aside>
+
+  </div>
+
+  <div id="bv-site-footer"></div>
+
+  <!-- React + Babel — required by SiteHeader / SiteFooter / Sdk* -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script type="text/babel" src="/js/_shared/SiteHeader.jsx"></script>
+  <script type="text/babel" src="/js/_shared/SiteFooter.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkSidebar.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkTOC.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkPager.jsx"></script>
+
+  <script type="text/babel">
+    ReactDOM.createRoot(document.getElementById('bv-site-header'))
+      .render(<SiteHeader active="sdk" search maxWidth={1400}/>);
+    ReactDOM.createRoot(document.getElementById('bv-site-footer'))
+      .render(<SiteFooter maxWidth={1400}/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-sidebar'))
+      .render(<SdkSidebar active="http-register"/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-toc'))
+      .render(<SdkTOC editPath="sdk/http/register/index.html"/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-pager'))
+      .render(<SdkPager
+        prev={{ href: '/sdk/http/get/', label: 'POST /get' }}
+        next={{ href: '/sdk/http/wire-spec/', label: 'Wire spec' }}
+      />);
+  </script>
+
+  <script src="/js/copy-buttons.js" defer></script>
+  <!-- Heading anchor copy-link icons. Injects a "#" affordance into every
+       <h2 id> / <h3 id> inside `.content` (matches the `.bv-content` and
+       `.docs-prose` surfaces too). Idempotent + uses MutationObserver to
+       catch React-mounted content. -->
+  <script src="/scripts/docs-headings.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>POST /get · beava HTTP API</title>
+<meta name="description" content="POST /get reads one feature row by entity key. Cold-start (no events for that key) returns {} with HTTP 200 — never a 404.">
+<link rel="stylesheet" href="/styles/colors_and_type.css">
+<link rel="stylesheet" href="/styles/site.css">
+<link rel="stylesheet" href="/styles/sdk-shell.css">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+<link rel="shortcut icon" href="/assets/favicon.ico">
+<style>
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--fg1); font-family: var(--font-sans); }
+
+  /* Reference-page hero — tighter than the Quickstart's landing-style
+     hero. No mascot; eyebrow + h1 + lede in a single column. */
+  .ref-hero {
+    margin: 0 0 28px;
+    padding-bottom: 26px;
+    border-bottom: 1px solid var(--border);
+  }
+  .ref-hero .eyebrow {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-family: var(--font-mono); font-weight: 600; font-size: 12px;
+    color: var(--fg3);
+    margin-bottom: 14px;
+  }
+  .ref-hero .eyebrow .pill {
+    display: inline-block;
+    font-family: var(--font-mono); font-size: 10.5px; font-weight: 600;
+    color: var(--accent); background: var(--beava-orange-wash);
+    padding: 2px 8px; border-radius: 999px;
+    letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .ref-hero h1 {
+    font-family: var(--font-serif); font-weight: 700;
+    font-size: 44px; line-height: 1.05; letter-spacing: -0.025em;
+    color: var(--fg1);
+    margin: 0 0 14px;
+  }
+  .ref-hero h1 code {
+    font-family: var(--font-mono); font-weight: 700; font-size: 0.78em;
+    background: var(--beava-paper); border: 1px solid var(--border-inset);
+    padding: 2px 9px; border-radius: 8px; color: var(--accent);
+    letter-spacing: 0;
+  }
+  .ref-hero .lede {
+    font-family: var(--font-serif);
+    font-size: 19px; line-height: 1.5;
+    color: var(--fg2); font-weight: 400;
+    margin: 0; max-width: 60ch;
+  }
+</style>
+</head>
+<body class="beava">
+
+  <div id="bv-site-header"></div>
+
+  <div class="shell">
+
+    <!-- ============ SIDEBAR ============ -->
+    <aside class="sidebar">
+      <div id="bv-sdk-sidebar"></div>
+    </aside>
+
+    <!-- ============ MAIN ============
+         `data-pagefind-body` tells the Pagefind crawler this is the
+         main content region to index for search. Sidebar / TOC / nav
+         are excluded by build-search.mjs's excludeSelectors list. -->
+    <main class="content" data-pagefind-body>
+
+      <div class="crumbs">
+        <a href="/">beava</a><span class="sep">/</span>
+        <a href="/sdk/python/">SDK reference</a><span class="sep">/</span>
+        <span class="cur">POST /get</span>
+      </div>
+
+      <header class="ref-hero">
+        <div class="eyebrow">
+          <span class="pill">HTTP API · data plane</span>
+          <span><code>POST /get</code></span>
+        </div>
+        <h1><code>POST /get</code></h1>
+        <p class="lede">Read one feature row by entity key. Cold-start (no events for that key yet) returns <code>{}</code> with HTTP 200 — not a 404.</p>
+      </header>
+
+      <!-- =============== OVERVIEW =============== -->
+      <h2 id="overview">Overview</h2>
+      <p><code>POST /get</code> is the single-row read on the data plane. You name a registered table, give an entity key, and the server returns the latest feature row for that key as a flat JSON dict.</p>
+
+      <p>The Redis-shaped contract matters here: <strong>a key that has never received a matching event is just a key with no data, not an error.</strong> The server returns HTTP 200 with body <code>{}</code>. That separates two distinct conditions:</p>
+
+      <ul>
+        <li><strong>Cold-start</strong> (HTTP 200, body <code>{}</code>) — the table is registered, the key parses, no events have populated this row yet. Treat it like <code>GET</code> on an unset Redis key.</li>
+        <li><strong><code>unknown_table</code></strong> (HTTP 404) — the table name isn't in the registry. <em>This</em> is the error path. If you mistyped the table or forgot to <code>register</code>, you land here.</li>
+      </ul>
+
+      <div class="callout note">
+        <span class="ic">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        </span>
+        <p><strong>Cold-start is HTTP 200, not 404.</strong> Client code that treats <code>{}</code> as an error will misbehave on every new entity. Branch on <code>response == {}</code> if you want a "no data yet" code path.</p>
+      </div>
+
+      <!-- =============== REQUEST =============== -->
+      <h2 id="request">Request</h2>
+
+      <p>Headers — the server attempts JSON parse regardless of <code>Content-Type</code>, but always send the canonical header so proxies, log scrapers, and curl-pasted requests stay portable:</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">headers</span>
+        </div>
+<pre>Content-Type: application/json</pre>
+      </div>
+
+      <p>Body shape:</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">body schema</span>
+        </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"table"</span>:    <span class="tk-s">"&lt;TableName&gt;"</span><span class="tk-p">,</span>      <span class="tk-c">// required, registered table</span>
+  <span class="tk-fn">"key"</span>:      <span class="tk-s">"&lt;Key&gt;"</span><span class="tk-p">,</span>            <span class="tk-c">// required, see below</span>
+  <span class="tk-fn">"features"</span>: <span class="tk-p">[</span><span class="tk-s">"f1"</span><span class="tk-p">,</span> <span class="tk-s">"f2"</span><span class="tk-p">,</span> <span class="tk-c">/* … */</span><span class="tk-p">]</span>  <span class="tk-c">// optional filter</span>
+<span class="tk-p">}</span></pre>
+      </div>
+
+      <ul>
+        <li><code>table</code> — the registered table's name. Required. Mismatched name → 404 <code>unknown_table</code>.</li>
+        <li><code>key</code> — the entity key as a JSON string. For composite keys (declared with <code>key=["a","b"]</code>), the SDK pipe-joins the segments before serialising — e.g. <code>"alice|merchant1"</code>. The empty string <code>""</code> routes to the global-aggregation sentinel for tables registered with <code>key=[]</code> (per ADR-003).</li>
+        <li><code>features</code> — optional. When supplied, the server narrows the response to the named subset; when omitted, the full row is returned.</li>
+      </ul>
+
+      <p>Worked curl example:</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">curl</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+<pre>curl -sS -X POST http://localhost:8080/get \
+  -H <span class="tk-s">'Content-Type: application/json'</span> \
+  -d <span class="tk-s">'{"table": "UserTxnFeatures", "key": "alice"}'</span></pre>
+      </div>
+
+      <!-- =============== RESPONSE =============== -->
+      <h2 id="response">Response</h2>
+
+      <p>The success body is a <strong>flat dict mapping feature name → value</strong>. There is no envelope — feature names are top-level keys. Cold-start returns <code>{}</code> at HTTP 200; document this in your client wrapper because it is easy to mistake for an empty error envelope.</p>
+
+      <h3 id="response-hit">Standard hit</h3>
+      <p>Table is registered, key has events, full row requested. Pulled verbatim from <code>examples/wire/get-found.*</code>:</p>
+
+      <div class="reqres">
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">request</span>
+          </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"table"</span>: <span class="tk-s">"UserTxnFeatures"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"key"</span>:   <span class="tk-s">"alice"</span>
+<span class="tk-p">}</span></pre>
+        </div>
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">200 OK</span>
+          </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"tx_count_1h"</span>:            <span class="tk-n">7</span><span class="tk-p">,</span>
+  <span class="tk-fn">"tx_sum_1h"</span>:              <span class="tk-n">312.45</span><span class="tk-p">,</span>
+  <span class="tk-fn">"tx_mean_1h"</span>:             <span class="tk-n">44.64</span><span class="tk-p">,</span>
+  <span class="tk-fn">"tx_p99_1h"</span>:              <span class="tk-n">89.99</span><span class="tk-p">,</span>
+  <span class="tk-fn">"tx_unique_merchants_1h"</span>: <span class="tk-n">3</span>
+<span class="tk-p">}</span></pre>
+        </div>
+      </div>
+
+      <h3 id="response-coldstart">Cold-start</h3>
+      <p>Same request, key the server has never seen. <strong>HTTP 200, not 404.</strong></p>
+
+      <div class="reqres">
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">request</span>
+          </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"table"</span>: <span class="tk-s">"UserTxnFeatures"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"key"</span>:   <span class="tk-s">"newuser"</span>
+<span class="tk-p">}</span></pre>
+        </div>
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">200 OK</span>
+          </div>
+<pre><span class="tk-p">{}</span></pre>
+        </div>
+      </div>
+
+      <h3 id="response-global">Global aggregation</h3>
+      <p>Tables registered with <code>key=[]</code> (no group-by keys) hold a single, server-wide row. Address it with the empty-string sentinel <code>"key": ""</code>. Pulled verbatim from <code>examples/wire/get-global.*</code>:</p>
+
+      <div class="reqres">
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">request</span>
+          </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"table"</span>: <span class="tk-s">"GlobalCounter"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"key"</span>:   <span class="tk-s">""</span>
+<span class="tk-p">}</span></pre>
+        </div>
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">200 OK</span>
+          </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"click_count"</span>: <span class="tk-n">12345</span>
+<span class="tk-p">}</span></pre>
+        </div>
+      </div>
+
+      <!-- =============== FEATURES FILTER =============== -->
+      <h2 id="features">The <code>features</code> filter</h2>
+      <p>When <code>features</code> is supplied, the server walks the registered descriptor and emits only the named subset. Useful for narrow client reads — a fraud rule that needs a single counter doesn't need to ship the full 30-feature row across the wire.</p>
+
+      <p>Same key, two requests:</p>
+
+      <div class="reqres">
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">full row request</span>
+          </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"table"</span>: <span class="tk-s">"UserStats"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"key"</span>:   <span class="tk-s">"alice"</span>
+<span class="tk-p">}</span></pre>
+        </div>
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">full row response</span>
+          </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"visits"</span>:    <span class="tk-n">2</span><span class="tk-p">,</span>
+  <span class="tk-fn">"last_path"</span>: <span class="tk-s">"/checkout"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"sessions"</span>:  <span class="tk-n">1</span>
+<span class="tk-p">}</span></pre>
+        </div>
+      </div>
+
+      <div class="reqres">
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">narrowed request</span>
+          </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"table"</span>:    <span class="tk-s">"UserStats"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"key"</span>:      <span class="tk-s">"alice"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"features"</span>: <span class="tk-p">[</span><span class="tk-s">"visits"</span><span class="tk-p">]</span>
+<span class="tk-p">}</span></pre>
+        </div>
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">narrowed response</span>
+          </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"visits"</span>: <span class="tk-n">2</span>
+<span class="tk-p">}</span></pre>
+        </div>
+      </div>
+
+      <p>If <code>features</code> names a column that isn't registered on the table, the whole call is rejected — no partial response. The error surfaces as HTTP 500 with <code>code: "internal_error"</code> and a <code>reason</code> that names the missing feature(s). This matches the batch-get path's whole-batch-reject disposition.</p>
+
+      <!-- =============== COMPOSITE KEYS =============== -->
+      <h2 id="composite-keys">Composite keys</h2>
+      <p>A table registered with <code>key=["user_id", "merchant_id"]</code> indexes rows on the pair. On the wire, the <code>key</code> field is still a single JSON string — the SDK pipe-joins the segments in registered order before serialising. Pipe characters inside a key value must be percent-encoded as <code>%7C</code>.</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">composite key on the wire</span>
+        </div>
+<pre><span class="tk-c">// table registered with key=["user_id", "merchant_id"]</span>
+<span class="tk-p">{</span>
+  <span class="tk-fn">"table"</span>: <span class="tk-s">"UserMerchantStats"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"key"</span>:   <span class="tk-s">"alice|merchant1"</span>
+<span class="tk-p">}</span></pre>
+      </div>
+
+      <p>The number of pipe-separated segments must exactly match the registered key arity. If it doesn't, the server returns 404 with <code>code: "key_parse_failure"</code> — distinct from <code>key_not_found</code> (cold-start; never surfaced to clients) so a malformed key looks different from a key with no data.</p>
+
+      <!-- =============== ERRORS =============== -->
+      <h2 id="errors">Errors</h2>
+
+      <p>Verified against <code>crates/beava-server/src/runtime_core_glue.rs</code> and <code>apply_shard.rs</code> on a live binary. Each error body has the shape <code>{"error": {"code": "&lt;code&gt;", ...}}</code>.</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">404 — unknown_table</span>
+        </div>
+<pre>HTTP/1.1 404 Not Found
+Content-Type: application/json
+
+<span class="tk-p">{</span><span class="tk-fn">"error"</span>:<span class="tk-p">{</span><span class="tk-fn">"code"</span>:<span class="tk-s">"unknown_table"</span><span class="tk-p">}}</span></pre>
+      </div>
+      <p><code>table</code> isn't in the registry. Re-check the spelling and confirm <code>POST /register</code> succeeded for the descriptor.</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">404 — key_parse_failure</span>
+        </div>
+<pre>HTTP/1.1 404 Not Found
+Content-Type: application/json
+
+<span class="tk-p">{</span><span class="tk-fn">"error"</span>:<span class="tk-p">{</span><span class="tk-fn">"code"</span>:<span class="tk-s">"key_parse_failure"</span><span class="tk-p">}}</span></pre>
+      </div>
+      <p>The pipe-joined <code>key</code> string didn't split into the right number of segments for the table's registered key arity. Check that you sent <code>"a|b"</code> for a 2-column key, not <code>"a"</code> or <code>"a|b|c"</code>.</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">400 — unsupported_request_shape</span>
+        </div>
+<pre>HTTP/1.1 400 Bad Request
+Content-Type: application/json
+
+<span class="tk-p">{</span><span class="tk-fn">"error"</span>:<span class="tk-p">{</span>
+  <span class="tk-fn">"code"</span>:    <span class="tk-s">"unsupported_request_shape"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"message"</span>: <span class="tk-s">"POST /get expects {table, key, features?}; received legacy {keys, features} shape — see docs/http-api.md#post-get"</span>
+<span class="tk-p">}}</span></pre>
+      </div>
+      <p>The body parsed as JSON but matched a deprecated shape (<code>{keys, features}</code> 2D-cell or <code>{feature, key}</code> single-feature). Migrate to the verb-style body documented above.</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">500 — internal_error</span>
+        </div>
+<pre>HTTP/1.1 500 Internal Server Error
+Content-Type: application/json
+
+<span class="tk-p">{</span><span class="tk-fn">"error"</span>:<span class="tk-p">{</span>
+  <span class="tk-fn">"code"</span>:   <span class="tk-s">"internal_error"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"reason"</span>: <span class="tk-s">"missing field `key` at line 1 column 15"</span>
+<span class="tk-p">}}</span></pre>
+      </div>
+      <p>The body was malformed JSON, or missed a required field, or named a feature in <code>features</code> that the table doesn't expose. The <code>reason</code> string carries the underlying serde / lookup error verbatim. Use it to fix your request.</p>
+
+      <p><strong>Note on <code>Content-Type</code>:</strong> <code>POST /get</code> does not enforce <code>application/json</code> at the route layer (only <code>POST /register</code> does). A request with <code>Content-Type: text/plain</code> and a JSON body still parses. Send the canonical header anyway — proxies, WAFs, and future strictness shouldn't surprise you.</p>
+
+      <!-- =============== TCP EQUIVALENT =============== -->
+      <h2 id="tcp">TCP equivalent</h2>
+      <p>The custom-framed TCP fast-path (default port <code>8081</code>) carries the same body. <code>OP_GET = 0x0020</code> wraps a JSON payload identical to the HTTP body shape; the response comes back as <code>OP_GET_RESPONSE = 0x0023</code>. Strict-FIFO correlation on a connection — one in-flight request per socket.</p>
+
+      <p>For multi-key reads, use <code>OP_BATCH_GET = 0x0024</code> instead of N round-trips. The Python SDK's <code>app.batch_get([...])</code> method maps to this opcode; over HTTP, the equivalent is <code>POST /batch_get</code>.</p>
+
+      <p>Full wire format — frame header, content-type byte, msgpack vs JSON encoding — is documented in the <a href="#">wire spec (planned)</a>.</p>
+
+      <!-- =============== FAQ =============== -->
+      <h2 id="faq">Common questions</h2>
+
+      <div class="accordion">
+        <details>
+          <summary>Why is cold-start <code>{}</code> instead of 404?</summary>
+          <div class="acc-body">
+            <p>Beava is Redis-shaped on reads. A key that hasn't received events yet isn't an exception — it's just a key with no data. Surfacing that as 404 would conflate three different conditions (cold-start, malformed key, unknown table) and force every client to inspect error bodies on the success path. <code>{}</code> at HTTP 200 keeps the happy path clean: one branch on <code>response == {}</code> if you care, otherwise treat the dict as authoritative.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Can I get just a single feature without the table boilerplate?</summary>
+          <div class="acc-body">
+            <p>Yes — pass <code>features: ["my_feature"]</code> on the regular <code>/get</code> body. There's no separate single-feature route; the filter is the mechanism. For multi-key fetches of one feature, the TCP fast-path's <code>OP_GET_MULTI = 0x0022</code> exists for ad-tech-style fanout reads, but the HTTP surface stays unified through <code>POST /get</code> + <code>POST /batch_get</code>.</p>
+          </div>
+        </details>
+        <details>
+          <summary>What happens if I pass <code>features</code> for a column that doesn't exist?</summary>
+          <div class="acc-body">
+            <p>The whole call is rejected — no partial response with the columns that did match. The server returns HTTP 500 with <code>code: "internal_error"</code> and a <code>reason</code> string of the form <code>"feature_not_found: missing=[\"bogus\"] table=UserStats"</code>. This whole-batch-reject disposition matches the multi-key path: clients see one consistent failure mode, not a half-populated row that silently dropped fields.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Is <code>POST /get</code> idempotent?</summary>
+          <div class="acc-body">
+            <p>Yes — it's a pure read. The server queries in-memory aggregate state without mutating anything. Safe to retry on transport errors; safe to fan out across clients. The only caveat is "freshness": between two reads the underlying row may have advanced, because beava applies pushes atomically on the apply thread without read-side locks.</p>
+          </div>
+        </details>
+      </div>
+
+      <!-- =============== NEXT =============== -->
+      <h2 id="next">Where to go next</h2>
+      <p>You've got reads. The other two HTTP endpoints close the loop:</p>
+
+      <div class="card-grid">
+        <a class="card" href="#">
+          <div class="ttl">POST /register</div>
+          <p class="desc">Register one or more event/table descriptors. The shape that <code>POST /get</code> later resolves <code>"table"</code> against.</p>
+          <span class="go">HTTP API reference (planned) <span class="arrow">→</span></span>
+        </a>
+        <a class="card" href="#">
+          <div class="ttl">POST /push</div>
+          <p class="desc">Push a single event. WAL-acked on return; the row that <code>POST /get</code> will read is updated atomically before the response comes back.</p>
+          <span class="go">HTTP API reference (planned) <span class="arrow">→</span></span>
+        </a>
+      </div>
+
+      <!-- =============== FOOTER =============== -->
+      <div class="footer-area">
+        <div class="feedback">
+          <div class="ask">Was this page useful?</div>
+          <div class="feedback-btns">
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3z"/><line x1="7" y1="22" x2="7" y2="11"/></svg>
+              Yes
+            </button>
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3z"/><line x1="17" y1="2" x2="17" y2="13"/></svg>
+              Not really
+            </button>
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              Suggest an edit
+            </button>
+          </div>
+        </div>
+
+        <div id="bv-sdk-pager"></div>
+      </div>
+    </main>
+
+    <!-- ============ RIGHT TOC ============ -->
+    <aside class="toc">
+      <div id="bv-sdk-toc"></div>
+    </aside>
+
+  </div>
+
+  <div id="bv-site-footer"></div>
+
+  <!-- React + Babel — required by SiteHeader / SiteFooter / Sdk* -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script type="text/babel" src="/js/_shared/SiteHeader.jsx"></script>
+  <script type="text/babel" src="/js/_shared/SiteFooter.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkSidebar.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkTOC.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkPager.jsx"></script>
+
+  <script type="text/babel">
+    ReactDOM.createRoot(document.getElementById('bv-site-header'))
+      .render(<SiteHeader active="sdk" search maxWidth={1400}/>);
+    ReactDOM.createRoot(document.getElementById('bv-site-footer'))
+      .render(<SiteFooter maxWidth={1400}/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-sidebar'))
+      .render(<SdkSidebar active="http-get"/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-toc'))
+      .render(<SdkTOC editPath="sdk/http/get/index.html"/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-pager'))
+      .render(<SdkPager
+        prev={{ href: '/sdk/http/push/', label: 'POST /push' }}
+        next={{ href: '/sdk/http/register/', label: 'POST /register' }}
+      />);
+  </script>
+
+  <script src="/js/copy-buttons.js" defer></script>
+  <!-- Heading anchor copy-link icons. Injects a "#" affordance into every
+       <h2 id> / <h3 id> inside `.content` (matches the `.bv-content` and
+       `.docs-prose` surfaces too). Idempotent + uses MutationObserver to
+       catch React-mounted content. -->
+  <script src="/scripts/docs-headings.js" defer></script>
+</body>
+</html>

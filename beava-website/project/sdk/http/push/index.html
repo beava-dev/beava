@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>POST /push · beava HTTP API</title>
+<meta name="description" content="POST /push — push a single event to the beava feature server. Verb-style JSON body {event, data}; ACK includes the durable WAL log offset and the registry version stamp.">
+<link rel="stylesheet" href="/styles/colors_and_type.css">
+<link rel="stylesheet" href="/styles/site.css">
+<link rel="stylesheet" href="/styles/sdk-shell.css">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+<link rel="shortcut icon" href="/assets/favicon.ico">
+<style>
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--fg1); font-family: var(--font-sans); }
+
+  /* Reference-page hero — matches /sdk/python/app/. */
+  .ref-hero {
+    margin: 0 0 28px;
+    padding-bottom: 26px;
+    border-bottom: 1px solid var(--border);
+  }
+  .ref-hero .eyebrow {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-family: var(--font-mono); font-weight: 600; font-size: 12px;
+    color: var(--fg3);
+    margin-bottom: 14px;
+  }
+  .ref-hero .eyebrow .pill {
+    display: inline-block;
+    font-family: var(--font-mono); font-size: 10.5px; font-weight: 600;
+    color: var(--accent); background: var(--beava-orange-wash);
+    padding: 2px 8px; border-radius: 999px;
+    letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .ref-hero h1 {
+    font-family: var(--font-serif); font-weight: 700;
+    font-size: 44px; line-height: 1.05; letter-spacing: -0.025em;
+    color: var(--fg1);
+    margin: 0 0 14px;
+  }
+  .ref-hero h1 code {
+    font-family: var(--font-mono); font-weight: 700; font-size: 0.78em;
+    background: var(--beava-paper); border: 1px solid var(--border-inset);
+    padding: 2px 9px; border-radius: 8px; color: var(--accent);
+    letter-spacing: 0;
+  }
+  .ref-hero .lede {
+    font-family: var(--font-serif);
+    font-size: 19px; line-height: 1.5;
+    color: var(--fg2); font-weight: 400;
+    margin: 0; max-width: 60ch;
+  }
+</style>
+</head>
+<body class="beava">
+
+  <div id="bv-site-header"></div>
+
+  <div class="shell">
+
+    <!-- ============ SIDEBAR ============ -->
+    <aside class="sidebar">
+      <div id="bv-sdk-sidebar"></div>
+    </aside>
+
+    <!-- ============ MAIN ============ -->
+    <main class="content" data-pagefind-body>
+
+      <div class="crumbs">
+        <a href="/">beava</a><span class="sep">/</span>
+        <a href="/sdk/python/">SDK reference</a><span class="sep">/</span>
+        <span class="cur">POST /push</span>
+      </div>
+
+      <header class="ref-hero">
+        <div class="eyebrow">
+          <span class="pill">HTTP API · data plane</span>
+          <span><code>OP_PUSH = 0x0010</code></span>
+        </div>
+        <h1><code>POST /push</code></h1>
+        <p class="lede">Push a single event. ACK includes the WAL log offset and the registry version stamp.</p>
+      </header>
+
+      <!-- =============== OVERVIEW =============== -->
+      <h2 id="overview">Overview</h2>
+      <p><code>POST /push</code> is the canonical write path for event ingestion. Send one event per request; the server validates it against the registered <code>EventDescriptor</code>, appends it to the write-ahead log, applies it to in-memory aggregations, and replies with the durable LSN once the WAL slot is reserved.</p>
+      <ul>
+        <li><strong>Default port:</strong> <code>8080</code> (the data-plane HTTP listener; configure via the server's <code>http_addr</code>).</li>
+        <li><strong>Status:</strong> <code>200 OK</code> on success; structured 4xx on validation failure (see <a href="#errors">Errors</a>).</li>
+        <li><strong>One event per request.</strong> For batched fast-path ingest, use <code>OP_PUSH_MANY</code> over framed TCP.</li>
+      </ul>
+
+      <div class="callout note">
+        <span class="ic">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        </span>
+        <p><strong>Verb-style body, not path-style.</strong> The event name lives <em>inside</em> the JSON body under the <code>event</code> key — never in the URL path. Always <code>POST /push</code>; never <code>POST /push/Foo</code>.</p>
+      </div>
+
+      <!-- =============== REQUEST =============== -->
+      <h2 id="request">Request</h2>
+
+      <h3 id="request-headers">Headers</h3>
+      <ul>
+        <li><code>Content-Type: application/json</code> — the only supported content type on the HTTP transport. The msgpack fast-path is TCP-only (<code>CT_MSGPACK = 0x02</code> on framed TCP); HTTP <code>/push</code> always parses the body as JSON.</li>
+      </ul>
+
+      <h3 id="request-body">Body</h3>
+      <p>The body is a JSON object with two top-level keys:</p>
+
+      <div class="params">
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">event</span>
+            <span class="param-tags">
+              <span class="param-tag type">string</span>
+              <span class="param-tag req">required</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>Name of a registered event type (e.g. <code>"Txn"</code>). Must match an <code>EventDescriptor</code> previously installed via <code>POST /register</code>; otherwise the server returns <code>404 event_not_found</code>.</p>
+          </div>
+        </div>
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">data</span>
+            <span class="param-tags">
+              <span class="param-tag type">object</span>
+              <span class="param-tag req">required</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>Event fields as a flat object. Keys must match the descriptor's declared <code>schema.fields</code>; unknown keys are rejected with <code>unknown_field_v0</code> (or <code>unknown_field_event_time_v0</code> for the legacy <code>event_time</code> / <code>event_time_ms</code> sentinels — beava v0 is processing-time only).</p>
+          </div>
+        </div>
+      </div>
+
+      <h3 id="request-curl">Worked example — curl</h3>
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">push.sh</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+<pre><span class="tk-fn">curl</span> <span class="tk-p">-</span>X POST http://localhost:8080/push <span class="tk-p">\</span>
+  <span class="tk-p">-</span>H <span class="tk-s">"Content-Type: application/json"</span> <span class="tk-p">\</span>
+  <span class="tk-p">-</span>d <span class="tk-s">'{
+    "event": "Txn",
+    "data": {
+      "user_id": "alice",
+      "card_id": "card_001",
+      "amount": 42.50,
+      "merchant": "amazon",
+      "ip": "203.0.113.42"
+    }
+  }'</span></pre>
+      </div>
+
+      <h3 id="request-python">Worked example — Python</h3>
+      <p>The Python SDK's <code>App</code> client wraps the same wire call:</p>
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">push.py</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+<pre><span class="tk-k">import</span> beava <span class="tk-k">as</span> bv
+
+app <span class="tk-p">=</span> bv<span class="tk-p">.</span>App<span class="tk-p">(</span><span class="tk-s">"http://localhost:8080"</span><span class="tk-p">)</span>
+ack <span class="tk-p">=</span> app<span class="tk-p">.</span>push<span class="tk-p">(</span><span class="tk-s">"Txn"</span><span class="tk-p">,</span> <span class="tk-p">{</span>
+    <span class="tk-s">"user_id"</span><span class="tk-p">:</span>  <span class="tk-s">"alice"</span><span class="tk-p">,</span>
+    <span class="tk-s">"card_id"</span><span class="tk-p">:</span>  <span class="tk-s">"card_001"</span><span class="tk-p">,</span>
+    <span class="tk-s">"amount"</span><span class="tk-p">:</span>   <span class="tk-n">42.50</span><span class="tk-p">,</span>
+    <span class="tk-s">"merchant"</span><span class="tk-p">:</span> <span class="tk-s">"amazon"</span><span class="tk-p">,</span>
+    <span class="tk-s">"ip"</span><span class="tk-p">:</span>       <span class="tk-s">"203.0.113.42"</span><span class="tk-p">,</span>
+<span class="tk-p">})</span>
+<span class="tk-fn">print</span><span class="tk-p">(</span>ack<span class="tk-p">[</span><span class="tk-s">"ack_lsn"</span><span class="tk-p">])</span>  <span class="tk-c"># → 12345</span></pre>
+      </div>
+
+      <!-- =============== RESPONSE =============== -->
+      <h2 id="response">Response</h2>
+      <p>Success returns <code>200 OK</code> with a JSON body:</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">success body</span>
+        </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"ack_lsn"</span>: <span class="tk-n">12345</span><span class="tk-p">,</span>
+  <span class="tk-fn">"registry_version"</span>: <span class="tk-n">1</span><span class="tk-p">,</span>
+  <span class="tk-fn">"idempotent_replay"</span>: <span class="tk-k">false</span>
+<span class="tk-p">}</span></pre>
+      </div>
+
+      <div class="params">
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">ack_lsn</span>
+            <span class="param-tags">
+              <span class="param-tag type">integer ≥ 0</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>The durable WAL offset assigned to this event — server's monotonic Log Sequence Number. Reaching this LSN means the event survives a crash; the server returns <code>ack_lsn</code> as soon as the WAL slot is reserved (the WAL writer guarantees a fsync before the slot is reused).</p>
+          </div>
+        </div>
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">registry_version</span>
+            <span class="param-tags">
+              <span class="param-tag type">integer ≥ 1</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>The server's current registry counter. Increments on every successful <code>/register</code>. Useful as a cache-key invalidation / schema-evolution signal on long-lived clients — when this value changes from one push to the next, the registry shape changed underneath you.</p>
+          </div>
+        </div>
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">idempotent_replay</span>
+            <span class="param-tags">
+              <span class="param-tag type">boolean</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p><code>true</code> when the server identified this push as a re-delivery of a prior event — matched by the descriptor's <code>dedupe_key</code> within the dedupe window. The underlying state was <em>not</em> mutated; the response is byte-identical to the original ack. Always <code>false</code> when the descriptor has no <code>dedupe_key</code>, or when <code>dedupe_key</code> is set but the value is novel. The HTTP transport also signals replay via the <code>X-Beava-Idempotent-Replay: 1</code> response header.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- =============== ERRORS =============== -->
+      <h2 id="errors">Errors</h2>
+      <p>Every non-2xx response carries a JSON body with the canonical error envelope:</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">error envelope</span>
+        </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"error"</span>: <span class="tk-p">{</span>
+    <span class="tk-fn">"code"</span>: <span class="tk-s">"&lt;structured-code&gt;"</span><span class="tk-p">,</span>
+    <span class="tk-fn">"path"</span>: <span class="tk-s">"&lt;json-path-to-offending-element&gt;"</span><span class="tk-p">,</span>      <span class="tk-c">// optional</span>
+    <span class="tk-fn">"message"</span>: <span class="tk-s">"&lt;human-readable-message&gt;"</span>           <span class="tk-c">// optional</span>
+  <span class="tk-p">}</span>
+<span class="tk-p">}</span></pre>
+      </div>
+
+      <p>The <code>code</code> field is a stable structured identifier; <code>path</code> and <code>message</code> are optional contextual detail. The push path emits the following codes (verified against <code>crates/beava-server/src/apply_shard.rs</code> and <code>crates/beava-runtime-core/src/http_listener.rs</code>):</p>
+
+      <div class="params">
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">404 · event_not_found</span>
+          </div>
+          <div class="param-body">
+            <p>The <code>event</code> name doesn't match any registered <code>EventDescriptor</code>. Register the event first via <code>POST /register</code>.</p>
+          </div>
+        </div>
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">400 · invalid_event</span>
+          </div>
+          <div class="param-body">
+            <p><code>data</code> failed schema validation against the descriptor — wrong field types, wrong cardinality, or a required field missing. The canonical fixture for this case (with the optional <code>path</code> + <code>message</code> populated) lives at <code>examples/wire/push-validation-error.error.json</code>; SDKs surface that richer shape as <code>RegistrationError(code="schema_mismatch", path=…, message=…)</code>.</p>
+          </div>
+        </div>
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">400 · invalid_json_body</span>
+          </div>
+          <div class="param-body">
+            <p>Request body isn't valid JSON. Most often a stray comma, an unquoted key, or a truncated payload.</p>
+          </div>
+        </div>
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">400 · missing_event_name_in_body</span>
+          </div>
+          <div class="param-body">
+            <p>Body parsed as JSON but the top-level <code>event</code> string is absent or non-string. The verb-style envelope <em>requires</em> <code>{"event": "&lt;name&gt;", "data": {…}}</code>.</p>
+          </div>
+        </div>
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">400 · unknown_field_v0</span>
+          </div>
+          <div class="param-body">
+            <p><code>data</code> contains a key not in the descriptor's <code>schema.fields</code> (and not declared optional). v0 strict-denies unknown fields rather than silently dropping them.</p>
+          </div>
+        </div>
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">400 · unknown_field_event_time_v0</span>
+          </div>
+          <div class="param-body">
+            <p>Specialised case of <code>unknown_field_v0</code> for the legacy <code>event_time</code> / <code>event_time_ms</code> field names. beava v0 is processing-time only; clients sending event-time data get a structured 400 rather than silent acceptance. Event-time support is on the post-v0 roadmap.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout note">
+        <span class="ic">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        </span>
+        <p><strong>HTTP <code>/push</code> does not enforce <code>Content-Type</code>.</strong> The 415 <code>unsupported_media_type</code> code only fires on <code>POST /register</code>; <code>/push</code> attempts JSON parse against any body and emits <code>invalid_json_body</code> on failure. Always send <code>Content-Type: application/json</code> anyway — proxies and load balancers in front of beava may enforce it.</p>
+      </div>
+
+      <!-- =============== EXAMPLE =============== -->
+      <h2 id="example">Worked example: end-to-end</h2>
+      <p>Canonical request and response, taken verbatim from the wire fixtures (<code>examples/wire/push-success.{request,response}.json</code>) so SDK ports stay byte-identical:</p>
+
+      <div class="reqres">
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">request</span>
+          </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"event"</span>: <span class="tk-s">"Txn"</span><span class="tk-p">,</span>
+  <span class="tk-fn">"data"</span>: <span class="tk-p">{</span>
+    <span class="tk-fn">"user_id"</span>: <span class="tk-s">"alice"</span><span class="tk-p">,</span>
+    <span class="tk-fn">"card_id"</span>: <span class="tk-s">"card_001"</span><span class="tk-p">,</span>
+    <span class="tk-fn">"amount"</span>: <span class="tk-n">42.50</span><span class="tk-p">,</span>
+    <span class="tk-fn">"merchant"</span>: <span class="tk-s">"amazon"</span><span class="tk-p">,</span>
+    <span class="tk-fn">"ip"</span>: <span class="tk-s">"203.0.113.42"</span>
+  <span class="tk-p">}</span>
+<span class="tk-p">}</span></pre>
+        </div>
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">response · 200 OK</span>
+          </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"ack_lsn"</span>: <span class="tk-n">12345</span><span class="tk-p">,</span>
+  <span class="tk-fn">"registry_version"</span>: <span class="tk-n">1</span><span class="tk-p">,</span>
+  <span class="tk-fn">"idempotent_replay"</span>: <span class="tk-k">false</span>
+<span class="tk-p">}</span></pre>
+        </div>
+      </div>
+
+      <p>To reproduce locally: boot the server with a YAML config that sets <code>http_addr: 127.0.0.1:8080</code>, <code>storage.memory_only: true</code>, and <code>test_mode: true</code>, register a <code>Txn</code> event, then send the request above. Both fixture files validate against the JSON Schemas at <code>examples/wire/schemas/push.{request,response}.schema.json</code>.</p>
+
+      <!-- =============== TCP =============== -->
+      <h2 id="tcp">TCP equivalent</h2>
+      <p>The framed-TCP fast-path carries the same JSON envelope under opcode <code>OP_PUSH = 0x0010</code>. Frame format:</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">tcp frame</span>
+        </div>
+<pre><span class="tk-p">[</span><span class="tk-t">u32 length BE</span><span class="tk-p">][</span><span class="tk-t">u16 op = 0x0010</span><span class="tk-p">][</span><span class="tk-t">u8 content_type</span><span class="tk-p">][</span>payload<span class="tk-p">]</span>
+
+content_type<span class="tk-p">:</span>  <span class="tk-n">0x01</span> = CT_JSON    <span class="tk-c">// {"event":"Txn","data":{...}}</span>
+              <span class="tk-n">0x02</span> = CT_MSGPACK <span class="tk-c">// msgpack-encoded {event, data} (TCP only)</span></pre>
+      </div>
+
+      <p>TCP is strict-FIFO with one in-flight request per connection — the response order matches the request order. The msgpack body format is a TCP-only fast-path; HTTP <code>/push</code> always parses bodies as JSON. See the <a href="#">wire spec (planned)</a> for the full opcode catalogue and frame state machine.</p>
+
+      <!-- =============== FAQ =============== -->
+      <h2 id="faq">Common questions</h2>
+
+      <div class="accordion">
+        <details>
+          <summary>What's <code>idempotent_replay</code> for if I'm not setting <code>dedupe_key</code>?</summary>
+          <div class="acc-body">
+            <p>It's always <code>false</code> in that case — the server only consults the dedupe cache when the descriptor declares a <code>dedupe_key</code>. The field is on every push response so the wire shape is uniform regardless of whether dedupe is enabled. To opt in, declare <code>dedupe_key="&lt;field&gt;"</code> on your <code>@bv.event</code> and the server will replay-detect within the descriptor's dedupe window.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Can I push multiple events in one request?</summary>
+          <div class="acc-body">
+            <p>Not over HTTP — <code>POST /push</code> is single-event. For batched ingest, use the framed-TCP fast-path with <code>OP_PUSH_MANY = 0x0012</code>; the body is a length-prefixed array of <code>{event, data}</code> objects and the server returns one ack per event in order. HTTP-level batching is intentionally absent: HTTP/1.1 keep-alive plus per-request acks already amortizes connection overhead well below the WAL throughput ceiling.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Is <code>ack_lsn</code> durable across restarts?</summary>
+          <div class="acc-body">
+            <p>Yes — <code>ack_lsn</code> is the WAL offset, persisted to disk before the server returns the ack. After a crash, recovery replays the WAL from the last snapshot up to the highest synced LSN, so any LSN you saw in a 200 response will be reflected in the post-recovery state. The same LSN is monotonically assigned across snapshots, so it remains a stable durability anchor for as long as the WAL files exist.</p>
+          </div>
+        </details>
+      </div>
+
+      <!-- =============== NEXT =============== -->
+      <h2 id="next">Where to go next</h2>
+      <p>You've sent your first event. The companion endpoints round out the data plane:</p>
+
+      <div class="card-grid">
+        <a class="card" href="#">
+          <div class="ttl">POST /get</div>
+          <p class="desc">Read a single feature row by entity key. JSON request, JSON response — pairs naturally with <code>/push</code> for the push-then-query loop. Reference page lands next.</p>
+          <span class="go">HTTP API reference (planned) <span class="arrow">→</span></span>
+        </a>
+        <a class="card" href="/sdk/python/app/">
+          <div class="ttl">App client</div>
+          <p class="desc">Python wrapper around <code>/push</code>, <code>/get</code>, <code>/register</code>, and the rest. Same wire shapes, with type hints and a context-manager lifecycle.</p>
+          <span class="go">Python SDK reference <span class="arrow">→</span></span>
+        </a>
+      </div>
+
+      <!-- =============== FOOTER =============== -->
+      <div class="footer-area">
+        <div class="feedback">
+          <div class="ask">Was this page useful?</div>
+          <div class="feedback-btns">
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3z"/><line x1="7" y1="22" x2="7" y2="11"/></svg>
+              Yes
+            </button>
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3z"/><line x1="17" y1="2" x2="17" y2="13"/></svg>
+              Not really
+            </button>
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              Suggest an edit
+            </button>
+          </div>
+        </div>
+
+        <div id="bv-sdk-pager"></div>
+      </div>
+    </main>
+
+    <!-- ============ RIGHT TOC ============ -->
+    <aside class="toc">
+      <div id="bv-sdk-toc"></div>
+    </aside>
+
+  </div>
+
+  <div id="bv-site-footer"></div>
+
+  <!-- React + Babel — required by SiteHeader / SiteFooter / Sdk* -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script type="text/babel" src="/js/_shared/SiteHeader.jsx"></script>
+  <script type="text/babel" src="/js/_shared/SiteFooter.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkSidebar.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkTOC.jsx"></script>
+  <script type="text/babel" src="/js/sdk/SdkPager.jsx"></script>
+
+  <script type="text/babel">
+    ReactDOM.createRoot(document.getElementById('bv-site-header'))
+      .render(<SiteHeader active="sdk" search maxWidth={1400}/>);
+    ReactDOM.createRoot(document.getElementById('bv-site-footer'))
+      .render(<SiteFooter maxWidth={1400}/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-sidebar'))
+      .render(<SdkSidebar active="http-push"/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-toc'))
+      .render(<SdkTOC editPath="sdk/http/push/index.html"/>);
+    ReactDOM.createRoot(document.getElementById('bv-sdk-pager'))
+      .render(<SdkPager
+        prev={{ href: '/sdk/python/errors/', label: 'Errors' }}
+        next={{ href: '/sdk/http/get/', label: 'POST /get' }}
+      />);
+  </script>
+
+  <script src="/js/copy-buttons.js" defer></script>
+  <script src="/scripts/docs-headings.js" defer></script>
+</body>
+</html>
