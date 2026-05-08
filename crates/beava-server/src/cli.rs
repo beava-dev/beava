@@ -22,6 +22,39 @@ pub struct Cli {
     #[arg(short, long, global = true)]
     pub config: Option<PathBuf>,
 
+    /// Override the HTTP listener address. Highest precedence — wins
+    /// over `--config` YAML and `BEAVA_LISTEN_ADDR` env. Locked v0
+    /// default: 127.0.0.1:8080.
+    #[arg(long, value_name = "ADDR", global = true)]
+    pub http_addr: Option<String>,
+
+    /// Override the TCP fast-path listener address. Highest precedence
+    /// — wins over `--config` YAML and `BEAVA_TCP_HOST`/`BEAVA_TCP_PORT`
+    /// env. Locked v0 default: 127.0.0.1:8081.
+    #[arg(long, value_name = "ADDR", global = true)]
+    pub tcp_addr: Option<String>,
+
+    /// Override both WAL and snapshot directories under a single root:
+    /// WAL lands at `<DIR>/wal`, snapshots at `<DIR>/snapshots`. Highest
+    /// precedence — wins over `--config` and `BEAVA_WAL_DIR` /
+    /// `BEAVA_SNAPSHOT_DIR` env. Default: `./.beava/`.
+    #[arg(long, value_name = "PATH", global = true)]
+    pub data_dir: Option<PathBuf>,
+
+    /// In-memory only: no WAL writer, no snapshot, no recovery. State
+    /// is lost on restart. Useful for `docker run` smoke tests, demo
+    /// boots, and any "I'm just kicking the tyres" workflow that
+    /// shouldn't leave bytes on disk.
+    #[arg(long, global = true)]
+    pub memory_only: bool,
+
+    /// Enable POST /reset and OP_RESET (the destructive registry-wipe
+    /// endpoint). Off by default; the locked v0 surface gates it on
+    /// this flag (or `BEAVA_TEST_MODE=1`) so production deploys can't
+    /// be reset by accident.
+    #[arg(long, global = true)]
+    pub test_mode: bool,
+
     /// Optional subcommand. When omitted, `beava` boots the server
     /// (the default behaviour). When `quickstart` is selected, beava
     /// runs the in-process 4-step demo and exits.
@@ -165,5 +198,51 @@ mod tests {
             "--test-mode must be a recognized flag; got {:?}",
             result.err()
         );
+    }
+
+    // Value assertions for the F5 flags. These complement the recognition
+    // tests above — once clap accepts each flag, pin the parsed value so
+    // a future refactor that drops a field type can't go unnoticed.
+
+    #[test]
+    fn http_addr_flag_captures_value() {
+        let cli = Cli::try_parse_from(["beava", "--http-addr", "0.0.0.0:9090"]).unwrap();
+        assert_eq!(cli.http_addr.as_deref(), Some("0.0.0.0:9090"));
+    }
+
+    #[test]
+    fn tcp_addr_flag_captures_value() {
+        let cli = Cli::try_parse_from(["beava", "--tcp-addr", "0.0.0.0:9091"]).unwrap();
+        assert_eq!(cli.tcp_addr.as_deref(), Some("0.0.0.0:9091"));
+    }
+
+    #[test]
+    fn data_dir_flag_captures_value() {
+        let cli = Cli::try_parse_from(["beava", "--data-dir", "/var/lib/beava"]).unwrap();
+        assert_eq!(cli.data_dir, Some(PathBuf::from("/var/lib/beava")));
+    }
+
+    #[test]
+    fn memory_only_flag_captures_true() {
+        let cli = Cli::try_parse_from(["beava", "--memory-only"]).unwrap();
+        assert!(cli.memory_only);
+    }
+
+    #[test]
+    fn memory_only_flag_default_false() {
+        let cli = Cli::try_parse_from(["beava"]).unwrap();
+        assert!(!cli.memory_only);
+    }
+
+    #[test]
+    fn test_mode_flag_captures_true() {
+        let cli = Cli::try_parse_from(["beava", "--test-mode"]).unwrap();
+        assert!(cli.test_mode);
+    }
+
+    #[test]
+    fn test_mode_flag_default_false() {
+        let cli = Cli::try_parse_from(["beava"]).unwrap();
+        assert!(!cli.test_mode);
     }
 }

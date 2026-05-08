@@ -254,3 +254,104 @@ fn env_var_overrides_listen_addr() {
         "expected server to bind on override port {override_port}"
     );
 }
+
+/// F5 end-to-end: `beava --http-addr ADDR --tcp-addr ADDR --memory-only --test-mode`
+/// boots without a YAML, binds where the CLI says, and lets /reset succeed.
+///
+/// This is the canonical "user copy-pastes the README CLI section into their
+/// shell" path. It exercises every locked v0 flag at once:
+///   - `--http-addr` and `--tcp-addr` win over the default 8080/8081 ports.
+///   - `--memory-only` skips the WAL writer (otherwise the default
+///     `./beava-wal` dir would collide across parallel tests).
+///   - `--test-mode` opens the destructive `/reset` endpoint, which
+///     returns 200 only when test_mode is on.
+#[test]
+fn cli_flags_boot_and_dispatch_reset() {
+    let _guard = CLI_SUBPROCESS_LOCK
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+
+    let http_port = free_port();
+    let tcp_port = free_port();
+    let admin_port = free_port();
+
+    let child = Command::new(beava_bin())
+        // Pin admin to an ephemeral port so parallel test spawns don't
+        // fight on default 8090; admin isn't part of the F5 surface, just
+        // an environmental knob.
+        .env("BEAVA_ADMIN_ADDR", format!("127.0.0.1:{admin_port}"))
+        .arg("--http-addr")
+        .arg(format!("127.0.0.1:{http_port}"))
+        .arg("--tcp-addr")
+        .arg(format!("127.0.0.1:{tcp_port}"))
+        .arg("--memory-only")
+        .arg("--test-mode")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn server");
+
+    // Poll-until-bind on the HTTP override port.
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    let mut is_bound = false;
+    while std::time::Instant::now() < deadline {
+        if std::net::TcpStream::connect(format!("127.0.0.1:{http_port}")).is_ok() {
+            is_bound = true;
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(
+        is_bound,
+        "expected /ping listener bound on --http-addr 127.0.0.1:{http_port}"
+    );
+
+    // Hit /reset — it returns 403 unless --test-mode is honoured. The
+    // body shape is `{"reset": true, "registry_version": <n>}` from
+    // server.rs::format_reset_response. cli_smoke is std-only (no tokio
+    // reactor in scope), so write a minimal HTTP/1.1 request by hand.
+    use std::io::{Read, Write};
+    let mut stream = std::net::TcpStream::connect(format!("127.0.0.1:{http_port}"))
+        .expect("connect /reset");
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .expect("set read timeout");
+    let req = "POST /reset HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}";
+    stream.write_all(req.as_bytes()).expect("write /reset");
+    // Read in chunks until we see the body close-tag `}` after the
+    // headers — the server keeps the connection open even with
+    // Connection: close, so a naive read_to_string blocks. The reset
+    // response is ~50 bytes; reading 1 KB into a buffer is enough.
+    let mut raw = Vec::with_capacity(1024);
+    let mut chunk = [0u8; 256];
+    while let Ok(n) = stream.read(&mut chunk) {
+        if n == 0 {
+            break;
+        }
+        raw.extend_from_slice(&chunk[..n]);
+        let raw_str = String::from_utf8_lossy(&raw);
+        if let Some(body_start) = raw_str.find("\r\n\r\n") {
+            let after_headers = &raw_str[body_start + 4..];
+            if after_headers.contains('}') {
+                break;
+            }
+        }
+    }
+    let raw_str = String::from_utf8_lossy(&raw).to_string();
+    let status_line = raw_str.lines().next().unwrap_or("");
+    let body = raw_str.split("\r\n\r\n").nth(1).unwrap_or("").to_string();
+
+    unsafe {
+        libc::kill(child.id() as libc::pid_t, libc::SIGTERM);
+    }
+    let _ = child.wait_with_output();
+
+    assert!(
+        status_line.contains("200"),
+        "/reset must return 200 with --test-mode; got status_line={status_line:?} body={body}"
+    );
+    assert!(
+        body.contains("\"reset\":true") || body.contains("\"reset\": true"),
+        "/reset body must contain reset:true; got {body}"
+    );
+}

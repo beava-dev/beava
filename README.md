@@ -124,18 +124,30 @@ Unknown opcodes return `error_response` with code `unknown_op` and the connectio
 ```text
 beava [OPTIONS]
 
-  --http-addr <ADDR>            default: 127.0.0.1:8080
-  --tcp-addr <ADDR>             default: 127.0.0.1:8081
-  --data-dir <PATH>             default: ./.beava/
-  --memory-only                 ephemeral; no WAL/snapshot
-  --test-mode                   enable POST /reset and OP_RESET
-  --wal-flush-ms <MS>           default: 100
-  --snapshot-interval-mins <M>  default: 30
+  -c, --config <CONFIG>     YAML config file (full surface; optional)
+      --http-addr <ADDR>    default: 127.0.0.1:8080
+      --tcp-addr <ADDR>     default: 127.0.0.1:8081
+      --data-dir <PATH>     default: ./beava-wal + ./beava-snapshots
+                            (with --data-dir <DIR>, writes to <DIR>/wal
+                            and <DIR>/snapshots)
+      --memory-only         ephemeral; no WAL/snapshot
+      --test-mode           enable POST /reset and OP_RESET
   -h, --help
   -V, --version
 
 env vars
-  BEAVA_LOG=debug|info|warn     default: info
+  BEAVA_LOG_LEVEL=debug|info|warn     default: info
+  BEAVA_TEST_MODE=1                   alias for --test-mode
+  BEAVA_WAL_DIR / BEAVA_SNAPSHOT_DIR  per-dir overrides (use --data-dir
+                                      for a single-root convenience flag)
+  BEAVA_LISTEN_ADDR / BEAVA_TCP_PORT  per-listener overrides
+                                      (use --http-addr / --tcp-addr
+                                      for the canonical CLI form)
+
+WAL fsync interval and snapshot interval ride along inside YAML / env
+(`BEAVA_WAL_FSYNC_INTERVAL_MS`, snapshot interval is plumbed via
+`ServerV18Config`); promotion to first-class CLI flags is a v0.0.x
+followup. Most operators don't tune these.
 ```
 
 No TLS in v0 — terminate at nginx, Envoy, or Cloudflare if you need it. No auth in v0 — bind to a private network.
