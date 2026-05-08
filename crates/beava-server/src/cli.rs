@@ -110,4 +110,60 @@ mod tests {
             "expected Command::Quickstart {{ no_file: true }}"
         );
     }
+
+    // ─── Locked v0 Server CLI flags (F5) ──────────────────────────────
+    // The README documents `--http-addr`, `--tcp-addr`, `--data-dir`,
+    // `--memory-only`, and `--test-mode` as the canonical OSS-launch
+    // surface. These tests pin the clap recognition of each so a future
+    // refactor can't silently drop a flag that the docs promise.
+
+    #[test]
+    fn http_addr_flag_is_recognized() {
+        let result = Cli::try_parse_from(["beava", "--http-addr", "127.0.0.1:9000"]);
+        assert!(
+            result.is_ok(),
+            "--http-addr must be a recognized flag; got {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn tcp_addr_flag_is_recognized() {
+        let result = Cli::try_parse_from(["beava", "--tcp-addr", "127.0.0.1:9001"]);
+        assert!(
+            result.is_ok(),
+            "--tcp-addr must be a recognized flag; got {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn data_dir_flag_is_recognized() {
+        let result = Cli::try_parse_from(["beava", "--data-dir", "/tmp/beava-data"]);
+        assert!(
+            result.is_ok(),
+            "--data-dir must be a recognized flag; got {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn memory_only_flag_is_recognized() {
+        let result = Cli::try_parse_from(["beava", "--memory-only"]);
+        assert!(
+            result.is_ok(),
+            "--memory-only must be a recognized flag; got {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_mode_flag_is_recognized() {
+        let result = Cli::try_parse_from(["beava", "--test-mode"]);
+        assert!(
+            result.is_ok(),
+            "--test-mode must be a recognized flag; got {:?}",
+            result.err()
+        );
+    }
 }
