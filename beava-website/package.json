@@ -6,7 +6,8 @@
   "description": "beava.dev — hand-rolled static HTML + Pagefind search.",
   "scripts": {
     "build:search": "node scripts/build-search.mjs",
-    "check:links": "node scripts/check-links.mjs"
+    "build:llms":   "node scripts/build-llms-txt.mjs",
+    "check:links":  "node scripts/check-links.mjs"
   },
   "devDependencies": {
     "pagefind": "^1.1.1"
