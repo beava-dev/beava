@@ -12,9 +12,17 @@ const DocsContent = () => (
     </div>
 
     <H1>Rolling counters</H1>
-    <p style={{ fontFamily: 'var(--font-sans)', fontSize: 19, lineHeight: 1.55, color: 'var(--fg2)', margin: '0 0 28px', textWrap: 'pretty' }}>
+    <p style={{ fontFamily: 'var(--font-sans)', fontSize: 19, lineHeight: 1.55, color: 'var(--fg2)', margin: '0 0 22px', textWrap: 'pretty' }}>
       A rolling counter answers the question: <em>"how many of X have happened in the last N seconds?"</em> — a useful primitive for rate limits, trending items, and surge detection.
     </p>
+
+    <DocsPageMeta stable="v0.9" updated="3 days ago" readMins={6}/>
+    <DocsRelatedChips items={[
+      { label: 'velocities' },
+      { label: 'rate limits' },
+      { label: 'last-N-seen' },
+      { label: 'leaderboards' },
+    ]}/>
 
     <H2 id="what">What is a rolling counter?</H2>
     <P>
@@ -75,6 +83,8 @@ const DocsContent = () => (
     <P>
       Counters are <strong>not</strong> durable across restarts by default — they recover by replay, which takes ~30s on typical volumes. See <a style={{ color: 'var(--accent)' }}>durability</a> if you need stricter guarantees.
     </P>
+
+    <DocsHelpCallout/>
 
     <div style={{ marginTop: 48, paddingTop: 24, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
       <a style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: 16, border: '1px solid var(--border)', borderRadius: 10, textDecoration: 'none', minWidth: 200 }}>

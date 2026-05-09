@@ -23,20 +23,25 @@ const FinalCTA = () => {
       borderTop: '1px solid var(--border)',
     }}>
       <div style={{ maxWidth: 920, margin: '0 auto', textAlign: 'center', position: 'relative' }}>
-        {/* Mascot greeter — full-body friendly pose, anchored top-right */}
-        <img
-          src="../../assets/logo-mark.png"
-          alt=""
-          width={120}
-          height={120}
-          style={{
-            position: 'absolute', top: -28, right: -8,
-            transform: 'rotate(6deg)',
-            display: 'block',
-            filter: 'drop-shadow(0 6px 14px rgba(26,23,20,0.10))',
-          }}
-          className="beava-finalcta-mascot"
-        />
+        {/* Brand lockup — geometric mascot + serif italic wordmark */}
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: 18,
+          marginBottom: 32,
+        }}>
+          <img
+            src="../../assets/mascot-mark-geometric-transparent.png"
+            alt=""
+            width={88}
+            height={88}
+            style={{ display: 'block' }}
+          />
+          <span style={{
+            fontFamily: 'var(--font-serif)', fontWeight: 600, fontStyle: 'italic',
+            fontSize: 84, letterSpacing: '-0.025em', lineHeight: 0.95,
+            color: 'var(--fg1)',
+          }}>beava</span>
+        </div>
+
         <Eyebrow>Three ways in</Eyebrow>
         <h2 style={{
           fontFamily: 'var(--font-serif)', fontWeight: 600,

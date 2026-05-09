@@ -307,7 +307,7 @@
         <div class="kicker">Skip the browser — run it for real</div>
         <p>The simulator on this page runs in your browser, but the real beava is a single binary you can <code>brew install</code> or <code>docker run</code> in 30 seconds. Same wire protocol; everything you build below works against it unchanged.</p>
         <pre class="term"><span class="cmt"># docker — pinned tag, no install needed</span>
-<span class="prompt">$</span> <span class="cmd">docker</span> run <span class="flag">-p</span> 6400:6400 <span class="flag">-v</span> $(pwd)/data:/data <span class="path">beavadev/beava:edge</span>
+<span class="prompt">$</span> <span class="cmd">docker</span> run <span class="flag">-p</span> 6400:6400 <span class="flag">-v</span> $(pwd)/data:/var/lib/beava <span class="path">beava/beava:v0</span>
 
 <span class="cmt"># homebrew — native binary on macOS / Linux</span>
 <span class="prompt">$</span> <span class="cmd">brew</span> install beava &amp;&amp; <span class="cmd">beava</span> serve <span class="flag">--data-dir</span> <span class="path">./beava-data</span>

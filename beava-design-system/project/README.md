@@ -219,6 +219,112 @@ beava does not have a custom icon library yet. Our approach:
 
 ---
 
+# Interactive blog patterns
+
+Blog / guide posts in this design system are **interactive build-alongs**, not static read-throughs. We have a fixed vocabulary of patterns. Use them in this order; don't invent new ones without a reason.
+
+### Page width rule (critical)
+
+One post has **two widths only**:
+- **prose column** — `780px` max, centered with `40px` inner padding (inside an `860px` outer). Use for paragraphs, headings, ask-Claude rows, simple code blocks.
+- **wide column** — `860px` max, centered. Use for the push-event form, live feed, entity dashboard, request/response pair, cost estimator, `ff-note`.
+
+**Prose and wide share the same outer container** (`1040px`, centered). This way a wide block's left and right edges always align with the prose column's edges — no visual jump when scrolling between them.
+
+Do NOT let widgets float inside prose at prose width and then expand on the next section — if a thing is interactive (a form, a dashboard, a terminal pair), it gets the wide width, always.
+
+### Post header (`comp-post-header.html`)
+
+Crumbs (`Guide / Chapter 1`) → orange eyebrow (`CHAPTER 1 · INTERACTIVE`) → large serif title (`60–68px`, max 16–18ch) → subtitle → mascot on the right (150–180px, pose 3). Use this header for every chapter-style / long-form tutorial post.
+
+### Run-for-real callout (`comp-run-for-real.html`)
+
+Cream card, orange eyebrow (`SKIP THE BROWSER — RUN IT FOR REAL`), one paragraph, dark terminal block with `docker` + `brew` + `curl` verify, meta strip below. Place it immediately after the header — this is the one place we tell readers that the browser sim is not the real thing. Use at most **once per post**.
+
+### Section marker
+
+`Part N · Label` eyebrow (orange, uppercase, 12px, 0.12em tracking) above an `h2` (40px serif). Parts are numbered starting at 1. Part 4 is conventionally the cost/scale section if the post has one.
+
+### Side-by-side code compare
+
+Two code blocks separated by a large rotated `≈` (Gaegu, orange). Pattern: `pandas (batch) ≈ beava (live)`. Labelled with small captions and a centered italic caption below explaining the difference. See `comp-code-compare.html`.
+
+### Ask-Claude row
+
+Orange-wash pill-row: orange rotated avatar with `?` + bold Gaegu "Or just ask Claude" title + mono command prompt underneath + white `Install skill →` CTA on the right. Use after each big pipeline code block to offer the skill alternative. Tone: the skill is the faster path, not a replacement.
+
+### Action + status-pill row
+
+Orange primary button (`>_ Register the pipeline`) + a green `✓ registered` pill to its right. The button state flips the pill. See `comp-action-pill.html`.
+
+### Push-event form (`.pusher`)
+
+White card with a 3px orange left border. Header row: `PUSH EVENT → @bv.table UserStats` tag on the left, orange `✦ Send a random event` button on the right. "or craft your own" italic note. Four-field grid: `user_id`, `path`, `category (derived, readonly, orange)`, `Push →` button. Width = wide.
+
+### Live feed + response rows (`comp-live-feed.html`)
+
+Left rail: `recent events` with pulsing green `live` dot and a scrolling list of event cards (uid + path + meta). Right panel: clean rows of `uid | value | label`. Below both: status strip with `✓ 200 OK · Xms` pill, pulsing `auto-refresh · 1.5s` pill, orange `>_ Re-run now` button.
+
+### Live entity dashboard (`comp-entity-dashboard.html`)
+
+4 KPI stat cards across the top + the events rail on the left + a 3-column grid of per-entity cards on the right. Each entity card: colored avatar badge (warm palette), uid, last-seen, big `views_total` serif number, mini bar for `views_24h`, category pills, activity sparkline. Use this AFTER the push form when the post's whole goal is "render live state."
+
+### Request/response terminal pair
+
+Side-by-side code blocks: `1. request — copy-paste this into your terminal` (curl) and `2. response — live, Xms` (JSON). Width = wide.
+
+### Cost / RAM estimator (`comp-cost-estimator.html`)
+
+Tabbed scale picker across the top (`10K / 100K / 1M / 10M / 100M users`) → three headline stats (entities / memory footprint / AWS fit-and-cost) → per-user byte breakdown table → footnote explaining why events don't add memory. Always goes near the end of the post. Drives the "this will actually fit on a t3.small" moment.
+
+### End-of-post celebration (GREEN, not orange)
+
+Dashed green border, `beava-success-wash` background, Gaegu scribble (`← you shipped it`), large serif title with one word in green italics, subtitle, two CTAs (green solid + green-outline), mascot on the right. **This is the one place we use green prominently** — it marks the "you finished" moment and visually differentiates from the orange "look at this" moments throughout the body.
+
+### Next-posts pair
+
+Two white cards side-by-side at the very bottom: small uppercase kicker (`NEXT CHAPTER` / `RECIPE`) + serif title. Always exactly two. Hover darkens border to orange.
+
+### Ordering
+
+For a typical chapter-style post:
+
+1. Post header
+2. Run-for-real callout (once)
+3. Part 1 · concept — prose + code-compare
+4. Part 2 · first pipeline — code block + ask-Claude + action-pill + pusher + live feed + request/response
+5. Part 3 · real build — same sequence, richer table + entity dashboard
+6. Part 4 · cost at scale — cost estimator + ask-Claude
+7. End-of-post celebration
+8. Next-posts pair
+
+---
+
+# Guidebook (chapter index) patterns
+
+The guidebook is the landing page for `beava.dev/learn` — the jumping-off point for every chapter. It has its own distinct patterns separate from inside-a-post chrome.
+
+### Guidebook hero (`comp-guidebook-hero.html`)
+
+The top of the learn index. Orange eyebrow (`THE REAL-TIME FEATURE GUIDEBOOK`, 0.16em tracking) → very large serif title (`66px+`, max 16ch, often running 4 lines tall — let it wrap) → 3–4 sentence subtitle → `your progress` bar (4px track, orange fill on cream well) with `N / 6 chapters` count right-aligned → mascot (pose 3) on the right at 200px.
+
+**Rules:** the title is the showpiece — don't cap it below ~4em font-size. Keep the subtitle concrete about what each chapter covers (name 3–5 of them) so the reader sees the destination before they click. Progress bar is persisted per-reader from localStorage — show it even on first visit, zero-filled.
+
+### Chapter card (`comp-chapter-card.html`)
+
+One card per chapter, stacked vertically (not a grid). Each card:
+- `Chapter N` in Gaegu (orange, rotated `-2deg`, 22px) + orange `→` arrow. The arrow slides right on hover.
+- Serif chapter title (28px, max 22ch).
+- One-sentence meta about what you build.
+- Tag row: `● interactive` (green pill), time estimate (`10 min`, orange pill), category tag (`basics` / `recipe` / `concept`, neutral pill).
+- Mascot (pose 3 or work-pose) peeking from the right edge at 140px, anchored right-center so it looks like it's climbing out of the card.
+- Cream `beava-paper` background, 18px radius, 1px border. Hover: border turns orange, card lifts 1px with a soft orange-tinted shadow.
+- Locked / coming-soon chapters use `opacity: 0.55`, no hover transform, grayed-out arrow. Still visible in the list so readers see what's planned.
+
+**Rules:** always stack, never grid. The long-scroll rhythm matters — readers should feel they can read down the list top to bottom without context-switching between columns. Alternate mascot poses between cards so the column feels alive (pose-3, work, pose-3, work).
+
+---
+
 ## For designers + agents
 
 - Read `SKILL.md` for the short version.

@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>beava — real-time features without heavy infrastructure</title>
-  <meta name="description" content="beava turns events into fresh, queryable state. Push events. Define pipelines. Query by key. Personalization, fraud rules, live dashboards — in hours, not quarters.">
+  <title>beava — real-time user features without heavy streaming infra</title>
+  <meta name="description" content="Define aggregations in Python, POST events over HTTP, and query fresh values by key in sub-millisecond latency. One binary. No Kafka, Flink, brokers, clusters, or stream jobs.">
   <link rel="stylesheet" href="styles/colors_and_type.css">
   <link rel="stylesheet" href="styles/site.css">
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="shortcut icon" href="/assets/favicon.ico">
@@ -23,218 +23,182 @@
   <script type="text/babel">
     // beava.dev homepage — Hero · PipelineShowcase · Pillars · FinalCTA
 
-    const useTickingNumber = (target, { duration = 1100, decimals = 0 } = {}) => {
-      const [val, setVal] = React.useState(target);
-      const fromRef = React.useRef(target);
-      React.useEffect(() => {
-        const from = fromRef.current;
-        const to = target;
-        if (from === to) return;
-        const start = performance.now();
-        let raf;
-        const step = (now) => {
-          const t = Math.min(1, (now - start) / duration);
-          const eased = 1 - Math.pow(1 - t, 3);
-          const v = from + (to - from) * eased;
-          setVal(v);
-          if (t < 1) raf = requestAnimationFrame(step);
-          else fromRef.current = to;
-        };
-        raf = requestAnimationFrame(step);
-        return () => cancelAnimationFrame(raf);
-      }, [target, duration]);
-      return decimals === 0 ? Math.round(val) : Number(val.toFixed(decimals));
-    };
+    // LiveQueriesPanel — chat7 (2026-05-09) hero redesign. Three live beava
+    // queries, function-call signature on the left, fresh value on the right.
+    // Values rotate on a slow loop so the panel feels alive without strobing.
+    // Replaces the prior LiveMetrics dashboard; the production /api/get poll
+    // moved to PipelineOutput below (closes the loop with the 13-line example).
+    const seedQueries = () => ([
+      {
+        id: 'pv',
+        fn: 'bv.count',
+        args: [{ k: 'user_id', v: '"u_8412"' }, { k: 'window', v: '"24h"' }],
+        value: 74,
+        fmt: (n) => Math.round(n).toLocaleString('en-US'),
+        drift: () => 1 + Math.floor(Math.random() * 3),
+      },
+      {
+        id: 'mt',
+        fn: 'bv.p50',
+        args: [{ k: 'path', v: '"/"' }, { k: 'window', v: '"1h"' }],
+        value: 1.2,
+        fmt: (n) => `${n.toFixed(1)}s`,
+        drift: () => (Math.random() - 0.5) * 0.18,
+      },
+      {
+        id: 'tp',
+        fn: 'bv.top_k',
+        args: [{ k: 'metric', v: '"page_view"' }, { k: 'k', v: '1' }, { k: 'window', v: '"1h"' }],
+        value: { path: '"/"', count: 382 },
+        rotateThru: [
+          { path: '"/"',                       count: 382 },
+          { path: '"/docs"',                   count: 264 },
+          { path: '"/learn/chapter-1"',        count: 198 },
+          { path: '"/docs/rolling-counters"',  count: 141 },
+        ],
+        fmt: (v) => `${v.path} · ${v.count.toLocaleString('en-US')}`,
+      },
+    ]);
 
-    const Sparkline = ({ data, color = 'var(--accent)', w = 300, h = 28 }) => {
-      if (!data || data.length < 2) return null;
-      const min = Math.min(...data);
-      const max = Math.max(...data);
-      const span = max - min || 1;
-      const stepX = w / (data.length - 1);
-      const pts = data.map((v, i) => [i * stepX, h - ((v - min) / span) * (h - 4) - 2]);
-      const d = pts.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-      const area = `${d} L${w},${h} L0,${h} Z`;
-      const last = pts[pts.length - 1];
+    const QueryCard = ({ row, pulse }) => {
+      const text = row.fmt ? row.fmt(row.value) : String(row.value);
       return (
-        <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none"
-             style={{ display: 'block', width: '100%', height: h, overflow: 'visible' }}>
-          <path d={area} fill={color} fillOpacity="0.10"/>
-          <path d={d} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke"/>
-          <circle cx={last[0]} cy={last[1]} r="2.75" fill={color}/>
-          <circle cx={last[0]} cy={last[1]} r="5" fill={color} fillOpacity="0.18"/>
-        </svg>
+        <div style={{
+          background: '#fff', border: '1px solid var(--border)', borderRadius: 14,
+          padding: '14px 18px', boxShadow: 'var(--shadow-sm)',
+          display: 'flex', flexWrap: 'wrap',
+          alignItems: 'center', columnGap: 12, rowGap: 6, minHeight: 56,
+        }}>
+          <div style={{ minWidth: 0, flex: '1 1 60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13.5, color: 'var(--fg2)', fontWeight: 500 }}>
+              <span style={{ color: 'var(--code-fn)' }}>{row.fn}</span>
+              <span style={{ color: 'var(--fg3)' }}>(</span>
+              {row.args.map((a, i) => (
+                <React.Fragment key={i}>
+                  {i > 0 && <span style={{ color: 'var(--fg3)' }}>, </span>}
+                  <span style={{ color: 'var(--code-keyword)' }}>{a.k}</span>
+                  <span style={{ color: 'var(--fg3)' }}>=</span>
+                  <span style={{ color: 'var(--code-string)' }}>{a.v}</span>
+                </React.Fragment>
+              ))}
+              <span style={{ color: 'var(--fg3)' }}>)</span>
+            </span>
+          </div>
+          <span style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 600 }}>→</span>
+          <span key={text} style={{
+            fontFamily: 'var(--font-mono)', fontSize: 15.5, fontWeight: 600,
+            color: 'var(--fg1)',
+            background: pulse ? 'var(--beava-orange-wash)' : 'transparent',
+            padding: '2px 8px', borderRadius: 6,
+            transition: 'background 600ms cubic-bezier(0.22,1,0.36,1)',
+            whiteSpace: 'nowrap',
+            animation: 'beava-fade-up 320ms cubic-bezier(0.22,1,0.36,1)',
+          }}>{text}</span>
+        </div>
       );
     };
 
-    const formatDuration = (ms) => {
-      const totalS = Math.max(0, Math.round(ms / 1000));
-      if (totalS < 60) return [`${totalS}s`, ''];
-      const m = Math.floor(totalS / 60);
-      const s = totalS % 60;
-      if (m < 60) return [`${m}m ${String(s).padStart(2, '0')}s`, ''];
-      return [`${(m / 60).toFixed(1)}h`, ''];
-    };
-
-    const formatCount = (n) => {
-      if (n < 10_000) return [n.toLocaleString('en-US'), ''];
-      if (n < 1_000_000) return [(n / 1000).toFixed(1), 'k'];
-      return [(n / 1_000_000).toFixed(2), 'M'];
-    };
-
-    const seedSeries = (n, base, jitter) =>
-      Array.from({ length: n }, (_, i) => {
-        const drift = Math.sin(i / 2.3) * jitter * 0.5;
-        const noise = (Math.random() - 0.5) * jitter;
-        return Math.max(0, base + drift + noise);
-      });
-
-    const MetricCard = ({ label, value, unit, subline, sparkData, sparkColor, big, mascot }) => (
-      <div className="bv-metric-card" style={{
-        background: '#fff', border: '1px solid var(--border)', borderRadius: 14,
-        padding: '18px 20px 18px', boxShadow: 'var(--shadow-sm)',
-        display: 'flex', flexDirection: 'column', gap: 14,
-        position: 'relative', overflow: 'hidden',
-      }}>
-        {mascot && (
-          <img className="bv-metric-mascot" src={mascot.src} alt=""
-            width={mascot.size || 44} height={mascot.size || 44}
-            style={{
-              position: 'absolute',
-              top: mascot.top ?? 10, right: mascot.right ?? 12,
-              opacity: mascot.opacity ?? 0.85,
-              transform: mascot.rotate ? `rotate(${mascot.rotate}deg)` : 'none',
-              pointerEvents: 'none',
-            }}/>
-        )}
-        <div className="bv-metric-label" style={{
-          fontFamily: 'var(--font-sans)', fontSize: 11.5, fontWeight: 600,
-          textTransform: 'uppercase', letterSpacing: '0.1em',
-          color: 'var(--fg3)', lineHeight: 1.3,
-          paddingRight: mascot ? 100 : 0,
-        }}>{label}</div>
-        <div style={{
-          fontFamily: 'var(--font-serif)', fontWeight: 600,
-          fontSize: 44, lineHeight: 1.05, letterSpacing: '-0.02em',
-          color: 'var(--fg1)',
-          display: 'flex', alignItems: 'baseline', gap: 6,
-          ...(big ? {
-            fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 600,
-            letterSpacing: 0, lineHeight: 1.4,
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-            display: 'block',
-          } : null),
-        }}>
-          {value}
-          {unit && <span style={{ fontSize: '0.5em', color: 'var(--fg3)', fontWeight: 500, fontFamily: 'var(--font-sans)' }}>{unit}</span>}
-        </div>
-        {subline && (
-          <div style={{
-            fontFamily: 'var(--font-sans)', fontSize: 12.5,
-            color: 'var(--fg3)', lineHeight: 1.4, marginTop: -4,
-          }}>{subline}</div>
-        )}
-        {sparkData && <Sparkline data={sparkData} color={sparkColor} w={300} h={28}/>}
-      </div>
-    );
-
-    const LiveMetrics = () => {
-      // Real-data mode: poll /api/stats and /api/features/<path> against the
-      // beava-website-beava instance. Falls back to seed values if offline.
-      const [dwellMs, setDwellMs] = React.useState(0);
-      const [pageViews, setPageViews] = React.useState(0);
-      const [topPath, setTopPath] = React.useState('/');
-      const [topPageHits, setTopPageHits] = React.useState(0);
-      const [dwellSeries, setDwellSeries] = React.useState(() => seedSeries(60, 0, 0));
-      const [pvSeries, setPvSeries] = React.useState(() => seedSeries(24, 0, 0));
-
+    const LiveQueriesPanel = () => {
+      const [rows, setRows] = React.useState(seedQueries);
+      const [pulseId, setPulseId] = React.useState(null);
       React.useEffect(() => {
-        let cancelled = false;
-        const refresh = async () => {
-          try {
-            // SiteMetrics is a global @bv.table (no key=) — one row,
-            // computed by beava server-side. Read it via /api/get with
-            // empty key per ADR-003.
-            const site = await fetch('/api/get', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ table: 'SiteMetrics', key: '' }),
-            }).then(r => r.ok ? r.json() : null).catch(() => null);
-            if (cancelled) return;
-
-            // /api/get returns the row as a flat object — feature names match
-            // beava-website/deploy/register_pipeline.py (the SDK file that IS
-            // the inline example below).
-            const sf = site || {};
-            const views = sf.page_views_24h || 0;
-            const median = sf.median_dwell_1h || 0;
-            // top_k returns a JSON array: [{value, count}, ...]. k=1 in
-            // register_pipeline.py so top[0] is the only row.
-            const top = Array.isArray(sf.top_page_1h) ? sf.top_page_1h[0] : null;
-            setPageViews(views);
-            setPvSeries(s => [...s.slice(1), views]);
-            setDwellMs(median);
-            setDwellSeries(s => [...s.slice(1), median]);
-            setTopPath(top?.value || '/');
-            setTopPageHits(top?.count || 0);
-          } catch (_) { /* keep previous values on transient failure */ }
-        };
-        refresh();
-        const id = setInterval(refresh, 1000);
-        return () => { cancelled = true; clearInterval(id); };
+        let i = 0;
+        const id = setInterval(() => {
+          setRows(prev => {
+            const idx = i % prev.length;
+            return prev.map((r, j) => {
+              if (j !== idx) return r;
+              if (r.id === 'pv') return { ...r, value: r.value + r.drift() };
+              if (r.id === 'mt') return { ...r, value: Math.max(0.4, r.value + r.drift()) };
+              if (r.id === 'tp') {
+                const list = r.rotateThru;
+                const cur = list.findIndex(x => x.path === r.value.path);
+                return { ...r, value: list[(cur + 1) % list.length] };
+              }
+              return r;
+            });
+          });
+          setPulseId(prev => {
+            const tickRow = (i < 0 ? 0 : i) % seedQueries().length;
+            return seedQueries()[tickRow]?.id ?? null;
+          });
+          i++;
+          setTimeout(() => setPulseId(null), 700);
+        }, 2400);
+        return () => clearInterval(id);
       }, []);
-
-      const dwellTickedMs = useTickingNumber(dwellMs, { duration: 900 });
-      const pvTicked = useTickingNumber(pageViews, { duration: 700 });
-      const hitsTicked = useTickingNumber(topPageHits, { duration: 700 });
-      const [dwellNum, dwellUnit] = formatDuration(dwellTickedMs);
-      const [pvNum, pvUnit] = formatCount(pvTicked);
-
       return (
         <div style={{ position: 'relative' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 14 }}>
-            <MetricCard label="Median time on page · Last hour" value={dwellNum} unit={dwellUnit}
-              sparkData={dwellSeries} sparkColor="var(--accent)"
-              mascot={{ src: '/assets/mascot-work-pose.svg', size: 84, top: 4, right: 10, rotate: -4 }}/>
-            <MetricCard label="Pages viewed · Last 24h" value={pvNum} unit={pvUnit}
-              sparkData={pvSeries} sparkColor="var(--beava-info)"
-              mascot={{ src: '/assets/logo-mark.png', size: 100, top: -2, right: 4, rotate: 4 }}/>
-            <MetricCard big label="Top page · Last hour"
-              mascot={{ src: '/assets/mascot-pose-3.svg', size: 80, top: 6, right: 10, rotate: -2 }}
-              value={
-                <span key={topPath} style={{
-                  fontFamily: 'var(--font-mono)', fontSize: 17, fontWeight: 600,
-                  color: 'var(--fg1)', letterSpacing: 0,
-                  animation: 'beava-fade-up 360ms cubic-bezier(0.22,1,0.36,1)',
-                  display: 'block', whiteSpace: 'nowrap', overflow: 'hidden',
-                  textOverflow: 'ellipsis', maxWidth: '100%',
-                }}>{topPath}</span>
-              }
-              subline={<><span style={{ fontFamily: 'var(--font-mono)', color: 'var(--fg2)' }}>{hitsTicked}</span> views</>}/>
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            marginBottom: 14, paddingLeft: 4,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{
+                fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 600,
+                textTransform: 'uppercase', letterSpacing: '0.1em',
+                color: 'var(--accent)',
+              }}>Live feature queries</div>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <span style={{
+                  width: 7, height: 7, borderRadius: 999, background: 'var(--beava-success)',
+                  boxShadow: '0 0 0 3px rgba(74,122,58,0.20)',
+                  animation: 'beava-pulse 2s cubic-bezier(0.65,0,0.35,1) infinite',
+                }}/>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg3)' }}>auto-refresh</span>
+              </span>
+            </div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg3)' }}>GET /q/...</div>
+          </div>
+          <div style={{
+            display: 'grid', gridTemplateColumns: 'auto 1fr auto', alignItems: 'center', gap: 10,
+            marginBottom: 14, padding: '0 4px',
+          }}>
+            <span style={{
+              fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--fg3)',
+              padding: '3px 9px', background: 'var(--beava-paper)',
+              border: '1px solid var(--border)', borderRadius: 999,
+            }}>POST /push</span>
+            <span style={{
+              height: 1, background: 'repeating-linear-gradient(90deg, var(--border-strong) 0 4px, transparent 4px 8px)',
+            }}/>
+            <span style={{
+              fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--accent)',
+              padding: '3px 9px', background: 'var(--beava-orange-wash)',
+              border: '1px solid #f1d8c2', borderRadius: 999,
+            }}>fresh values</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
+            {rows.map(r => <QueryCard key={r.id} row={r} pulse={pulseId === r.id}/>)}
           </div>
           <p style={{
-            margin: '16px 4px 0',
-            fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--fg3)',
+            margin: '14px 4px 0',
+            fontFamily: 'var(--font-sans)', fontSize: 12.5, color: 'var(--fg3)',
             fontStyle: 'italic', lineHeight: 1.5,
           }}>
-            Three real beava queries. <a href="#pipeline" style={{
+            Three live beava queries. Each is a function defined in Python, fed by HTTP events,
+            queryable by key in <span style={{ color: 'var(--fg2)', fontStyle: 'normal' }}>&lt;1ms</span>.
+            {' '}
+            <a href="#pipeline" style={{
               color: 'var(--accent)', textDecoration: 'none',
               borderBottom: '1px solid color-mix(in oklab, var(--accent) 35%, transparent)',
               fontStyle: 'normal', fontWeight: 500,
-            }}>The pipeline is below ↓</a>
+            }}>See the pipeline ↓</a>
           </p>
         </div>
       );
     };
 
-    // v0 install surface: curl (recommended) / docker. Brew tap retired.
-    // curl|sh fetches the platform wheel from the latest GH Release; no
-    // PyPI dependency, no Rust on the user's box. Same wheels ship from
-    // PyPI once `pip install beava` lands (post-Trusted-Publisher setup);
-    // both surfaces will coexist then.
+    // v0 install surface: curl (recommended) / docker / cargo. brew + pip
+    // retired (pip wheels still ship to GH Releases / PyPI for SDK users —
+    // see python/README.md). curl|sh is the canonical first-touch path:
+    // detects platform, pulls the matching wheel from the latest GH Release,
+    // pip install --user's it. Docker is the zero-deps host alternative.
+    // cargo is the from-source path for Rust-toolchain users.
     const INSTALL_TABS = [
       { id: 'curl',   label: 'curl',   cmd: 'curl -fsSL https://raw.githubusercontent.com/beava-dev/beava/main/scripts/install.sh | sh', recommended: true },
       { id: 'docker', label: 'docker', cmd: 'docker run -p 8080:8080 beavadev/beava:edge' },
+      { id: 'cargo',  label: 'cargo',  cmd: 'cargo install --git https://github.com/beava-dev/beava beava-server' },
     ];
 
     const InstallTabs = () => {
@@ -248,23 +212,22 @@
       };
       return (
         <div style={{ marginBottom: 18 }}>
-          <div style={{ fontFamily: 'var(--font-sans)', fontSize: 13.5, color: 'var(--fg2)', fontWeight: 500, marginBottom: 10, paddingLeft: 4 }}>
-            Run it locally.
-          </div>
           <div style={{ display: 'flex', gap: 2, paddingLeft: 4 }}>
             {INSTALL_TABS.map(t => {
               const active = t.id === tabId;
               return (
                 <button key={t.id} onClick={() => setTabId(t.id)} style={{
-                  padding: '6px 12px', borderRadius: '6px 6px 0 0',
-                  background: active ? '#fff' : 'transparent',
+                  padding: '6px 12px 8px', borderRadius: '8px 8px 0 0',
+                  background: active ? 'var(--code-bg)' : 'transparent',
                   border: '1px solid', borderColor: active ? 'var(--border)' : 'transparent',
-                  borderBottom: active ? '1px solid #fff' : '1px solid var(--border)',
-                  marginBottom: -1, fontFamily: 'var(--font-mono)', fontSize: 12.5,
+                  borderBottom: active ? '1px solid var(--code-bg)' : '1px solid var(--border)',
+                  position: 'relative', top: 1,
+                  fontFamily: 'var(--font-mono)', fontSize: 12.5,
                   fontWeight: active ? 600 : 500,
                   color: active ? 'var(--fg1)' : 'var(--fg3)',
                   cursor: 'pointer',
                   display: 'inline-flex', alignItems: 'center', gap: 6,
+                  transition: 'color 200ms',
                 }}>
                   {t.label}
                   {t.recommended && (
@@ -278,92 +241,64 @@
                 </button>
               );
             })}
+            <div style={{ flex: 1, borderBottom: '1px solid var(--border)' }}/>
           </div>
           <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '12px 16px',
-            background: '#fff', border: '1px solid var(--border)', borderRadius: '0 8px 8px 8px',
-            fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--fg1)',
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '12px 14px',
+            background: 'var(--code-bg)', border: '1px solid var(--border)', borderTop: 'none',
+            borderRadius: '0 10px 10px 10px',
+            boxShadow: 'var(--shadow-inset)',
           }}>
-            <span><span style={{ color: 'var(--fg3)', marginRight: 6 }}>$</span>{tab.cmd}</span>
-            <button onClick={copy} style={{
-              padding: '4px 10px', fontSize: 11.5, fontFamily: 'var(--font-sans)',
-              background: copied ? 'var(--beava-success-wash)' : 'transparent',
-              border: '1px solid var(--border)', borderRadius: 5,
-              color: copied ? 'var(--beava-success)' : 'var(--fg2)', cursor: 'pointer',
-              display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap',
+            <span style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 14, userSelect: 'none' }}>$</span>
+            <code style={{
+              fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--code-fg)',
+              background: 'transparent', border: 0, padding: 0, flex: 1,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>{tab.cmd}</code>
+            <button onClick={copy} title="Copy" style={{
+              fontFamily: 'var(--font-mono)', fontSize: 12,
+              padding: '4px 10px',
+              background: copied ? 'var(--beava-success-wash)' : '#fff',
+              color: copied ? 'var(--beava-success)' : 'var(--fg2)',
+              border: '1px solid', borderColor: copied ? '#cdd9b6' : 'var(--border)',
+              borderRadius: 6, cursor: 'pointer', fontWeight: 600,
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              transition: 'all 200ms', whiteSpace: 'nowrap',
             }}>{copied ? '✓ copied' : '⎘ copy'}</button>
-          </div>
-          <div style={{
-            marginTop: 12, paddingLeft: 4,
-            fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--fg3)', lineHeight: 1.5,
-          }}>
-            macOS, Linux <span style={{ color: 'var(--border-strong)' }}>·</span> runs on 1 GB RAM <span style={{ color: 'var(--border-strong)' }}>·</span> scales to one big box
-          </div>
-          <div style={{
-            marginTop: 14, paddingLeft: 4,
-            fontFamily: 'var(--font-sans)', fontSize: 14.5, color: 'var(--fg2)',
-            lineHeight: 1.5, fontWeight: 500,
-          }}>
-            Push events <span style={{ color: 'var(--border-strong)', margin: '0 4px' }}>·</span>
-            Define pipelines <span style={{ color: 'var(--border-strong)', margin: '0 4px' }}>·</span>
-            Query by key.
-          </div>
-          <div style={{ marginTop: 16, paddingLeft: 4 }}>
-            <div style={{
-              fontFamily: 'var(--font-sans)', fontSize: 12.5, color: 'var(--fg3)',
-              fontWeight: 500, marginBottom: 6, letterSpacing: '0.01em',
-            }}>
-              Then see it work in 5 seconds:
-            </div>
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: 10,
-              padding: '8px 14px',
-              background: '#fff', border: '1px solid var(--accent)', borderRadius: 8,
-              fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--fg1)',
-              boxShadow: '0 0 0 3px rgba(184,92,32,0.08)',
-            }}>
-              <span style={{ color: 'var(--fg3)' }}>$</span>
-              <span style={{ fontWeight: 600 }}>beava quickstart</span>
-              <span style={{
-                fontFamily: 'var(--font-sans)', fontSize: 11, color: 'var(--fg3)',
-                fontWeight: 500, marginLeft: 8,
-              }}>
-                — register, push 5 events, query, drop a Python file
-              </span>
-            </div>
           </div>
         </div>
       );
     };
 
     const Hero = () => (
-      <section style={{ padding: '52px 24px 88px', position: 'relative' }}>
+      <section style={{ padding: '56px 24px 96px', position: 'relative' }}>
         <div className="beava-hero-grid" style={{
           maxWidth: 1200, margin: '0 auto',
-          display: 'grid', gridTemplateColumns: '1.15fr 1fr', gap: 72, alignItems: 'center',
+          display: 'grid', gridTemplateColumns: '1.05fr 1fr', gap: 80, alignItems: 'center',
         }}>
           <div>
+            {/* Eyebrow does work now: license · binary · language. Clickable to GitHub. */}
             <a href="https://github.com/beava-dev/beava" target="_blank" rel="noopener" style={{
               display: 'inline-flex', alignItems: 'center', gap: 10,
               padding: '5px 12px 5px 10px', borderRadius: 999,
               background: 'var(--beava-orange-wash)', border: '1px solid #f1d8c2',
               color: 'var(--accent)', fontSize: 12.5, fontWeight: 600,
-              marginBottom: 18, fontFamily: 'var(--font-sans)',
+              marginBottom: 22, fontFamily: 'var(--font-sans)',
               whiteSpace: 'nowrap', flexWrap: 'nowrap', textDecoration: 'none',
               transition: 'all 200ms cubic-bezier(0.22,1,0.36,1)',
             }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = '#f1d8c2'; e.currentTarget.style.transform = ''; }}>
               <span style={{ width: 6, height: 6, background: 'var(--accent)', borderRadius: 999, boxShadow: '0 0 0 3px rgba(184,92,32,0.18)' }}/>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>v0</span>
-              <span style={{ color: '#d8b594' }}>·</span>
               <span>Apache 2.0</span>
               <span style={{ color: '#d8b594' }}>·</span>
               <span>single binary</span>
+              <span style={{ color: '#d8b594' }}>·</span>
+              <span>Python-defined streams</span>
               <span style={{ color: 'var(--fg3)', fontSize: 11, marginLeft: 2 }}>↗</span>
             </a>
-            <div style={{ marginBottom: 12 }}>
+            <div style={{ marginBottom: 14 }}>
               <span style={{
                 fontFamily: 'var(--font-accent)', fontWeight: 700,
                 fontSize: 24, lineHeight: 1, color: 'var(--accent)',
@@ -373,25 +308,49 @@
             </div>
             <h1 style={{
               fontFamily: 'var(--font-serif)', fontWeight: 600,
-              fontSize: 'clamp(34px, 4.4vw, 56px)',
-              lineHeight: 1.15, letterSpacing: '-0.02em',
-              color: 'var(--fg1)', margin: '0 0 38px',
-              maxWidth: 600, textWrap: 'balance',
-            }}>Real-time features without heavy infrastructure.</h1>
+              fontSize: 'clamp(38px, 4.8vw, 60px)',
+              lineHeight: 1.1, letterSpacing: '-0.02em',
+              color: 'var(--fg1)', margin: '0 0 28px',
+              maxWidth: 620, textWrap: 'balance',
+            }}>Real-time user features <em style={{ color: 'var(--accent)', fontStyle: 'italic' }}>without heavy streaming infra.</em></h1>
             <p style={{
-              fontFamily: 'var(--font-serif)', fontStyle: 'italic',
-              fontWeight: 400, fontSize: 22, lineHeight: 1.45,
-              color: 'var(--fg1)', margin: '0 0 36px',
-              maxWidth: 560, textWrap: 'pretty',
-            }}>Declare aggregations in Python, push events over HTTP, query computed features in sub-millisecond &mdash; single binary, no Kafka.</p>
+              fontFamily: 'var(--font-sans)', fontWeight: 400,
+              fontSize: 17.5, lineHeight: 1.55,
+              color: 'var(--fg2)', margin: '0 0 32px',
+              maxWidth: 540, textWrap: 'pretty',
+            }}>Define aggregations in Python, POST events over HTTP, and query fresh values by key in sub-millisecond latency. One binary. No Kafka, Flink, brokers, clusters, or stream jobs.</p>
             <InstallTabs/>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
-              <Button variant="primary" size="lg" href="/docs/" icon={<Icon name="arrow" size={16}/>}>Read the docs</Button>
-              <Button variant="secondary" size="lg" href="https://discord.gg/Jnx89PN9" target="_blank" rel="noopener">Join Discord →</Button>
+            {/* Single primary CTA + Read-docs as a quiet text link. Discord lives in the nav. */}
+            <div style={{ display: 'flex', gap: 18, alignItems: 'center', marginTop: 20, flexWrap: 'wrap' }}>
+              <Button variant="primary" size="lg" href="/docs/get-started/quickstart/" icon={<Icon name="arrow" size={16}/>}>Run quickstart</Button>
+              <a href="/docs/" style={{
+                fontFamily: 'var(--font-sans)', fontSize: 14.5, fontWeight: 500,
+                color: 'var(--fg2)', textDecoration: 'none',
+                borderBottom: '1px solid color-mix(in oklab, var(--fg3) 35%, transparent)',
+                paddingBottom: 1,
+              }}>Read the docs →</a>
+            </div>
+            {/* Support strip — replaces the secondary-CTA cluster with a fact line */}
+            <div style={{
+              marginTop: 22, paddingLeft: 4,
+              fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--fg3)',
+              lineHeight: 1.5,
+            }}>
+              ~14 MB <span style={{ color: 'var(--border-strong)' }}>·</span> macOS, Linux, Windows
+              <span style={{ color: 'var(--border-strong)' }}> · </span> runs on 1 GB RAM
+              <span style={{ color: 'var(--border-strong)' }}> · </span> scales to one big box
             </div>
           </div>
           <div style={{ position: 'relative' }}>
-            <LiveMetrics/>
+            {/* Mascot peek — top-right, slight rotation, drop-shadow */}
+            <img src="/assets/mascot-pose-2.svg" alt="" width={108} height={108} className="beava-hero-mascot" style={{
+              position: 'absolute',
+              top: -82, right: -12,
+              transform: 'rotate(8deg)',
+              filter: 'drop-shadow(0 6px 14px rgba(26,23,20,0.12))',
+              pointerEvents: 'none', zIndex: 2,
+            }}/>
+            <LiveQueriesPanel/>
           </div>
         </div>
         <style>{`
@@ -399,8 +358,13 @@
             from { opacity: 0; transform: translateY(6px); }
             to   { opacity: 1; transform: translateY(0); }
           }
+          @keyframes beava-pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50%      { transform: scale(1.4); opacity: 0.55; }
+          }
           @media (max-width: 960px) {
             .beava-hero-grid { grid-template-columns: 1fr !important; gap: 48px !important; }
+            .beava-hero-mascot { display: none !important; }
             .beava-pillars-grid { grid-template-columns: repeat(2, 1fr) !important; }
           }
           @media (max-width: 760px) {
@@ -432,13 +396,14 @@
     );
 
     // ---------- PipelineOutput ----------
-    // Live-polled JSON output panel that closes the visual loop:
-    // 13-line site_metrics.py → POST /get → this JSON shape → the hero
-    // dashboard above. Shares the /api/get endpoint with LiveMetrics; an
-    // independent fetch on a 3s cadence (LiveMetrics polls every 1s for
-    // smooth ticking) — keeps the two displays decoupled if either
-    // fails. Falls back to a static seed shape on cold start so the
-    // panel always renders something representative.
+    // Live-polled JSON output panel that closes the visual loop: the
+    // 13-line site_metrics.py shown above runs against POST /get and
+    // returns this JSON shape. Hero LiveQueriesPanel uses representative
+    // mock signatures (bv.count / bv.p50 / bv.top_k); the production
+    // /api/get poll lives here — every page-view event on this site
+    // pushes a real event, and the JSON below is the resulting feature
+    // row. Falls back to a static seed shape on cold start so the panel
+    // always renders something representative.
     const PipelineOutput = () => {
       const SEED = {
         median_dwell_1h: 6250.0,
@@ -522,7 +487,7 @@
                 <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>13 lines.</span> That&rsquo;s the whole pipeline.
               </h2>
               <p style={{ fontFamily: 'var(--font-sans)', fontSize: 17, lineHeight: 1.55, color: 'var(--fg2)', margin: 0, maxWidth: 640, textWrap: 'pretty' }}>
-                Every page view on this site pushes a real event to this pipeline. Every number in the hero panel is a real feature query against it.
+                Every page view on this site pushes a real event to this pipeline. The JSON below is the live feature row for this exact moment.
               </p>
             </div>
             <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 16, boxShadow: 'var(--shadow-sm)', overflow: 'hidden' }}>

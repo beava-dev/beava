@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>beava — real-time features without the streaming priesthood</title>
+  <title>beava — real-time user features without Kafka</title>
   <link rel="stylesheet" href="../../colors_and_type.css">
   <link rel="icon" href="../../assets/mascot-mark-geometric.png">
   <style>
@@ -19,25 +19,27 @@
   <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
 
   <script type="text/babel" src="Shared.jsx"></script>
-  <script type="text/babel" src="Nav.jsx"></script>
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+  <script type="text/babel" src="../_shared/SiteHeader.jsx"></script>
+  <script type="text/babel" src="../_shared/SiteFooter.jsx"></script>
   <script type="text/babel" src="Hero.jsx"></script>
-  <script type="text/babel" src="CapabilityGrid.jsx"></script>
-  <script type="text/babel" src="CodeShowcase.jsx"></script>
-  <script type="text/babel" src="FeedTheBeaver.jsx"></script>
-  <script type="text/babel" src="Testimonials.jsx"></script>
-  <script type="text/babel" src="Footer.jsx"></script>
+  <script type="text/babel" src="Pillars.jsx"></script>
+  <script type="text/babel" src="PipelineShowcase.jsx"></script>
+  <script type="text/babel" src="Recipes.jsx"></script>
+  <script type="text/babel" src="FinalCTA.jsx"></script>
 
   <script type="text/babel">
+    // Homepage — Hero (sharper headline, single primary CTA, live feature queries).
     const App = () => (
-      <>
-        <Nav/>
+      <div data-screen-label="01 Home">
+        <SiteHeader maxWidth={1200}/>
         <Hero/>
-        <CapabilityGrid/>
-        <CodeShowcase/>
-        <FeedTheBeaver/>
-        <Testimonials/>
-        <Footer/>
-      </>
+        <Pillars/>
+        <PipelineShowcase/>
+        <Recipes/>
+        <FinalCTA/>
+        <SiteFooter maxWidth={1200}/>
+      </div>
     );
     ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
   </script>

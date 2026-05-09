@@ -8,8 +8,8 @@ const LearnNav = () => (
   }}>
     <div style={{ maxWidth: 1200, width: '100%', margin: '0 auto', display: 'flex', alignItems: 'center', gap: 20 }}>
       <a style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: 'var(--fg1)' }}>
-        <img src="../../assets/logo-mark.png" width={28} height={28}/>
-        <span style={{ fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 17 }}>beava</span>
+        <img src="../../assets/mascot-mark-geometric-transparent.png" width={30} height={30} style={{ display: 'block' }}/>
+        <span style={{ fontFamily: 'var(--font-serif)', fontWeight: 600, fontStyle: 'italic', fontSize: 22, letterSpacing: '-0.025em', lineHeight: 1 }}>beava</span>
         <span style={{ fontFamily: 'var(--font-sans)', fontSize: 14, color: 'var(--fg3)', padding: '2px 8px', background: 'var(--beava-paper)', borderRadius: 6, border: '1px solid var(--border)', marginLeft: 4 }}>learn</span>
       </a>
       <div style={{ display: 'flex', gap: 2, marginLeft: 20, flex: 1 }}>

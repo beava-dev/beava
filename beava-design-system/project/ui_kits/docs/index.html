@@ -18,22 +18,25 @@
   <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
 
   <script type="text/babel" src="DocsShared.jsx"></script>
-  <script type="text/babel" src="DocsNav.jsx"></script>
+  <script type="text/babel" src="../_shared/SiteHeader.jsx"></script>
+  <script type="text/babel" src="../_shared/SiteFooter.jsx"></script>
   <script type="text/babel" src="DocsSidebar.jsx"></script>
   <script type="text/babel" src="DocsTOC.jsx"></script>
   <script type="text/babel" src="CodeBlock.jsx"></script>
   <script type="text/babel" src="Callout.jsx"></script>
   <script type="text/babel" src="DocsContent.jsx"></script>
+  <script type="text/babel" src="DocsExtras.jsx"></script>
 
   <script type="text/babel">
     const App = () => (
       <>
-        <DocsNav/>
+        <SiteHeader active="docs" search maxWidth={1400}/>
         <div style={{ maxWidth: 1400, margin: '0 auto', display: 'flex', gap: 0, padding: '0 20px' }}>
           <DocsSidebar active="Rolling counters"/>
           <DocsContent/>
           <DocsTOC/>
         </div>
+        <SiteFooter maxWidth={1400}/>
       </>
     );
     ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
