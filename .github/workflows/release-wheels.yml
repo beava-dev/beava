@@ -7,9 +7,12 @@
 # + interpreter resolution that cibuildwheel would require lots of
 # bespoke config to replicate.
 #
-# Platform coverage: Linux x86_64, Linux aarch64, macOS x86_64, macOS arm64.
-# Windows is excluded — beava-server uses POSIX-only APIs and the repo's
-# standard CI builds on Linux only. Windows is a follow-up port.
+# Platform coverage: Linux x86_64, Linux aarch64, macOS arm64.
+# Excluded: Windows (POSIX-only deps in beava-server) and macOS x86_64
+# (GitHub's x86_64 mac runner pool starves with hour-plus queues; intel
+# Mac users install via the sdist fallback, ~1 min cold build via pip's
+# PEP 517 isolation pulling Rust + maturin). Both are documented at the
+# matrix definition below.
 #
 # Triggers:
 #   - push tag v*       → full build + PyPI publish
@@ -60,11 +63,24 @@ jobs:
     name: wheel (${{ matrix.os }} / ${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
-    # Windows is intentionally absent. beava-server uses POSIX-only
-    # APIs (`tokio::signal::unix::{signal, SignalKind}` for graceful
-    # shutdown, `libc::pthread_t` + `libc::pthread_self` for thread-CPU
-    # accounting). The repo's standard CI also runs ubuntu-latest only.
-    # Windows is a follow-up port, not a wheel-build issue.
+    # Platform exclusions:
+    #
+    # - Windows: beava-server uses POSIX-only APIs
+    #   (`tokio::signal::unix::{signal, SignalKind}` for graceful
+    #   shutdown, `libc::pthread_t` + `libc::pthread_self` for thread-CPU
+    #   accounting). The repo's standard CI also runs ubuntu-latest only.
+    #   Windows is a follow-up port, not a wheel-build issue.
+    #
+    # - macOS x86_64 (macos-13): GitHub-hosted x86_64 mac runners have
+    #   hour-plus queue times since the runner pool shifted to Apple
+    #   Silicon. Apple's last x86_64 Mac shipped 2020 and Rosetta runs
+    #   the arm64 wheel binary fine on the shrinking intel-Mac
+    #   population, so the cost-benefit doesn't justify keeping the
+    #   cell. Intel Macs install via the sdist (Rust + maturin pulled
+    #   in transparently by pip's PEP 517 build isolation; ~1 min cold
+    #   build). Future enhancement: build a universal2 wheel from
+    #   macos-14 covering both arches in one file (polars / ruff
+    #   currently ship separate macos wheels but pay the queue tax).
     strategy:
       fail-fast: false
       matrix:
@@ -73,8 +89,6 @@ jobs:
             target: x86_64
           - os: ubuntu-latest
             target: aarch64
-          - os: macos-13
-            target: x86_64
           - os: macos-14
             target: aarch64
     steps:
@@ -101,10 +115,9 @@ jobs:
       - name: Smoke-test wheel imports
         # Skip on linux/aarch64 cross-builds (built via qemu, can't run
         # natively on the x86_64 runner). Native targets only:
-        # ubuntu-latest/x86_64, macos-13/x86_64, macos-14/aarch64.
+        # ubuntu-latest/x86_64, macos-14/aarch64.
         if: |
           (matrix.os == 'ubuntu-latest' && matrix.target == 'x86_64') ||
-          (matrix.os == 'macos-13' && matrix.target == 'x86_64') ||
           (matrix.os == 'macos-14' && matrix.target == 'aarch64')
         shell: bash
         run: |
