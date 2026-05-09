@@ -849,6 +849,103 @@ mod tests {
         );
     }
 
+    // ── Multi-bucket merge for sketch ops (regression) ────────────────────
+    //
+    // Bug surfaced from prod (beava.dev homepage `top_page_1h`): for a 1h
+    // windowed top_k the displayed count "resets" every ~56s. Root cause:
+    // `query()` for AggKind::TopK / Percentile / CountDistinct was picking
+    // only the highest-epoch active bucket and returning that single
+    // bucket's result, instead of merging across all active buckets the way
+    // Count / Sum / Avg / Min / Max / Variance / StdDev / Entropy do. With
+    // bucket_ms = ceil(window_ms / 64) ≈ 56s for a 1h window, every new
+    // bucket made the visible result drop to whatever was observed in the
+    // last sub-bucket only.
+    //
+    // These tests pin the merged-across-active-buckets contract.
+
+    #[test]
+    fn windowed_top_k_merges_across_active_buckets() {
+        // window=64ms → bucket_ms=1ms. Push the same path "/home" 3× into
+        // bucket 0 and 1× into bucket 10; query at t=20 with all buckets
+        // still active. Merged top-1 must report "/home" with count 4, not
+        // count 1 (which is what the latest bucket alone would say).
+        let mut op = WindowedOp::new_with_params(
+            AggKind::TopK,
+            64,
+            SketchParams {
+                top_k_k: Some(2),
+                ..Default::default()
+            },
+        );
+        for t in [0_i64, 0, 0, 10] {
+            let row = Row::new().with_field("path", Value::Str("/home".into()));
+            op.update(&row, t, Some("path"), true);
+        }
+        // sanity: also insert a different path in yet another bucket to
+        // ensure we don't accidentally merge unrelated values.
+        let row_about = Row::new().with_field("path", Value::Str("/about".into()));
+        op.update(&row_about, 15, Some("path"), true);
+
+        let result = op.query(20);
+        let arr = match result {
+            Value::Json(serde_json::Value::Array(arr)) => arr,
+            other => panic!("expected Json(Array), got {:?}", other),
+        };
+        // Top-1 must be /home with merged count 4, not just the latest
+        // bucket's 0 (bucket 10 only saw /home once).
+        assert!(
+            !arr.is_empty(),
+            "merged top_k must not be empty when buckets have data"
+        );
+        let top0 = &arr[0];
+        assert_eq!(
+            top0.get("value").and_then(|v| v.as_str()),
+            Some("/home"),
+            "/home should be the top value (4 occurrences across buckets); got {:?}",
+            top0
+        );
+        assert_eq!(
+            top0.get("count").and_then(|v| v.as_u64()),
+            Some(4),
+            "/home count must be merged across active buckets (3 in bucket 0 + 1 in bucket 10 = 4); got {:?}",
+            top0
+        );
+    }
+
+    #[test]
+    fn windowed_percentile_merges_across_active_buckets() {
+        // Same shape as the top_k test: spread known values across buckets
+        // and assert the median reflects the full window, not the latest
+        // bucket alone. Bucket 0 holds [1, 2, 3]; bucket 10 holds [100,
+        // 100, 100]. Whole-window median is 50; latest-bucket-only median
+        // is 100. Tolerance accounts for UDDSketch quantization.
+        let mut op = WindowedOp::new_with_params(
+            AggKind::Percentile,
+            64,
+            SketchParams {
+                percentile_q: Some(0.5),
+                ..Default::default()
+            },
+        );
+        for (t, v) in [(0_i64, 1.0_f64), (0, 2.0), (0, 3.0), (10, 100.0), (10, 100.0), (10, 100.0)] {
+            let row = Row::new().with_field("dwell_ms", Value::F64(v));
+            op.update(&row, t, Some("dwell_ms"), true);
+        }
+        let result = op.query(20);
+        let median = match result {
+            Value::F64(v) => v,
+            other => panic!("expected F64 median, got {:?}", other),
+        };
+        // Full-window median of [1, 2, 3, 100, 100, 100] is 50 (between 3
+        // and 100). Latest-bucket-only median is 100. The merged result
+        // must be much closer to 50 than to 100.
+        assert!(
+            median < 80.0,
+            "merged percentile must reflect both buckets; latest-only would give 100, got {}",
+            median
+        );
+    }
+
     // ── Replay determinism ────────────────────────────────────────────────
 
     #[test]
