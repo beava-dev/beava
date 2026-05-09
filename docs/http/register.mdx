@@ -23,9 +23,7 @@ Successful calls increment `registry_version` by one and append a `RegistryBump`
 
 ### Body shape
 
-          envelope
-
-```
+``` title="envelope"
 {
   "nodes": [ /* one or more node objects, see below */ ],
   "force":    false,   // optional, default false
@@ -33,30 +31,21 @@ Successful calls increment `registry_version` by one and append a `RegistryBump`
 }
 ```
 
+<Note>
 The top-level field is nodes, not descriptors. Some early prototypes / external write-ups used descriptors — that key is rejected by the v0 server. Always send {"nodes": [...]}.
+</Note>
 
-            nodes
-
-              array<Node>
-              required
-
+<ParamField path="nodes" type="array<Node>">
 Ordered list of nodes to install. Each entry is either an event source (`kind: "event"`) or a derivation (`kind: "derivation"`). Empty arrays are accepted and return `200 OK` with an unchanged `registry_version`.
+</ParamField>
 
-            force
-
-              bool
-
+<ParamField path="force" type="bool" default="false">
 If `true`, destructive changes (renames, type changes, key-cols changes, removed aggregations) are applied — the affected descriptor is dropped along with its accumulated state, and the new shape installs cleanly. Without `force`, destructive changes return `409 force_required`.
+</ParamField>
 
-default `false`
-
-            dry_run
-
-              bool
-
+<ParamField path="dry_run" type="bool" default="false">
 If `true`, the server validates the payload and returns the categorized diff under `{"diff": ..., "would_apply": false}` without mutating the registry. `dry_run=true, force=true` still resolves to dry-run — dry-run wins so a "what would this do?" probe never escalates to a real mutation.
-
-default `false`
+</ParamField>
 
 ### Node kinds
 
@@ -67,8 +56,6 @@ default `false`
 - Any other kind returns 400 unsupported_node_kind. v0 is events-only at the top level; tables are produced by derivations.
 
 ### Event node — kind: "event"
-
-        {"kind": "event", "name": "<Name>", "schema": {"fields": {...}, "optional_fields": [...]}}
 
 An event source declares a typed payload shape that downstream `POST /push` calls have to match.
 
@@ -88,9 +75,7 @@ An event source declares a typed payload shape that downstream `POST /push` call
 
 ### Example
 
-          event node
-
-```
+``` title="event node"
 {
   "kind": "event",
   "name": "Txn",
@@ -110,8 +95,6 @@ An event source declares a typed payload shape that downstream `POST /push` call
 ```
 
 ### Derivation node — kind: "derivation"
-
-        {"kind": "derivation", "name", "output_kind": "table"|"event", "upstreams": [...], "ops": [...], "table_primary_key"?: [...]}
 
 A derivation is a chain of operators applied to one or more upstream nodes. `output_kind` picks between two flavours:
 
@@ -137,9 +120,7 @@ A derivation is a chain of operators applied to one or more upstream nodes. `out
 
 ### Example — table derivation (per-user)
 
-          derivation node — output_kind: table
-
-```
+``` title="derivation node — output_kind: table"
 {
   "kind":               "derivation",
   "name":               "UserTxnFeatures",
@@ -164,9 +145,7 @@ A derivation is a chain of operators applied to one or more upstream nodes. `out
 
 An empty `table_primary_key` + empty `group_by.keys` declares a single global counter — one feature row keyed by the empty-string sentinel. Read it back with `POST /get` and `key=""`.
 
-          derivation node — global aggregation
-
-```
+``` title="derivation node — global aggregation"
 {
   "kind":               "derivation",
   "name":               "GlobalCounter",
@@ -189,9 +168,7 @@ An empty `table_primary_key` + empty `group_by.keys` declares a single global co
 
 `200 OK` with a flat JSON body:
 
-          success body
-
-```
+```json title="success body"
 {
   "status":                 "ok",
   "registry_version":       1,
@@ -215,9 +192,7 @@ An empty `table_primary_key` + empty `group_by.keys` declares a single global co
 
 Pass `"dry_run": true` to validate without committing. The server runs the same destructive-change classifier it would for a real call, and returns the categorized diff:
 
-            request
-
-```
+```json title="request"
 {
   "nodes": [
     {
@@ -236,9 +211,7 @@ Pass `"dry_run": true` to validate without committing. The server runs the same 
 }
 ```
 
-            response
-
-```
+```json title="response"
 {
   "diff": {
     "additive": [
@@ -256,9 +229,7 @@ If the dry-run diff has *any* destructive entries, the equivalent real call woul
 
 Destructive changes — type changes, renames, key-cols changes, removed aggregations — drop the affected descriptor's accumulated state when applied. Without `force=true`, the server returns `409 force_required` and refuses to proceed:
 
-          force replace
-
-```
+``` title="force replace"
 {
   "nodes": [
     {
@@ -278,7 +249,9 @@ Destructive changes — type changes, renames, key-cols changes, removed aggrega
 }
 ```
 
+<Note>
 force=true drops accumulated state. Aggregation tables tied to the replaced descriptor lose every per-entity row; pushed events resume populating an empty table. Use a dry-run first, then bake the force flag into a deliberate cutover.
+</Note>
 
 ## Errors
 
@@ -296,9 +269,7 @@ The body parsed but failed schema validation — missing required field, unknown
 
 The payload would destructively mutate the registry but `force` wasn't set. Body carries the diagnostic `diff` so callers can inspect what would change before retrying with `force: true`:
 
-          409 body
-
-```
+```json title="409 body"
 {
   "code":   "force_required",
   "reason": "Destructive registry change requires force=true. See diff for details.",
@@ -326,21 +297,31 @@ The framed-TCP fast-path carries the same JSON envelope under opcode `OP_REGISTE
 
 ## Common questions
 
-          Why hot-reload? Doesn't that risk inconsistency?
+<AccordionGroup>
+<Accordion title="Why hot-reload? Doesn't that risk inconsistency?">
 
 Registration is atomic at the `registry_version` boundary: either the WAL-fsynced `RegistryBump` commits and every subsequent `/push` sees the new shape, or it doesn't and the registry is unchanged. Pushes never see a half-installed pipeline. Long-lived clients can ping the data plane and check `registry_version` to invalidate their schema cache the moment a deploy lands.
 
-          Can I unregister a node?
+</Accordion>
+
+<Accordion title="Can I unregister a node?">
 
 Two ways: (1) `force=true` a registration that replaces the descriptor with a new shape, or (2) restart the server with the desired registry.
 
-          What goes in `optional_fields`?
+</Accordion>
+
+<Accordion title="What goes in optional_fields?">
 
 Field names from `schema.fields` that may be omitted on `/push`. Pushes that omit a non-optional field return `schema_mismatch`; pushes that omit a listed optional field record the field as null. Use it for late-arriving signals (e.g. an enrichment that's eventually populated) — **not** for fields you'll always send. Aggregations over an optional field skip events where it's null.
 
-          Is `registered_descriptors` the same as my register payload?
+</Accordion>
+
+<Accordion title="Is registered_descriptors the same as my register payload?">
 
 No — it's the full registry snapshot post-call, including descriptors installed by every prior `/register`. If the request was the first call against an empty server, the two will match by accident; in steady state they diverge. Treat `added` as "what this call did" and `registered_descriptors` as "what the server now knows about".
+
+</Accordion>
+</AccordionGroup>
 
 ## Where to go next
 

@@ -9,10 +9,7 @@ A `@bv.table` is a per-entity feature row, keyed on one or more event columns an
 
 A table is the *output* side of an aggregation. You declare an event source with `@bv.event`, then declare a table that says “group those events by some key column(s) and roll them up into a row of features.” Each unique key gets its own row; `app.get("TableName", "alice")` returns alice’s row at sub-millisecond latency.
 
-          tiny.py
-          Copy
-
-```
+```python title="tiny.py"
 import beava as bv
 
 @bv.event
@@ -37,9 +34,7 @@ Three things are happening above:
 
 ## Signature
 
-          signature
-
-```
+``` title="signature"
 @bv.table(
     *,
     key: str | list[str] | tuple[str, ...] | None = None,
@@ -58,16 +53,15 @@ Three call shapes are accepted:
 
 Anything else for `key=` raises `TypeError` at decorator time — the rejection lists what was passed and what the valid shapes are.
 
+<Note>
 Function form only in v0. @bv.table wraps def functions; class form is reserved for @bv.event. The body returns a chain — see The chain function.
+</Note>
 
 ## Single-column key
 
 The most common shape. Pass `key="col"` as a string; the decorator wraps it as `key_cols=["col"]` internally and emits `table_primary_key: ["col"]` on the wire (always a list, even for a single key).
 
-          single_key.py
-          Copy
-
-```
+```python title="single_key.py"
 @bv.event
 class Txn:
     user_id: str
@@ -86,15 +80,11 @@ def UserTxnFeatures(t: Txn):
 
 Look up a row with the key as a plain string:
 
-            request
-
-```
+```json title="request"
 app.get("UserTxnFeatures", "alice")
 ```
 
-            response
-
-```
+```json title="response"
 {
   "tx_count_1h": 3,
   "tx_sum_1h": 42.10,
@@ -107,10 +97,7 @@ app.get("UserTxnFeatures", "alice")
 
 Pass `key=["a", "b", ...]` when one column isn’t enough to uniquely address an entity. The chain’s `group_by(...)` arguments must mirror the key list — they’re what the server uses to bucket events at apply time.
 
-          composite_key.py
-          Copy
-
-```
+```python title="composite_key.py"
 @bv.event
 class Login:
     user_id:   str
@@ -127,15 +114,11 @@ def UserDeviceStats(l: Login):
 
 The wire shape carries `table_primary_key` as a list in declaration order, matching the `group_by` column order. To look up a composite-keyed row, pass a list to `app.get`:
 
-            request
-
-```
+```json title="request"
 app.get("UserDeviceStats", ["alice", "iphone-15"])
 ```
 
-            response
-
-```
+```json title="response"
 {
   "logins_24h": 7,
   "unique_ips_24h": 2
@@ -148,10 +131,7 @@ app.get("UserDeviceStats", ["alice", "iphone-15"])
 
 When you want a single feature row that summarizes *everything* — site-wide rolling counters, fleet-wide error rates, top-line dashboards — declare a global table. Three equivalent forms:
 
-          global.py
-          Copy
-
-```
+```python title="global.py"
 # All three forms produce the same descriptor — key_cols=[].
 
 @bv.table
@@ -169,24 +149,17 @@ def SiteTotals3(c: Click):
 
 A global table’s single row is addressed by the **empty-string sentinel entity id**. `app.get("SiteTotals")` with no `key` argument routes to that sentinel automatically:
 
-            request
-
-```
+```json title="request"
 app.get("SiteTotals")
 ```
 
-            response
-
-```
+```json title="response"
 { "total_clicks_1h": 14823 }
 ```
 
 Pushes flow into a global table the same way they flow into a keyed one — fire-and-forget, processing-time, ack-on-write:
 
-          push.sh
-          Copy
-
-```
+```bash title="push.sh"
 curl http://localhost:8080/push \
   -H "content-type: application/json" \
   -d '{"event": "Click", "data": {"user_id": "alice", "path": "/"}}'
@@ -202,10 +175,7 @@ Two contracts:
 
 - The return value must end in agg(...). Anything else (a bare filter, a dangling with_columns, a non-chain object) raises TypeError with the canonical rewrite hint.
 
-          chain_with_filter.py
-          Copy
-
-```
+```python title="chain_with_filter.py"
 @bv.table(key="user_id")
 def HighValueUserStats(t: Txn):
     return (
@@ -220,15 +190,15 @@ def HighValueUserStats(t: Txn):
 
 Chain methods you can compose before the terminal `agg`: `filter`, `select`, `drop`, `rename`, `with_columns`, `cast`, `fillna`, `group_by`. The terminal call must be `agg(...)`; otherwise the descriptor is classified as an event-derivation (`output_kind="event"`) and belongs under [@bv.event](/python/event), not `@bv.table`.
 
+<Note>
 Processing-time only. Aggregation windows (window="1h", "24h", "forever", ...) are walltime-relative on the server. Beava v0 does not support event-time / watermarks; declaring an event_time field on the upstream @bv.event raises TypeError at decorator time.
+</Note>
 
 ## Wire shape
 
 At `app.register(...)` time, every `@bv.table` descriptor is serialized into a node on the registry payload. The shape:
 
-          node JSON
-
-```
+``` title="node JSON"
 {
   "kind": "derivation",
   "name": "UserTxnFeatures",
@@ -261,21 +231,31 @@ The full registry payload — the wrapper around `nodes`, additional flags like 
 
 ## Common questions
 
-          Can a table key contain dots or slashes?
+<AccordionGroup>
+<Accordion title="Can a table key contain dots or slashes?">
 
 Yes — the column *name* is restricted by your `@bv.event` schema, but the column *value* at lookup time is treated as an opaque string. `app.get("UserClicks", "a.b/c")` works fine. The wire encoding is JSON, so any UTF-8 string is permitted; the empty string is the global-table sentinel and not a valid entity id for keyed tables.
 
-          What if my key column has nulls?
+</Accordion>
+
+<Accordion title="What if my key column has nulls?">
 
 The server treats `null` as a distinct bucket — events with a null key value land in their own row, addressable by passing `None` for that key column. If you’d rather reject them, add a `filter(bv.col("user_id").is_not_null())` step in front of the `group_by`; if you’d rather replace them, use `fillna(user_id="anonymous")` earlier in the chain.
 
-          Does the table refresh on event arrival or on read?
+</Accordion>
+
+<Accordion title="Does the table refresh on event arrival or on read?">
 
 On arrival. Every `app.push(...)` applies the event to every aggregation that names its source as an upstream — atomically, on the data plane, before the push is acked. Reads are pure lookups: `app.get` returns the row as it exists at that instant, no recompute, no fan-out, no quorum. That’s what makes batch-get sub-millisecond.
 
-          Can one table read from multiple event sources?
+</Accordion>
+
+<Accordion title="Can one table read from multiple event sources?">
 
 One upstream per table. The function takes one annotated parameter and the chain builds off that one source. Joins and unions are not part of the v0 surface.
+
+</Accordion>
+</AccordionGroup>
 
 ## Where to go next
 

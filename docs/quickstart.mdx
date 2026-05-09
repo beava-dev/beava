@@ -13,7 +13,9 @@ Most readers want the install path below; if you'd rather skip the server entire
 
 → **Use embed mode** ([#embed](#embed)) — bv.App() with no URL spawns a local binary on ephemeral ports. Best for tests and notebooks.
 
+<Note>
 This is the SDK reference. For the why — vision, concepts, recipes — see Docs. For tutorials, Learn.
+</Note>
 
 ## 01 Install beava
 
@@ -25,10 +27,7 @@ You install two things: the **server** (the single binary that holds state) and 
           cargo
           from source
 
-              terminal
-              Copy
-
-```
+```bash title="terminal"
 # persistent volume keeps your features across restarts
 docker run -d --name beava \
   -p 8080:8080 -p 8081:8081 \
@@ -42,10 +41,7 @@ curl -X POST http://localhost:8080/ping
 
 Port `8080` is the HTTP data plane (push, get, batch_get, register, ping). Port `8081` is the framed-TCP fast-path (sub-millisecond JSON). Admin endpoints (`/health`, `/ready`, `/metrics`, `/registry`) live on a separate sidecar port that you opt into via the `--http-addr` / `--config` flags.
 
-              terminal
-              Copy
-
-```
+```bash title="terminal"
 cargo install --git https://github.com/beava-dev/beava beava-server
 beava --memory-only
 # → HTTP listen   : 127.0.0.1:8080
@@ -54,10 +50,7 @@ beava --memory-only
 
 Requires Rust 1.74+. `--memory-only` skips the WAL — useful for kicking the tyres. Drop it for production (state lands under `./.beava/` by default).
 
-              terminal
-              Copy
-
-```
+```bash title="terminal"
 git clone https://github.com/beava-dev/beava
 cd beava
 cargo run --release --bin beava
@@ -65,25 +58,23 @@ cargo run --release --bin beava
 
 ### Python client
 
-          terminal
-          Copy
-
-```
+```bash title="terminal"
 pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"
 ```
 
+<Note>
 PyPI publish lands at v0.0.x — pip install beava will work then. For the v0.0.0 cut the SDK installs from the GitHub source above. Both URLs keep working after the PyPI cut.
+</Note>
 
+<Tip>
 Tip. beava ships static. There's no JVM to size, no broker to configure, no schema registry to register against. If curl -X POST :8080/ping returns {"pong":true,"registry_version":0}, you're done.
+</Tip>
 
 ## 02 Declare your first feature
 
 beava is declarative. You write a Python class for the **event source** and a function for the **table** (the per-entity feature you want to query). Every operator works the same way: `group_by(...).agg(name=bv.(...))`.
 
-          site_features.py
-          12 lines
-
-```
+```python title="site_features.py"
 import beava as bv
 
 @bv.event
@@ -100,10 +91,7 @@ def UserStats(pv: PageView):
 
 Register it once. The server picks it up live — no restart.
 
-          terminal
-          Copy
-
-```
+```bash title="terminal"
 python -c "import beava as bv; from site_features import *; \
   bv.App('http://localhost:8080').register(PageView, UserStats)"
 # → {"status": "ok", "registry_version": 1, "added": ["PageView", "UserStats"]}
@@ -113,10 +101,7 @@ python -c "import beava as bv; from site_features import *; \
 
 beava speaks HTTP — every operation is a single request. You can drive it from Python or from `curl`; the wire is identical.
 
-            request · push event
-            Copy
-
-```
+```json title="request · push event"
 curl -X POST \
   http://localhost:8080/push \
   -H "content-type: application/json" \
@@ -129,10 +114,7 @@ curl -X POST \
   }'
 ```
 
-            response · 4 ms
-            200 OK
-
-```
+```json title="response · 4 ms"
 {
   "ack_lsn": 62,
   "idempotent_replay": false,
@@ -142,10 +124,7 @@ curl -X POST \
 
 Now ask beava for the running feature:
 
-            request · read feature
-            Copy
-
-```
+```json title="request · read feature"
 curl -X POST \
   http://localhost:8080/get \
   -H "content-type: application/json" \
@@ -155,10 +134,7 @@ curl -X POST \
   }'
 ```
 
-            response · 0.6 ms
-            200 OK
-
-```
+```json title="response · 0.6 ms"
 { "visits": 2 }
 ```
 
@@ -168,33 +144,22 @@ The `/get` response is the row itself — a flat dict of feature name → value.
 
 Every `bv.App(...)` accepts the same shape. Pass an explicit URL or rely on embed mode (no URL → spawn local binary on ephemeral ports).
 
-            url
-
-              string | None
-
+<ParamField path="url" type="string | None" default="None">
 Server URL. `http://...` / `https://...` for HTTP transport, `tcp://...` for the custom-framed TCP fast-path. `None` (the default) for embed mode — the SDK locates the `beava` binary on `$PATH` and spawns it.
+</ParamField>
 
-default `None`
-
-            timeout
-
-              float
-
+<ParamField path="timeout" type="float" default="30.0">
 Per-request transport-level I/O timeout in seconds.
+</ParamField>
 
-default `30.0`
-
-            test_mode
-
-              bool
-
+<ParamField path="test_mode" type="bool" default="False">
 Embed-mode only. Sets `BEAVA_TEST_MODE=1` in the spawned binary's env so test-only opcodes (`OP_RESET`) are accepted. Setting `test_mode=True` against a network URL emits a `UserWarning` and is ignored.
-
-default `False`
+</ParamField>
 
 ## Common questions
 
-          Embed mode — what's the lifecycle?
+<AccordionGroup>
+<Accordion title="Embed mode — what's the lifecycle?">
 
 `bv.App()` (no URL) spawns the beava binary on ephemeral ports inside a context manager. The subprocess is torn down on `__exit__`. Calling any wire method on an embed-mode `App` outside `with` raises `RuntimeError`.
 
@@ -207,21 +172,30 @@ with bv.App() as app:
 
 Each spawn allocates a unique tmpdir under `$TMPDIR/beava-embed---/`; cleaned up via `atexit`.
 
-          What does the server hold? Does it persist events?
+</Accordion>
+
+<Accordion title="What does the server hold? Does it persist events?">
 
 The server holds **per-entity aggregates** — counters, velocities, sketches, last-seen — keyed by entity. It does **not** persist the raw events themselves; it persists the aggregates over them via WAL + periodic snapshot.
 
 If you need event replay, keep your raw events somewhere else (S3, your warehouse). beava is the live-feature server, not the event log.
 
-          Cold-start for an unknown key — is that an error?
+</Accordion>
+
+<Accordion title="Cold-start for an unknown key — is that an error?">
 
 No. `app.get("UserStats", "newuser")` returns `{}` (empty dict) with HTTP 200 when no events have ever been pushed for that key. This matches the Redis-shaped contract: a cold key is just a key with no data.
 
 `unknown_table` IS an error — that means the table name isn't registered.
 
-          How does this compare to Redis?
+</Accordion>
+
+<Accordion title="How does this compare to Redis?">
 
 Redis is a key-value store you can *build* rolling counters on top of (with Lua + ZSETs + a lot of care). beava is a server that already *is* rolling counters — and velocities, leaderboards, last-N-seen, sketches — without you assembling the primitives.
+
+</Accordion>
+</AccordionGroup>
 
 ## Where to go next
 

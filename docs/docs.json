@@ -3,6 +3,11 @@
   "theme": "mint",
   "name": "beava",
   "description": "Real-time feature server for fraud, ad-tech, and behavioral analytics. Single binary, in-memory state, declarative pipeline.",
+  "logo": {
+    "light": "/logo/beava.png",
+    "dark": "/logo/beava.png"
+  },
+  "favicon": "/logo/beava.png",
   "colors": {
     "primary": "#b85c20",
     "light": "#d97a3e",
@@ -79,10 +84,74 @@
       }
     ]
   },
+  "navbar": {
+    "links": [
+      {
+        "label": "Home",
+        "href": "https://beava.dev/"
+      },
+      {
+        "label": "Guide",
+        "href": "https://beava.dev/guide/"
+      },
+      {
+        "label": "Community",
+        "href": "https://beava.dev/community/"
+      },
+      {
+        "label": "Discord",
+        "href": "https://discord.gg/Jnx89PN9"
+      }
+    ],
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/beava-dev/beava"
+    }
+  },
   "footer": {
     "socials": {
       "github": "https://github.com/beava-dev/beava",
       "discord": "https://discord.gg/Jnx89PN9"
-    }
+    },
+    "links": [
+      {
+        "header": "Project",
+        "items": [
+          {
+            "label": "Guide",
+            "href": "https://beava.dev/guide/"
+          },
+          {
+            "label": "Docs",
+            "href": "/"
+          },
+          {
+            "label": "Roadmap",
+            "href": "https://github.com/beava-dev/beava/discussions"
+          },
+          {
+            "label": "OSS commitment",
+            "href": "https://github.com/beava-dev/beava/blob/main/LICENSE"
+          }
+        ]
+      },
+      {
+        "header": "Community",
+        "items": [
+          {
+            "label": "GitHub",
+            "href": "https://github.com/beava-dev/beava"
+          },
+          {
+            "label": "Discussions",
+            "href": "https://github.com/beava-dev/beava/discussions"
+          },
+          {
+            "label": "Discord",
+            "href": "https://discord.gg/Jnx89PN9"
+          }
+        ]
+      }
+    ]
   }
 }

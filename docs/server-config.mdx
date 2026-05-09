@@ -17,9 +17,7 @@ The `beava` binary boots a single-process feature server. With no flags, no env 
 
 There's no implicit `./beava.yaml` lookup. If you want to use a YAML config, point at it explicitly with `-c` / `--config`.
 
-          three boot styles
-
-```
+``` title="three boot styles"
 # 1. Built-in defaults (good for first-touch + tests)
 beava
 
@@ -34,67 +32,39 @@ beava --config /etc/beava/beava.yaml --memory-only
 
 All flags are global — they work whether you boot the server (default) or run a subcommand like `beava quickstart`.
 
-          usage
-
-```
+``` title="usage"
 beava [OPTIONS] [COMMAND]
 ```
 
-            -c, --config <PATH>
-
-              path
-
+<ParamField path="-c, --config <PATH>" type="path" default="no default — env + built-in defaults apply when omitted">
 Load settings from a YAML config file. Optional. There's no implicit `./beava.yaml` lookup; if you want a config, point at one explicitly. The resolved config (which path was loaded — or whether built-in defaults applied) is logged at startup.
+</ParamField>
 
-no default — env + built-in defaults apply when omitted
-
-            --http-addr <ADDR>
-
-              host:port
-
+<ParamField path="--http-addr <ADDR>" type="host:port" default="127.0.0.1:8080">
 Override the HTTP data-plane listener address. Highest precedence — wins over `BEAVA_LISTEN_ADDR` and any `--config` YAML.
+</ParamField>
 
-default `127.0.0.1:8080`
-
-            --tcp-addr <ADDR>
-
-              host:port
-
+<ParamField path="--tcp-addr <ADDR>" type="host:port" default="127.0.0.1:8081">
 Override the TCP fast-path listener address. Highest precedence — wins over `BEAVA_TCP_HOST` / `BEAVA_TCP_PORT` and YAML. The TCP transport carries the same JSON envelope as HTTP but with sub-millisecond P99 latency on long-lived connections.
+</ParamField>
 
-default `127.0.0.1:8081`
+<ParamField path="--data-dir <PATH>" type="path" default="./.beava/">
+Override both WAL and snapshot directories under a single root: WAL lands at `<PATH>/wal`, snapshots at `<PATH>/snapshots`. Highest precedence — wins over `BEAVA_WAL_DIR` / `BEAVA_SNAPSHOT_DIR` and YAML.
+</ParamField>
 
-            --data-dir <PATH>
-
-              path
-
-Override both WAL and snapshot directories under a single root: WAL lands at `/wal`, snapshots at `/snapshots`. Highest precedence — wins over `BEAVA_WAL_DIR` / `BEAVA_SNAPSHOT_DIR` and YAML.
-
-default `./.beava/` (so `./.beava/wal/` + `./.beava/snapshots/`)
-
-            --memory-only
-
-              bool flag
-
+<ParamField path="--memory-only" type="bool flag" default="false">
 In-memory only — no WAL writer, no periodic snapshot, no recovery on boot. State is lost on restart. Use for `docker run` smoke tests, demo boots, ephemeral CI runs, and any "I'm just kicking the tyres" workflow that shouldn't leave bytes on disk.
+</ParamField>
 
-default `false` (durable mode)
-
-            --test-mode
-
-              bool flag
-
+<ParamField path="--test-mode" type="bool flag" default="false">
 Enable `POST /reset` and `OP_RESET` — the destructive registry-wipe endpoint. Off by default; production deploys leave it off so they can't be wiped by accident. Equivalent to setting `BEAVA_TEST_MODE=1`; the flag wins if both are set.
-
-default `false`
+</ParamField>
 
 ## Subcommands
 
 When no subcommand is provided, `beava` boots the server. One subcommand is exposed in v0:
 
 ### beava quickstart [--no-file]
-
-beava quickstart [--no-file]
 
 Run the in-process 4-step first-touch demo. Spawns an in-process server on an ephemeral port, registers a `PageView` / `SiteMetrics` pipeline, pushes 5 events, queries the global row, prints a formatted walkthrough, and writes `beava_quickstart.py` to the current working directory. Zero setup, zero dependencies, completes in under 10 seconds.
 
@@ -104,10 +74,7 @@ Run the in-process 4-step first-touch demo. Spawns an in-process server on an ep
 
 ### Example
 
-          terminal
-          Copy
-
-```
+```bash title="terminal"
 beava quickstart
 # → 4-step demo runs, beava_quickstart.py lands in cwd
 
@@ -219,9 +186,7 @@ The YAML config covers the long-form settings you'd rather not encode in a shell
 
 Point at it with `--config`; there's no implicit lookup.
 
-          beava.yaml
-
-```
+```yaml title="beava.yaml"
 # Address and port to bind the HTTP data plane to.
 listen_addr: "127.0.0.1:8080"
 
@@ -249,43 +214,55 @@ The resolved config is logged at startup. If beava's bound to a port you didn't 
 
 With no flags, no env, no YAML:
 
-            HTTP data plane
-
+<ParamField path="HTTP data plane">
 `127.0.0.1:8080`
+</ParamField>
 
-            TCP fast-path
-
+<ParamField path="TCP fast-path">
 `127.0.0.1:8081`
+</ParamField>
 
-            Admin sidecar
-
+<ParamField path="Admin sidecar">
 `127.0.0.1:8090` — separate port for `/health`, `/ready`, `/metrics`, `/registry`. Kept off the data-plane port so admin scrapes don't share a runtime with hot-path requests.
+</ParamField>
 
-            Working directory
-
+<ParamField path="Working directory">
 `./.beava/` — WAL at `./.beava/wal/`, snapshots at `./.beava/snapshots/`. The directory is created on first boot if missing.
+</ParamField>
 
 ## Common questions
 
-          Why doesn't beava look for `./beava.yaml` automatically?
+<AccordionGroup>
+<Accordion title="Why doesn't beava look for ./beava.yaml automatically?">
 
 Because `cargo install beava-server && beava` is the canonical first-touch path, and an implicit lookup would force every fresh install to pre-create a YAML file (or hit "config file not found"). The locked behavior: no YAML unless you ask for one with `-c`. Built-in defaults handle every other case.
 
-          Can I run beava without writing to disk at all?
+</Accordion>
+
+<Accordion title="Can I run beava without writing to disk at all?">
 
 Yes — `beava --memory-only`. Skips WAL, skips snapshots, skips recovery. State lives in process memory only and is lost on restart. Use it for tests, demos, and CI runs that shouldn't leave bytes behind.
 
-          How do I bind to all interfaces in a container?
+</Accordion>
+
+<Accordion title="How do I bind to all interfaces in a container?">
 
 Pass `--http-addr 0.0.0.0:8080` (and `--tcp-addr 0.0.0.0:8081` if you want the TCP fast-path reachable). The defaults bind to `127.0.0.1` so a fresh native install isn't accidentally exposed to the network.
 
-          Why does WAL refuse a network filesystem?
+</Accordion>
+
+<Accordion title="Why does WAL refuse a network filesystem?">
 
 Because the WAL writer relies on `O_APPEND` + `fsync()` semantics that NFS / CIFS / FUSE-style mounts don't reliably honor. A successful `fsync()` on a network filesystem can return before bytes hit the persistence layer, breaking the durability contract. Beava detects the FS type at boot and refuses to start on a remote mount; point `--data-dir` at local block storage.
 
-          Where are the admin endpoints?
+</Accordion>
+
+<Accordion title="Where are the admin endpoints?">
 
 On a separate sidecar port (default `127.0.0.1:8090`). `/health`, `/ready`, `/metrics`, and `/registry` are served there — kept off the data-plane port so observability scrapes don't share a runtime with the hot-path event apply loop.
+
+</Accordion>
+</AccordionGroup>
 
 ## Where to go next
 

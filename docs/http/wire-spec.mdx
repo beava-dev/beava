@@ -15,7 +15,9 @@ Beava ships two transports:
 
 Both transports carry the same JSON envelope per opcode. The only differences are framing (HTTP headers vs the binary length-prefixed frame), the route/opcode mapping, and the strict-FIFO contract on TCP. Pick HTTP for reach; pick TCP for latency.
 
+<Note>
 Admin endpoints live on a separate port. Health, readiness, metrics and registry-introspection (/health, /ready, /metrics, /registry) are served by an admin sidecar bound to cfg.admin_addr. They are not part of the data-plane wire spec and are not exposed on the TCP port.
+</Note>
 
 ## HTTP routes
 
@@ -36,9 +38,7 @@ Errors on every route share one body shape — see [Errors](#errors) below.
 
 Every TCP frame — request or response — has the same envelope. All multi-byte integers are big-endian (network byte order).
 
-          on-wire bytes
-
-```
+``` title="on-wire bytes"
 [u32 length BE][u16 op BE][u8 content_type][payload: length - 3 bytes]
 ```
 
@@ -49,9 +49,7 @@ Every TCP frame — request or response — has the same envelope. All multi-byt
 | content_type | 1 byte | 0x01 = JSON. Any other byte returns unsupported_content_type; the connection stays open, only the offending frame is rejected. |
 | payload | length − 3 bytes | Opcode-specific JSON body. Server enforces length ≤ tcp_max_frame_bytes + 3; default is 4 MiB payload (4 * 1024 * 1024). Frames over the limit are rejected with frame_too_large and the connection is closed. |
 
-          empty-payload OP_PING — 7 bytes total
-
-```
+```json title="empty-payload OP_PING — 7 bytes total"
 # length=3 (op + ct), op=0x0000 (ping), ct=0x01 (JSON), payload=∅
 00 00 00 03  00 00  01
 ```
@@ -95,9 +93,7 @@ Concretely:
 
 Every error — HTTP or TCP — has the same body shape:
 
-          error body
-
-```
+```json title="error body"
 {
   "error": {
     "code":    "event_not_found",
@@ -121,21 +117,31 @@ Over HTTP this body is returned with the appropriate `4xx` / `5xx` status. Over 
 
 ## Common questions
 
-          Can I tunnel TCP through HTTP (e.g. via WebSockets)?
+<AccordionGroup>
+<Accordion title="Can I tunnel TCP through HTTP (e.g. via WebSockets)?">
 
 No. The TCP fast-path is a raw length-prefixed framing — it has no upgrade dance, no HTTP framing, no WebSocket envelope. If you can't reach port 8081 directly, use the HTTP transport. Beava deliberately does not try to be both.
 
-          What's the maximum frame size?
+</Accordion>
+
+<Accordion title="What's the maximum frame size?">
 
 The configured `tcp_max_frame_bytes` applies to the *payload*, not the whole frame. Default is **4 MiB** (`4 * 1024 * 1024` = `4194304` bytes). The server accepts a `length` field of up to `tcp_max_frame_bytes + 3` (the `+3` covers `op + content_type`). Frames over the limit are rejected with `frame_too_large`; the connection is closed because the rest of the stream is not parseable. HTTP `POST` bodies have a parallel cap configured separately on the HTTP listener.
 
-          Is the wire format stable?
+</Accordion>
+
+<Accordion title="Is the wire format stable?">
 
 The opcodes and their semantics are locked for v0. Existing opcodes never change shape; new wire features get new opcode numbers.
 
-          How do I implement a third-party SDK?
+</Accordion>
+
+<Accordion title="How do I implement a third-party SDK?">
 
 Two layers. (1) A frame writer/reader: 4-byte length + 2-byte opcode + 1-byte content-type + payload. ~50 LOC in any language. (2) A JSON serialiser per opcode whose body shape is documented above. ~150 LOC for the six request opcodes (`OP_PING`, `OP_REGISTER`, `OP_PUSH`, `OP_GET`, `OP_BATCH_GET`, `OP_RESET`) plus the two response opcodes. Hold the strict-FIFO discipline (one in-flight request per socket, send/recv under a mutex) and you're done. The Python SDK's TCP transport is a good reference at ~250 LOC.
+
+</Accordion>
+</AccordionGroup>
 
 ## Where to go next
 

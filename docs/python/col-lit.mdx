@@ -9,18 +9,14 @@ description: "Column references and literal values for the chain DSL."
 
 Every predicate in beava — every `where=` kwarg, every filter clause, every derived-column expression — is built from two primitives: `bv.col(name)` for a field reference, and `bv.lit(value)` for a constant. Combine them with Python operators (`==`, `>`, `&`, `|`, `~`) to produce an `_Expr` AST node. The AST is inert at construction time; the server's expression parser evaluates it at push time.
 
-            filter on a predicate
-
-```
+``` title="filter on a predicate"
 bv.count(
     window="1h",
     where=bv.col("amount") > 100,
 )
 ```
 
-            derived column
-
-```
+``` title="derived column"
 pv.with_columns(
     is_premium=bv.col("plan") == bv.lit("premium"),
 )
@@ -29,8 +25,6 @@ pv.with_columns(
 Both helpers return `_Expr` nodes (subclasses `_Col` and `_Literal`). `_Expr` overloads Python's comparison, arithmetic, and bitwise operators to grow the AST; you never construct nodes by hand.
 
 ### bv.col(name)
-
-bv.col(name: str) -> _Col
 
 Reference a schema field by name. Returns an `_Expr` — an unbound expression node that participates in operator overloads. The lookup is unresolved until the expression reaches the server; `bv.col("nonexistent")` only fails at register / push time when the schema check runs.
 
@@ -44,10 +38,7 @@ Reference a schema field by name. Returns an `_Expr` — an unbound expression n
 
 ### Example
 
-          col.py
-          Copy
-
-```
+```python title="col.py"
 import beava as bv
 
 amount = bv.col("amount")
@@ -56,8 +47,6 @@ print(expr.to_expr_string())  # → '(amount > 100)'
 ```
 
 ### bv.lit(value)
-
-bv.lit(value: int | float | str | bool | None) -> _Literal
 
 Wrap a Python constant as an explicit literal expression. The implicit form (`bv.col("a") > 100`) and the explicit form (`bv.col("a") > bv.lit(100)`) are wire-equivalent inside operator overloads — Python's dispatch coerces the right-hand side automatically. `bv.lit` is required when the literal stands on its own (a constant column in `with_columns`, the left-hand side of an arithmetic expression, or the only operand of a derivation).
 
@@ -73,10 +62,7 @@ Wrap a Python constant as an explicit literal expression. The implicit form (`bv
 
 ### Example
 
-          lit.py
-          Copy
-
-```
+```python title="lit.py"
 import beava as bv
 
 bv.lit(42).to_expr_string()     # → '42'
@@ -93,44 +79,31 @@ An `_Expr` grows by operator overload. Every overload returns a new `_Expr` — 
 
 Each comparison operator emits a `_BinOp` node. Both operands are `_Expr`; bare Python literals on either side are auto-wrapped via `_coerce`.
 
-            ==  !=
-
-              _Expr × _Expr → _Expr
-
+<ParamField path="==  !=" type="_Expr × _Expr → _Expr">
 Equality and inequality. `bv.col("plan") == bv.lit("premium")` renders as `(plan == 'premium')`.
+</ParamField>
 
-            <  <=  >  >=
-
-              _Expr × _Expr → _Expr
-
+<ParamField path="<  <=  >  >=" type="_Expr × _Expr → _Expr">
 Ordered comparison. Numeric on both sides; the server rejects ordered comparison of strings.
+</ParamField>
 
 ### Logical combinators
 
 Python's `and` / `or` can't be overloaded — they short-circuit on truthiness. Beava overloads `&` / `|` instead and serializes them as the server-grammar keywords `and` / `or`. **Always parenthesize** — Python's bitwise operators bind tighter than comparison.
 
-            &
-
-              _Expr × _Expr → _Expr
-
+<ParamField path="&" type="_Expr × _Expr → _Expr">
 Logical AND. Wire form: `(left and right)`.
+</ParamField>
 
-            |
-
-              _Expr × _Expr → _Expr
-
+<ParamField path="|" type="_Expr × _Expr → _Expr">
 Logical OR. Wire form: `(left or right)`.
+</ParamField>
 
-            ~
-
-              _Expr → _Expr
-
+<ParamField path="~" type="_Expr → _Expr">
 Logical NOT. Wire form: `!(operand)`.
+</ParamField>
 
-          combinators.py
-          Copy
-
-```
+```python title="combinators.py"
 expr = (bv.col("amount") > 100) & (bv.col("plan") == "premium")
 expr.to_expr_string()
 # → "((amount > 100) and (plan == 'premium'))"
@@ -142,39 +115,29 @@ negated.to_expr_string()
 
 ### Methods
 
-            .cast(target)
-
-              str → _Expr
-
+<ParamField path=".cast(target)" type="str → _Expr">
 Cast the operand to one of `"str"`, `"int"`, `"float"`, `"bool"`. Any other target raises `ValueError` at construction time (client-side guard). Wire form: `cast(operand, target)`.
+</ParamField>
 
-            .isnull()
-
-              () → _Expr
-
+<ParamField path=".isnull()" type="() → _Expr">
 Null-check. Wire form: `(operand == null)`. Combine with `~` for an "is not null" check: `~bv.col("x").isnull()`.
+</ParamField>
 
-            .to_expr_string()
-
-              () → str
-
+<ParamField path=".to_expr_string()" type="() → str">
 Render the AST to its wire-grammar JSON form. Stable string representation; safe to use in tests.
+</ParamField>
 
 ## The where= contract
 
 Every kwarg that takes a predicate — every aggregation operator's `where=`, every filter clause — accepts an `_Expr` and only an `_Expr`. Bare strings are rejected. The check lives in `_serialize_where` on every aggregation operator: anything that isn't `None` or an `_Expr` raises `TypeError` client-side, before a single byte hits the wire.
 
-            rejected — bare string
-
-```
+``` title="rejected — bare string"
 bv.count(where="amount > 0")
 # TypeError: where= must be an _Expr or None;
 #   got str
 ```
 
-            canonical — _Expr
-
-```
+``` title="canonical — _Expr"
 bv.count(where=bv.col("amount") > 0)
 # wire: where = "(amount > 0)"
 ```
@@ -183,21 +146,31 @@ bv.count(where=bv.col("amount") > 0)
 
 ## Common questions
 
-          Why do I need `bv.lit` for constants? Polars does this automatically.
+<AccordionGroup>
+<Accordion title="Why do I need bv.lit for constants? Polars does this automatically.">
 
 Inside an operator overload (e.g. `bv.col("a") > 100`), Python's dispatch *does* auto-coerce the right-hand side via `_coerce`. `bv.lit` is needed when the literal isn't on the right side of an overload — for instance, when assigning a constant column in `with_columns` (no operator to dispatch through). Pick whichever reads better; both render to the same wire form.
 
-          Can I use Python's `and` / `or`?
+</Accordion>
+
+<Accordion title="Can I use Python's and / or?">
 
 No — Python forbids overloading `and` / `or` (they short-circuit on truthiness, not on operand types). The SDK overloads `&` / `|` instead and serializes them as the server-grammar keywords `and` / `or`. Always parenthesize each side: `(a == 1) & (b > 0)`, not `a == 1 & b > 0` — Python's bitwise operators bind tighter than comparison.
 
-          Does `.cast` allow lossy conversions?
+</Accordion>
+
+<Accordion title="Does .cast allow lossy conversions?">
 
 The client-side guard only validates the target name — one of `"str"`, `"int"`, `"float"`, `"bool"`. The server applies the actual conversion at push time and rejects values that can't be represented (e.g. `cast("not-a-number", int)`). Lossy numeric casts (`float → int`) follow the server's coercion rules; check the operator catalogue's "type coercion" notes for the exact behaviour per call-site.
 
-          Can I reuse the same `_Expr` in multiple operators?
+</Accordion>
+
+<Accordion title="Can I reuse the same _Expr in multiple operators?">
 
 Yes. `_Expr` subclasses are frozen dataclasses — the AST is immutable, so a single expression node can appear inside several aggregations safely. Build it once at module scope and pass it to each `where=` kwarg.
+
+</Accordion>
+</AccordionGroup>
 
 ## Where to go next
 

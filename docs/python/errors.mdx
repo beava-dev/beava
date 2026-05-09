@@ -15,9 +15,7 @@ Beava errors come from two places:
 
 The canonical wire-error envelope is a flat object:
 
-          wire error response
-
-```
+```json title="wire error response"
 {
   "error": {
     "code":    "event_not_found",
@@ -39,8 +37,6 @@ Section 1 of 2
 Three exception classes are exported from the top-level `beava` module. All three are also accessible as `bv.RegistrationError`, `bv.ValidationError`, `bv.BinaryNotFoundError`.
 
 ### RegistrationError
-
-RegistrationError(*, code: str, path: str = "", message: str = "", errors: list[ValidationError] | None = None)
 
 The SDK's general-purpose wire-error wrapper. Raised for every non-2xx response from the data plane. Discriminate on `code`, not on the exception class.
 
@@ -64,10 +60,7 @@ The SDK's general-purpose wire-error wrapper. Raised for every non-2xx response 
 
 ### Example
 
-          handle_errors.py
-          Copy
-
-```
+```python title="handle_errors.py"
 import beava as bv
 
 app = bv.App("http://localhost:8080")
@@ -89,8 +82,6 @@ except bv.RegistrationError as e:
 
 ### ValidationError
 
-ValidationError(kind: str, path: str, message: str)
-
 Frozen dataclass carrying a single validation failure. Not raised on its own — it's the type held in `RegistrationError.errors` when registration validation produces multiple failures (e.g. five fields with type mismatches across two descriptors).
 
 ### Attributes
@@ -104,8 +95,6 @@ Frozen dataclass carrying a single validation failure. Not raised on its own —
 The dataclass is frozen, so you can use it as a dict key or in sets. Stringification is `"[kind] path: message"`.
 
 ### BinaryNotFoundError
-
-BinaryNotFoundError
 
 Raised by **embed mode** (`bv.App()` with no URL) when the `beava` binary cannot be located. Discovery order:
 
@@ -121,10 +110,7 @@ Network-mode (`http://...`, `tcp://...`) `App`s never raise this — they don't 
 
 ### Example
 
-          embed_or_fail.py
-          Copy
-
-```
+```python title="embed_or_fail.py"
 try:
     with bv.App() as app:
         app.register(PageView)
@@ -143,37 +129,25 @@ Every non-2xx response from the data plane carries a structured `error` object. 
 
 ### event_not_found
 
-HTTP 404 · POST /push · path: <event-name>
-
 The pushed `event_name` isn't in the registry. Register it first (`app.register(...)`), or check for typos. Catch as `RegistrationError(code="event_not_found")`.
 
 ### invalid_event
-
-HTTP 400 · POST /push · path: data.<field> (when known)
 
 The push body is malformed JSON, fails to deserialize into a `Row`, or violates the registered event schema (missing required fields, wrong types). The single biggest source of `invalid_event`: a field type doesn't match the declared schema. Catch as `RegistrationError(code="invalid_event")`.
 
 ### unknown_field_v0
 
-HTTP 400 · POST /push · path: <event>.<field>
-
 The push body contains a field not declared on the event's schema (and not in `optional_fields`). Beava is strict-deny on unknown fields in v0. Add the field to your `@bv.event` declaration or strip it from the push payload.
 
 ### unknown_field_event_time_v0
-
-HTTP 400 · POST /push · path: <event>.event_time
 
 Specialised form of `unknown_field_v0` for the reserved `event_time` / `event_time_ms` field names. v0 is processing-time only — server clock is the timestamp source. Drop the field.
 
 ### missing_event_name_in_body
 
-HTTP 400 · POST /push (TCP fast-path)
-
 The framed-TCP variant of `POST /push` couldn't extract `event_name` from the request frame. Almost always a malformed frame or a stale client. Re-check the SDK version against the server.
 
 ### invalid_json_body
-
-HTTP 400 · POST /push (any transport)
 
 The request body wasn't valid JSON. Distinct from `invalid_event` — the bytes never made it to schema validation.
 
@@ -181,31 +155,21 @@ The request body wasn't valid JSON. Distinct from `invalid_event` — the bytes 
 
 ### unknown_table
 
-HTTP 404 · GET /get, POST /batch_get · path: <table-name>
-
 The requested `table` isn't in the registry. In `batch_get`, this can appear per-tuple in the response array — the SDK aggregates and re-raises as a single `RegistrationError` when any entry failed.
 
 ### key_not_found
-
-HTTP 404 · GET /get · path: <table>/<key>
 
 The table is registered, but no events have populated this entity-key yet. The SDK normalizes single-row `get` calls so that cold-start returns `{}` rather than raising — you only see `key_not_found` when calling lower-level feature-query endpoints directly.
 
 ### key_parse_failure
 
-HTTP 400 · GET /get, POST /batch_get · path: <table>/<key>
-
 The supplied entity key doesn't deserialize into the table's declared key shape — typically a composite-key call where the JSON list has the wrong arity or types.
 
 ### feature_not_found
 
-HTTP 400 · GET /get, POST /batch_get
-
 One of the feature names in the `features=[...]` filter isn't on the table. The body's `missing` key lists the offending names. Drop them or re-register the table with the new feature.
 
 ### batch_too_large
-
-HTTP 400 · POST /batch_get
 
 Total work (`keys × features`) exceeds the per-request limit (10,000). Split the batch on the client.
 
@@ -213,31 +177,21 @@ Total work (`keys × features`) exceeds the per-request limit (10,000). Split th
 
 ### invalid_registration
 
-HTTP 400 · POST /register
-
 The register payload failed structural validation (malformed DAG, missing required keys, raw `OpNode` shape errors). The body's `errors` list carries one `{kind, path, message}` per failure; the SDK exposes them via `RegistrationError.errors`.
 
 ### unsupported_node_kind
-
-HTTP 400 · POST /register · path: descriptors[i].kind
 
 The register payload included a descriptor with a `kind` the server doesn't accept. v0 accepts `"event"` and `"derivation"` only; aggregation tables are produced via `kind: "derivation", output_kind: "table"`.
 
 ### unbounded_op_in_lifetime_mode
 
-HTTP 400 · POST /register · path: descriptors[i].agg.<op>
-
 An aggregation that requires a window (`velocity`, `rate`, etc.) was declared without one in a context that demands a bounded window. Add `window="..."` to the op.
 
 ### force_required
 
-HTTP 409 · POST /register
-
 The proposed registry change would destroy state (type change, removed field, etc.). The body carries a structured `diff` with `additive` and `destructive` sections — same shape the server returns under `dry_run`. Re-call with `force=True` to commit, or revise the change to be additive-only.
 
 ### invalid_descriptor
-
-SDK-side · raised pre-wire · path: descriptors[i]
 
 **Client-only.** Raised by `app.register(*descriptors)` when one of the descriptors is a raw `EventDerivation` (a chain expression that wasn't wrapped in `@bv.event`). The exception message includes the canonical rewrite. Never reaches the wire.
 
@@ -245,69 +199,47 @@ SDK-side · raised pre-wire · path: descriptors[i]
 
 ### reset_disabled_in_production
 
-HTTP 403 · POST /reset
-
 The server isn't in test mode (no `--test-mode` flag, no `BEAVA_TEST_MODE=1`). `/reset` is gated to keep production state safe. The SDK surfaces this as `RegistrationError(code="reset_disabled")` for backward compatibility — handle either string in your `except` branch if you straddle versions.
 
 ### Transport / framing errors
 
 ### unknown_op
 
-HTTP 400 · TCP fast-path
-
 The opcode in a TCP frame isn't in the dispatch table. Almost always a stale client; upgrade the SDK.
 
 ### op_not_implemented
-
-HTTP 400 · TCP fast-path
 
 The opcode is recognised but not handled in this build. Distinct from `unknown_op` (the opcode is outside the dispatch table entirely).
 
 ### frame_too_large
 
-HTTP 413 · TCP fast-path
-
 The TCP frame's declared length exceeds `max_frame_bytes`. Bump the server's frame ceiling or split the request.
 
 ### frame_error
-
-HTTP 400 · TCP fast-path
 
 Generic protocol-level frame violation (bad length, bad content-type marker, truncated payload).
 
 ### http_protocol_error
 
-HTTP 400 · HTTP transport
-
 The HTTP/1.1 layer rejected the request before it reached an application handler — typically a malformed request line or oversize headers.
 
 ### unsupported_content_type
-
-HTTP 415 · TCP fast-path
 
 The frame's `content_type` byte isn't `0x01` (JSON) — the only supported value in v0.
 
 ### unsupported_media_type
 
-HTTP 415 · HTTP transport
-
 The HTTP `Content-Type` header isn't `application/json`. Set the header explicitly on raw `curl` calls.
 
 ### unsupported_request_shape
-
-HTTP 400 · HTTP transport
 
 The request body parsed but didn't match any known shape for the endpoint (e.g. `/batch_get` got an object instead of an array). The body's `message` field carries a hint.
 
 ### not_found
 
-HTTP 404 · any HTTP path
-
 The HTTP route doesn't exist. Either a typo on a curl-built request or a version skew.
 
 ### method_not_allowed
-
-HTTP 405 · any HTTP path
 
 Right path, wrong verb (e.g. `GET /push`). The body echoes `method` and `path`.
 
@@ -315,19 +247,13 @@ Right path, wrong verb (e.g. `GET /push`). The body echoes `method` and `path`.
 
 ### wal_unavailable
 
-HTTP 503 · POST /register, POST /push
-
 The write-ahead log is taking writes but the durability path is degraded (disk full, fsync stuck, recovery in progress). Retries are safe — beava's contract is that successful writes are WAL-acked.
 
 ### wal_sync_timeout
 
-HTTP 504 · sync-mode push
-
 A sync-mode push waited longer than its timeout for fsync acknowledgement. The event may or may not be durable — if the server comes back, the event will appear with the next ack-LSN if it was buffered. Treat as an at-most-once retry candidate from the application side.
 
 ### internal_error
-
-HTTP 500 · any path
 
 Catch-all for server-side failures the engine couldn't categorize (panicked task, response serialization bug, unexpected I/O). The body's `reason` field carries a short hint. File a bug with the request payload and the server log line.
 
@@ -335,23 +261,29 @@ Catch-all for server-side failures the engine couldn't categorize (panicked task
 
 ### unparseable_error
 
-SDK-side · raised on non-JSON server response
-
 **Client-only.** Generated by the transport layer when the server returns a non-2xx response that isn't valid JSON (a load-balancer 502 page, a TCP RST mid-frame, an unexpected HTML body). The exception's `message` contains the first 200 bytes of the response so you can diagnose. Never originates server-side.
 
 ## Common questions
 
-          How do I distinguish a 4xx from a 5xx?
+<AccordionGroup>
+<Accordion title="How do I distinguish a 4xx from a 5xx?">
 
 The exception doesn't carry the raw HTTP status — only the `code`. The mapping is documented per-code above (`event_not_found` is 404, `invalid_event` is 400, `wal_unavailable` is 503, etc.). Treat the code as the contract; the status is for HTTP-aware infrastructure (load balancers, monitoring) and isn't part of the SDK's public surface. If you need the status anyway, drop down to the transport layer (`app._transport`) — but that's a private API and may move.
 
-          Does the SDK retry transient failures?
+</Accordion>
+
+<Accordion title="Does the SDK retry transient failures?">
 
 No. Each method is one wire call. Retries belong in your application code — beava's contract is that successful pushes are WAL-acked (durable), so re-pushing on a transport error is safe (idempotent under `dedupe_key`, an at-least-once duplicate without). For server-side soft failures (`wal_unavailable`, `wal_sync_timeout`, `internal_error`), exponential backoff with jitter is a reasonable default. Don't retry `4xx` codes — those are client mistakes that won't fix themselves.
 
-          Are these codes stable across versions?
+</Accordion>
+
+<Accordion title="Are these codes stable across versions?">
 
 The codes documented above are stable. New codes get added (and that's a minor-version-compatible change); existing codes don't get renamed or repurposed without a major-version bump. If you write an exhaustive switch on `e.code`, fall through to a default branch — don't panic on unknown codes from a newer server.
+
+</Accordion>
+</AccordionGroup>
 
 ## Where to go next
 

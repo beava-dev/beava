@@ -9,9 +9,7 @@ Synchronous Python client for the beava feature server. Seven wire-mapped method
 
 Every interaction with a running beava server flows through a single `bv.App` instance. The constructor picks a transport from the URL scheme; from then on, the seven methods below are 1:1 wire calls.
 
-          signature
-
-```
+``` title="signature"
 bv.App(
     url: str | None = None,
     *,
@@ -28,33 +26,23 @@ Three transport modes, picked from the URL scheme:
 
 - None — embed mode. The SDK locates the beava binary on $PATH and spawns it on ephemeral ports for the lifetime of a with block.
 
+<Note>
 Embed mode requires a with block. The spawned binary is torn down on context exit. Calling any method on an embed-mode App outside with raises RuntimeError.
+</Note>
 
 ## Constructor parameters
 
-            url
-
-              str | None
-
+<ParamField path="url" type="str | None" default="None">
 Server URL. `http://...` / `https://...` for HTTP transport, `tcp://...` for the framed-TCP fast-path. `None` selects embed mode.
+</ParamField>
 
-default `None`
-
-            timeout
-
-              float
-
+<ParamField path="timeout" type="float" default="30.0">
 Per-request transport-level I/O timeout in seconds. Applies to both HTTP and TCP transports.
+</ParamField>
 
-default `30.0`
-
-            test_mode
-
-              bool
-
+<ParamField path="test_mode" type="bool" default="False">
 Embed-mode only. Sets `BEAVA_TEST_MODE=1` in the spawned binary's env so test-only opcodes (`OP_RESET`) are accepted. Setting `test_mode=True` against a network URL emits a `UserWarning` and is otherwise ignored — server-side configuration controls test mode for shared servers.
-
-default `False`
+</ParamField>
 
 An unrecognised URL scheme (anything other than `http` / `https` / `tcp` / `None`) raises `ValueError` at construction time.
 
@@ -63,8 +51,6 @@ An unrecognised URL scheme (anything other than `http` / `https` / `tcp` / `None
 Seven public methods. Each maps 1:1 to a wire opcode; the SDK does not batch, retry, or buffer on your behalf.
 
 ### register(*descriptors, force=False, dry_run=False)
-
-register(*descriptors: Any, force: bool = False, dry_run: bool = False) -> dict[str, Any]
 
 Register one or more event/table descriptors with the server. Hot-reloadable — the server picks up new pipelines without restarting; `registry_version` increments on each successful call.
 
@@ -80,9 +66,7 @@ Register one or more event/table descriptors with the server. Hot-reloadable —
 
 The parsed server response — a flat dict whose shape varies by request:
 
-          success body
-
-```
+```json title="success body"
 {
   "status": "ok",
   "registry_version": 1,
@@ -98,10 +82,7 @@ The parsed server response — a flat dict whose shape varies by request:
 
 ### Example
 
-          register.py
-          Copy
-
-```
+```python title="register.py"
 import beava as bv
 
 @bv.event
@@ -122,8 +103,6 @@ print(result["registry_version"])  # → 1
 
 ### push(event_name, fields)
 
-push(event_name: str, fields: dict[str, Any]) -> dict[str, Any]
-
 Push a single event to the server. Ack-on-write — the server returns a write-ahead-log offset and a registry-version stamp on every push.
 
 ### Args
@@ -134,9 +113,7 @@ Push a single event to the server. Ack-on-write — the server returns a write-a
 
 ### Returns
 
-          success body
-
-```
+```json title="success body"
 {
   "ack_lsn": 62,
   "idempotent_replay": false,
@@ -156,10 +133,7 @@ Push a single event to the server. Ack-on-write — the server returns a write-a
 
 ### Example
 
-          push.py
-          Copy
-
-```
+```python title="push.py"
 app.push("PageView", {
     "user_id": "alice",
     "path":    "/home",
@@ -168,12 +142,6 @@ app.push("PageView", {
 ```
 
 ### get(table, key=None, features=None)
-
-get(
-    table: str,
-    key: str | list[str | int | bool] | None = None,
-    features: list[str] | None = None,
-) -> dict[str, Any]
 
 Get a single feature row by entity key. Cold-start (no events for that key) returns `{}`, not an error.
 
@@ -189,27 +157,19 @@ Get a single feature row by entity key. Cold-start (no events for that key) retu
 
 A flat dict mapping feature name → value. Examples:
 
-            request
-
-```
+```json title="request"
 app.get("UserStats", "alice")
 ```
 
-            response
-
-```
+```json title="response"
 { "visits": 2 }
 ```
 
-            cold-start request
-
-```
+```json title="cold-start request"
 app.get("UserStats", "newuser")
 ```
 
-            response
-
-```
+```json title="response"
 {}
 ```
 
@@ -218,13 +178,6 @@ app.get("UserStats", "newuser")
 - RegistrationError with code="unknown_table" — table isn't registered.
 
 ### batch_get(requests)
-
-batch_get(
-    requests: list[
-        tuple[str, str | list[str | int | bool]]
-        | tuple[str, str | list[str | int | bool], list[str] | None]
-    ],
-) -> list[dict[str, Any]]
 
 Multi-key fetch in a single round-trip. Returns a list of rows in request order; cold-start per-entry is `{}`.
 
@@ -244,10 +197,7 @@ Multi-key fetch in a single round-trip. Returns a list of rows in request order;
 
 ### Example
 
-          batch_get.py
-          Copy
-
-```
+```python title="batch_get.py"
 rows = app.batch_get([
     ("UserStats", "alice"),
     ("UserStats", "bob", ["visits"]),
@@ -256,8 +206,6 @@ rows = app.batch_get([
 ```
 
 ### reset()
-
-reset() -> None
 
 Wipe all server state — every registered descriptor, every per-entity aggregate. **Test-mode-gated.** Use it in tests, never in production.
 
@@ -277,10 +225,7 @@ Wipe all server state — every registered descriptor, every per-entity aggregat
 
 ### Example
 
-          test_setup.py
-          Copy
-
-```
+```python title="test_setup.py"
 with bv.App(test_mode=True) as app:
     app.register(PageView, UserStats)
     # run a test ...
@@ -289,15 +234,11 @@ with bv.App(test_mode=True) as app:
 
 ### ping()
 
-ping() -> dict[str, Any]
-
 Cheap liveness probe on the data plane. Returns the current registry version — useful as a cache-key invalidation / schema-evolution signal on long-lived connections.
 
 ### Returns
 
-          success body
-
-```
+```json title="success body"
 {
   "pong": true,
   "registry_version": 1
@@ -309,8 +250,6 @@ Cheap liveness probe on the data plane. Returns the current registry version —
 - RegistrationError — non-200 from the server (defensively wrapped so callers don't deal with raw httpx exceptions).
 
 ### close()
-
-close() -> None
 
 Release the underlying transport (closes the HTTP connection pool, the TCP socket, or tears down the embed-mode subprocess). Idempotent — safe to call twice. Calling any wire method after `close()` raises `RuntimeError`.
 
@@ -324,18 +263,14 @@ You normally don't call this directly:
 
 Network mode (`http`, `tcp`) is flexible — you can use the `App` as a long-lived module-level singleton or as a context manager. Embed mode **requires** a context manager so the spawned binary is torn down on exit.
 
-            embed mode (with-required)
-
-```
+``` title="embed mode (with-required)"
 with bv.App() as app:
     app.register(PageView, UserStats)
     app.push("PageView", {...})
 # subprocess torn down here
 ```
 
-            network mode (either form)
-
-```
+``` title="network mode (either form)"
 app = bv.App("http://localhost:8080")
 app.register(PageView, UserStats)
 # ... use it for the lifetime of the process
@@ -346,21 +281,31 @@ Each embed-mode spawn allocates a unique tmpdir under `$TMPDIR/beava-embed---/` 
 
 ## Common questions
 
-          Is `App` thread-safe?
+<AccordionGroup>
+<Accordion title="Is App thread-safe?">
 
 The HTTP transport (httpx-backed) is thread-safe. The TCP transport is **not** — strict-FIFO at the protocol layer means one in-flight request per connection; sharing a TCP-mode `App` across threads will interleave frames and corrupt state. If you need TCP from multiple threads, give each thread its own `App`.
 
-          Does the SDK retry?
+</Accordion>
+
+<Accordion title="Does the SDK retry?">
 
 No. Each method is one wire call; transient transport errors propagate as `httpx`/socket exceptions. Retries belong in your application — beava's contract is that successful pushes are durable (WAL-acked), so you can safely re-push on connection loss.
 
-          What's the async story?
+</Accordion>
+
+<Accordion title="What's the async story?">
 
 `bv.App` is sync. v0 doesn't ship an async client — wrap calls in `asyncio.to_thread(...)` from your event loop, or open multiple `App` instances in worker threads (HTTP transport is thread-safe).
 
-          Can I use one `App` against two servers?
+</Accordion>
+
+<Accordion title="Can I use one App against two servers?">
 
 No — one transport per `App`. Construct two `App` instances if you need to talk to two servers. Their state is independent.
+
+</Accordion>
+</AccordionGroup>
 
 ## Where to go next
 

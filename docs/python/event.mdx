@@ -15,10 +15,7 @@ The decorator has two shapes:
 
 - Def form — @bv.event def BigClick(click: Click): .... The function body returns a chain expression; the decorator captures it as a stable, addressable derivation.
 
-          both forms
-          Copy
-
-```
+``` title="both forms"
 import beava as bv
 
 # Class form — declares a fresh event source.
@@ -33,16 +30,15 @@ def BigClick(click: Click):
     return click.filter(bv.col("page") == "/checkout")
 ```
 
+<Note>
 Processing-time only. The server stamps wall-clock time on every push. The decorator rejects an event_time class field and the event_time_field / tolerate_delay kwargs with TypeError at decorator time.
+</Note>
 
 ## Class form
 
 Apply `@bv.event` to a plain Python class. Each annotated attribute becomes a column in the wire schema; types are mapped `str → "str"`, `int → "i64"`, `float → "f64"`, `bool → "bool"`. Anything else is coerced to `"str"`.
 
-          class form
-          Copy
-
-```
+``` title="class form"
 @bv.event
 class Login:
     user_id:    str
@@ -54,9 +50,7 @@ The decorator returns the same class with chain methods attached as static metho
 
 When you pass `Login` to `app.register(...)`, it serializes to:
 
-          register node
-
-```
+``` title="register node"
 {
   "kind": "event",
   "name": "Login",
@@ -73,10 +67,7 @@ When you pass `Login` to `app.register(...)`, it serializes to:
 
 Once registered, push events by name:
 
-          push.sh
-          Copy
-
-```
+```bash title="push.sh"
 curl -X POST http://localhost:8080/push \
   -H "content-type: application/json" \
   -d '{"event": "Login", "data": {"user_id": "alice", "success": true, "latency_ms": 142}}'
@@ -86,10 +77,7 @@ curl -X POST http://localhost:8080/push \
 
 Apply `@bv.event` to a function that takes one or more decorated upstream events as parameters and returns a chain expression. The decorator captures the chain under the function's name, registering it as a derivation node on the wire.
 
-          def form
-          Copy
-
-```
+``` title="def form"
 @bv.event
 class Click:
     user_id: str
@@ -116,42 +104,23 @@ If you pass a raw chain expression (e.g. `Click.filter(...).named("X")`) to `app
 
 The decorator-factory shape `@bv.event(...)` accepts per-source knobs. They are stored on the `EventSource` and forwarded to the server at register time.
 
-            keep_events_for
-
-              str | None
-
+<ParamField path="keep_events_for" type="str | None" default="None">
 Per-event retention window. Events older than this are eligible for compaction out of the per-entity event log. Accepts duration strings (`"30d"`, `"1h"`, `"15m"`).
+</ParamField>
 
-default `None` (server-wide default applies)
-
-            cold_after
-
-              str | None
-
+<ParamField path="cold_after" type="str | None" default="None">
 Idle threshold after which an entity that hasn't received this event is considered cold and may be evicted from hot memory. Accepts the same duration strings as `keep_events_for`.
+</ParamField>
 
-default `None` (server-wide default applies)
-
-            dedupe_key
-
-              str | None
-
+<ParamField path="dedupe_key" type="str | None" default="None">
 Name of a field whose value uniquely identifies a logical event. Pushes carrying a previously-seen `dedupe_key` within `dedupe_window` return `"idempotent_replay": true` and do not mutate state.
+</ParamField>
 
-default `None` (no dedupe)
-
-            dedupe_window
-
-              str | None
-
+<ParamField path="dedupe_window" type="str | None" default="None">
 Lookback window over which `dedupe_key` values are remembered. Required when `dedupe_key` is set.
+</ParamField>
 
-default `None`
-
-          decorator-factory shape
-          Copy
-
-```
+``` title="decorator-factory shape"
 @bv.event(
     keep_events_for="30d",
     dedupe_key="id",
@@ -162,15 +131,15 @@ class Login:
     user_id: str
 ```
 
+<Note>
 Forbidden kwargs. event_time_field and tolerate_delay raise TypeError at decorator time — v0 has no event-time. A class field literally named event_time is also rejected.
+</Note>
 
 ## Wire shape
 
 At register time the SDK serializes each `@bv.event` descriptor into a JSON node and posts the array as `{"nodes": [...]}` to the server. The class form emits a node with `kind: "event"`; the def form emits `kind: "derivation"` with the upstream's name and the chain ops.
 
-            class form (event)
-
-```
+``` title="class form (event)"
 {
   "kind": "event",
   "name": "Click",
@@ -184,9 +153,7 @@ At register time the SDK serializes each `@bv.event` descriptor into a JSON node
 }
 ```
 
-            def form (derivation)
-
-```
+``` title="def form (derivation)"
 {
   "kind": "derivation",
   "name": "CheckoutClick",
@@ -203,21 +170,31 @@ The full envelope and per-field semantics are documented at [HTTP /register](/ht
 
 ## Common questions
 
-          Can I add fields after the event is registered?
+<AccordionGroup>
+<Accordion title="Can I add fields after the event is registered?">
 
 Yes. Re-decorate the class with the new annotation, call `app.register(MyEvent, force=True)`, and the server hot-swaps the schema; `registry_version` increments. Existing on-disk events keep their old schema — the server reconciles missing fields as `null` on read.
 
-          What happens if I push a field that isn't in the schema?
+</Accordion>
+
+<Accordion title="What happens if I push a field that isn't in the schema?">
 
 The server rejects the push with `code="schema_mismatch"`. There is no implicit schema-on-write; every field on a push has to be declared on the event. The SDK surfaces this as `RegistrationError` with the structured error body intact.
 
-          Is `dedupe_key` exact-match?
+</Accordion>
+
+<Accordion title="Is dedupe_key exact-match?">
 
 Yes — exact byte-for-byte equality on the value of the named field, scoped to the `dedupe_window`. There's no fuzzy match, no normalization, and no canonicalization. If you need normalized dedupe (e.g. lowercase emails), normalize the field upstream of the push and dedupe on the normalized value.
 
-          Do I need `@bv.event def` if I already have a derivation chained inline inside a `@bv.table`?
+</Accordion>
+
+<Accordion title="Do I need @bv.event def if I already have a derivation chained inline inside a @bv.table?">
 
 Not always. Inline chains inside the `@bv.table` body work for one-shot pipelines because the SDK flattens the chain to the root event source at register time. Use `@bv.event def` when you want a stable, addressable name — e.g. so two tables can share the same upstream derivation, or so you can push events by that name from the client.
+
+</Accordion>
+</AccordionGroup>
 
 ## Where to go next
 
