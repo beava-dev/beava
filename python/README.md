@@ -8,7 +8,7 @@ Python SDK for [Beava](https://github.com/beava-dev/beava), the single-binary re
 curl -fsSL https://raw.githubusercontent.com/beava-dev/beava/main/scripts/install.sh | sh
 ```
 
-The installer pulls the platform wheel from the latest GitHub Release and `pip install --user`'s it. The wheel ships the SDK **and** the Rust `beava` server binary (v0.4.0+, polars-style); after install, the `beava` shell command is on `PATH` and the SDK can run against it directly — including embed mode (`bv.App()` with no URL). Pin a specific version with `BEAVA_VERSION=v0.4.0 curl ... | sh`.
+The installer pulls the platform wheel from the latest GitHub Release and `pip install --user`'s it. The wheel ships the SDK **and** the Rust `beava` server binary (v0.0.0+, polars-style); after install, the `beava` shell command is on `PATH` and the SDK can run against it directly — including embed mode (`bv.App()` with no URL). Pin a specific version with `BEAVA_VERSION=v0.0.0 curl ... | sh`.
 
 If you'd rather run the server in a container, Docker is the alternative:
 

@@ -30,7 +30,7 @@ beava --memory-only
 # → TCP listen    : 127.0.0.1:8081 (enabled=true)
 ```
 
-The installer detects your platform (`uname -s/-m`), pulls the matching wheel from the latest release on `beava-dev/beava`, and `pip install --user`'s it. `--memory-only` skips the WAL for a kick-the-tyres run — drop it for production (state lands under `./.beava/` by default). Pin a specific version with `BEAVA_VERSION=v0.4.0 curl ... | sh`.
+The installer detects your platform (`uname -s/-m`), pulls the matching wheel from the latest release on `beava-dev/beava`, and `pip install --user`'s it. `--memory-only` skips the WAL for a kick-the-tyres run — drop it for production (state lands under `./.beava/` by default). Pin a specific version with `BEAVA_VERSION=v0.0.0 curl ... | sh`.
 
 Port `8080` is the HTTP data plane (push, get, batch_get, register, ping). Port `8081` is the framed-TCP fast-path (sub-millisecond JSON). Admin endpoints (`/health`, `/ready`, `/metrics`, `/registry`) live on a separate sidecar port that you opt into via the `--http-addr` / `--config` flags.
 

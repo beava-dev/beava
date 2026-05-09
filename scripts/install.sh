@@ -62,7 +62,7 @@ fi
 
 # ─── locate wheel asset ───────────────────────────────────────────────
 # Resolve "latest" through the API. For an explicit version
-# (BEAVA_VERSION=v0.4.0), hit the tagged-release endpoint instead.
+# (BEAVA_VERSION=v0.0.0), hit the tagged-release endpoint instead.
 if [ "$RELEASE_TAG" = "latest" ]; then
   api="https://api.github.com/repos/${REPO}/releases/latest"
 else

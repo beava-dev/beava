@@ -62,7 +62,7 @@
 
             <h2 id="install">Install beava</h2>
             <Code lang="bash">{`curl -fsSL https://raw.githubusercontent.com/beava-dev/beava/main/scripts/install.sh | sh`}</Code>
-            <p>The installer detects your platform and pulls the matching wheel from the latest GitHub Release. The wheel ships the SDK <em>and</em> the Rust <code>beava</code> server binary together. Pin a version with <code>BEAVA_VERSION=v0.4.0 curl ... | sh</code>. PyPI publish lands at v0.0.x — <code>pip install beava</code> will work then; the import name is <code>beava</code> either way.</p>
+            <p>The installer detects your platform and pulls the matching wheel from the latest GitHub Release. The wheel ships the SDK <em>and</em> the Rust <code>beava</code> server binary together. Pin a version with <code>BEAVA_VERSION=v0.0.0 curl ... | sh</code>. PyPI publish lands at v0.0.x — <code>pip install beava</code> will work then; the import name is <code>beava</code> either way.</p>
             <p>Start a local beava server:</p>
             <Code lang="bash">{`beava`}</Code>
             <p>beava is designed to start small. For local development, a single beava process should be enough to define pipelines, push events, and query features.</p>

@@ -1,6 +1,6 @@
 # Build platform wheels for `pip install beava` and publish to PyPI on tag.
 #
-# From v0.4.0, the wheel ships the Rust `beava` server binary (maturin
+# From v0.0.0, the wheel ships the Rust `beava` server binary (maturin
 # `bindings = "bin"`). One wheel per (os, arch) combo + one sdist. We use
 # PyO3/maturin-action because it's the standard pattern for maturin
 # projects (polars / ruff / uv) — handles manylinux + cross-compilation

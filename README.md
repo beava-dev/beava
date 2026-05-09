@@ -26,7 +26,7 @@ Think **Redis for stateful streaming features**, with 50+ purpose-built aggregat
 ```bash
 # curl|sh fetches the platform wheel from the latest GitHub Release
 # (~14 MB, ships SDK + Rust server binary together; polars / ruff / uv pattern).
-# `beava` shell command lands on PATH. Pin with BEAVA_VERSION=v0.4.0.
+# `beava` shell command lands on PATH. Pin with BEAVA_VERSION=v0.0.0.
 curl -fsSL https://raw.githubusercontent.com/beava-dev/beava/main/scripts/install.sh | sh
 beava --data-dir ./.beava/
 
