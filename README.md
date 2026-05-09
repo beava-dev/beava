@@ -46,6 +46,13 @@ Then start the server:
 beava --data-dir ./.beava/
 ```
 
+Or kick the tyres without writing anything to disk:
+
+```bash
+beava quickstart   # 4-step in-process demo, ~10s, drops a beava_quickstart.py file
+beava --memory-only   # ephemeral server, no WAL, no recovery
+```
+
 ```python
 import beava as bv
 
@@ -61,7 +68,7 @@ def UserActivity(e: Click):
         unique_pages_1h=bv.n_unique("page", window="1h"),
     )
 
-app = bv.App(url="http://localhost:8080")
+app = bv.App(url="http://localhost:8080")    # or bv.App() to spawn an embed-mode server
 app.register(Click, UserActivity)
 
 app.push("Click", {"user_id": "alice", "page": "/home"})
@@ -131,32 +138,33 @@ Unknown opcodes return `error_response` with code `unknown_op` and the connectio
 ## Server CLI
 
 ```text
-beava [OPTIONS]
+beava [OPTIONS] [SUBCOMMAND]
 
   -c, --config <CONFIG>     YAML config file (full surface; optional)
       --http-addr <ADDR>    default: 127.0.0.1:8080
       --tcp-addr <ADDR>     default: 127.0.0.1:8081
-      --data-dir <PATH>     default: ./beava-wal + ./beava-snapshots
-                            (with --data-dir <DIR>, writes to <DIR>/wal
-                            and <DIR>/snapshots)
+      --data-dir <PATH>     default: ./.beava/  (WAL → <DIR>/wal,
+                                                 snapshots → <DIR>/snapshots)
       --memory-only         ephemeral; no WAL/snapshot
       --test-mode           enable POST /reset and OP_RESET
   -h, --help
   -V, --version
+
+subcommands
+  quickstart [--no-file]    in-process 4-step first-touch demo
 
 env vars
   BEAVA_LOG_LEVEL=debug|info|warn     default: info
   BEAVA_TEST_MODE=1                   alias for --test-mode
   BEAVA_WAL_DIR / BEAVA_SNAPSHOT_DIR  per-dir overrides (use --data-dir
                                       for a single-root convenience flag)
-  BEAVA_LISTEN_ADDR / BEAVA_TCP_PORT  per-listener overrides
-                                      (use --http-addr / --tcp-addr
-                                      for the canonical CLI form)
+  BEAVA_LISTEN_ADDR                   alias for --http-addr
+  BEAVA_TCP_HOST / BEAVA_TCP_PORT     per-listener overrides
+                                      (use --tcp-addr for the canonical form)
 
-WAL fsync interval and snapshot interval ride along inside YAML / env
-(`BEAVA_WAL_FSYNC_INTERVAL_MS`, snapshot interval is plumbed via
-`ServerV18Config`); promotion to first-class CLI flags is a v0.0.x
-followup. Most operators don't tune these.
+WAL fsync interval and snapshot interval ride along inside YAML config;
+promotion to first-class CLI flags (`--wal-flush-ms`, `--snapshot-interval-mins`)
+is a v0.0.x followup. Most operators don't tune these.
 ```
 
 No TLS in v0 — terminate at nginx, Envoy, or Cloudflare if you need it. No auth in v0 — bind to a private network.
