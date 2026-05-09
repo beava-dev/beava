@@ -23,15 +23,27 @@ Think **Redis for stateful streaming features**, with 50+ purpose-built aggregat
 
 ## 60-second quickstart
 
-```bash
-# curl|sh fetches the platform wheel from the latest GitHub Release
-# (~14 MB, ships SDK + Rust server binary together; polars / ruff / uv pattern).
-# `beava` shell command lands on PATH. Pin with BEAVA_VERSION=v0.0.0.
-curl -fsSL https://raw.githubusercontent.com/beava-dev/beava/main/scripts/install.sh | sh
-beava --data-dir ./.beava/
+Pick whichever install path matches your box. All three deliver the same `beava` binary.
 
-# Or run the server in Docker (no Python required)
+```bash
+# curl  — fetches the platform wheel from the latest GitHub Release
+#         (~14 MB, ships SDK + Rust server binary together;
+#          polars / ruff / uv pattern). `beava` lands on PATH.
+#          Pin a version with BEAVA_VERSION=v0.0.0.
+curl -fsSL https://raw.githubusercontent.com/beava-dev/beava/main/scripts/install.sh \
+  | sh
+
+# docker — zero deps on the host
 docker run -p 8080:8080 -p 8081:8081 beavadev/beava:edge
+
+# cargo  — from source, for Rust-toolchain users
+cargo install --git https://github.com/beava-dev/beava beava-server
+```
+
+Then start the server:
+
+```bash
+beava --data-dir ./.beava/
 ```
 
 ```python

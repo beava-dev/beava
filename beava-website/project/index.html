@@ -23,56 +23,62 @@
   <script type="text/babel">
     // beava.dev homepage — Hero · PipelineShowcase · Pillars · FinalCTA
 
-    // LiveQueriesPanel — chat7 (2026-05-09) hero redesign, refit 2026-05-09pm
-    // to show both sides of the loop in each card:
+    // LiveQueriesPanel — chat7 (2026-05-09) hero, refit to query the REAL
+    // SiteMetrics pipeline that backs this site. Polls /api/get every
+    // 1.5s; values you see are the live row from the production beava
+    // instance.
     //
-    //   Top row:    app.get(table, key)        ← the query the client makes
-    //   Bottom row: → bv.<op>(...) = value     ← the operator that computes it,
-    //                                            with the live value appended
+    // Each card shows both sides of the loop:
     //
-    // This anchors WHY the displayed value is what it is — `74` isn't magic,
-    // it's the count over 24h that the table was registered with. The same
-    // bv.* operators appear at register-time in the 13-line Python pipeline
-    // below; the right column makes the link visible.
+    //   Top row:    app.get("SiteMetrics")["<feature>"]   ← what a client types
+    //   Bottom row: → bv.<op>(...) = <live value>          ← the operator that
+    //                                                        defined the feature,
+    //                                                        plus its current value
     //
-    // Tables shown are illustrative; the live SiteMetrics pipeline that
-    // backs this site is what PipelineOutput below polls against.
-    const seedQueries = () => ([
+    // The three features map 1:1 to register_pipeline.py:
+    //
+    //   page_views_24h  ← bv.count(window="24h")
+    //   median_dwell_1h ← bv.quantile("dwell_ms", q=0.5, window="1h")
+    //   top_page_1h     ← bv.top_k("path", k=1, window="1h")
+    //
+    // PipelineOutput below polls the same endpoint independently (different
+    // cadence) — fault-tolerance: one panel surviving doesn't block the
+    // other. Cold-start fallback values match PipelineOutput's SEED.
+    const SITE_METRICS_SEED = {
+      page_views_24h: 14207,
+      median_dwell_1h: 6250.0,
+      top_page_1h: [{ value: '/', count: 412 }],
+    };
+
+    const QUERY_ROWS = [
       {
-        id: 'pv',
-        query: { fn: 'app.get', args: [{ v: '"UserActivity"' }, { v: '"u_8412"' }] },
+        id: 'page_views_24h',
+        query: { fn: 'app.get', args: [{ v: '"SiteMetrics"' }], index: 'page_views_24h' },
         op:    { fn: 'bv.count', args: [{ k: 'window', v: '"24h"' }] },
-        value: 74,
-        fmt: (n) => Math.round(n).toLocaleString('en-US'),
-        drift: () => 1 + Math.floor(Math.random() * 3),
+        fmt: (n) => Math.round(n || 0).toLocaleString('en-US'),
+        pick: (d) => d.page_views_24h ?? 0,
       },
       {
-        id: 'mt',
-        query: { fn: 'app.get',     args: [{ v: '"PathStats"' }, { v: '"/"' }] },
+        id: 'median_dwell_1h',
+        query: { fn: 'app.get', args: [{ v: '"SiteMetrics"' }], index: 'median_dwell_1h' },
         op:    { fn: 'bv.quantile', args: [{ v: '"dwell_ms"' }, { k: 'q', v: '0.5' }, { k: 'window', v: '"1h"' }] },
-        value: 1.2,
-        fmt: (n) => `${n.toFixed(1)}s`,
-        drift: () => (Math.random() - 0.5) * 0.18,
+        fmt: (ms) => `${((ms || 0) / 1000).toFixed(1)}s`,
+        pick: (d) => d.median_dwell_1h ?? 0,
       },
       {
-        id: 'tp',
-        // Global table per ADR-003: no key, single positional arg to app.get.
-        query: { fn: 'app.get',  args: [{ v: '"SiteMetrics"' }] },
+        id: 'top_page_1h',
+        query: { fn: 'app.get', args: [{ v: '"SiteMetrics"' }], index: 'top_page_1h' },
         op:    { fn: 'bv.top_k', args: [{ v: '"path"' }, { k: 'k', v: '1' }, { k: 'window', v: '"1h"' }] },
-        value: { path: '"/"', count: 382 },
-        rotateThru: [
-          { path: '"/"',                       count: 382 },
-          { path: '"/docs"',                   count: 264 },
-          { path: '"/learn/chapter-1"',        count: 198 },
-          { path: '"/docs/rolling-counters"',  count: 141 },
-        ],
-        fmt: (v) => `${v.path} · ${v.count.toLocaleString('en-US')}`,
+        fmt: (top) => top ? `${JSON.stringify(top.value)} · ${(top.count || 0).toLocaleString('en-US')}` : '—',
+        pick: (d) => Array.isArray(d.top_page_1h) ? d.top_page_1h[0] : null,
       },
-    ]);
+    ];
 
     // Renders `fn(arg, key=val, ...)` with syntax-coloured tokens. Args
     // shaped `{ v }` render positional; `{ k, v }` render as kwargs.
-    const Signature = ({ fn, args }) => (
+    // Optional `index` appends `["<index>"]` after the closing paren —
+    // for queries that read one feature out of a row dict.
+    const Signature = ({ fn, args, index }) => (
       <React.Fragment>
         <span style={{ color: 'var(--code-fn)' }}>{fn}</span>
         <span style={{ color: 'var(--fg3)' }}>(</span>
@@ -89,6 +95,13 @@
           </React.Fragment>
         ))}
         <span style={{ color: 'var(--fg3)' }}>)</span>
+        {index && (
+          <React.Fragment>
+            <span style={{ color: 'var(--fg3)' }}>[</span>
+            <span style={{ color: 'var(--code-string)' }}>"{index}"</span>
+            <span style={{ color: 'var(--fg3)' }}>]</span>
+          </React.Fragment>
+        )}
       </React.Fragment>
     );
 
@@ -139,34 +152,44 @@
     };
 
     const LiveQueriesPanel = () => {
-      const [rows, setRows] = React.useState(seedQueries);
+      const [data, setData] = React.useState(SITE_METRICS_SEED);
       const [pulseId, setPulseId] = React.useState(null);
+      const [isLive, setIsLive] = React.useState(false);
+
       React.useEffect(() => {
-        let i = 0;
-        const id = setInterval(() => {
-          setRows(prev => {
-            const idx = i % prev.length;
-            return prev.map((r, j) => {
-              if (j !== idx) return r;
-              if (r.id === 'pv') return { ...r, value: r.value + r.drift() };
-              if (r.id === 'mt') return { ...r, value: Math.max(0.4, r.value + r.drift()) };
-              if (r.id === 'tp') {
-                const list = r.rotateThru;
-                const cur = list.findIndex(x => x.path === r.value.path);
-                return { ...r, value: list[(cur + 1) % list.length] };
-              }
-              return r;
+        let cancelled = false;
+        let prev = SITE_METRICS_SEED;
+        let pulseTimer = null;
+        const refresh = async () => {
+          try {
+            const r = await fetch('/api/get', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ table: 'SiteMetrics', key: '' }),
             });
-          });
-          setPulseId(prev => {
-            const tickRow = (i < 0 ? 0 : i) % seedQueries().length;
-            return seedQueries()[tickRow]?.id ?? null;
-          });
-          i++;
-          setTimeout(() => setPulseId(null), 700);
-        }, 2400);
-        return () => clearInterval(id);
+            if (cancelled || !r.ok) return;
+            const j = await r.json();
+            if (!j || typeof j !== 'object') return;
+            // Diff against previous to find the first changed feature; pulse it.
+            for (const r of QUERY_ROWS) {
+              if (JSON.stringify(r.pick(prev)) !== JSON.stringify(r.pick(j))) {
+                setPulseId(r.id);
+                if (pulseTimer) clearTimeout(pulseTimer);
+                pulseTimer = setTimeout(() => setPulseId(null), 700);
+                break;
+              }
+            }
+            prev = j;
+            setData(j);
+            setIsLive(true);
+          } catch (_) { /* keep previous on transient failure */ }
+        };
+        refresh();
+        const id = setInterval(refresh, 1500);
+        return () => { cancelled = true; clearInterval(id); if (pulseTimer) clearTimeout(pulseTimer); };
       }, []);
+
+      const rows = QUERY_ROWS.map(r => ({ ...r, value: r.pick(data) }));
       return (
         <div style={{ position: 'relative' }}>
           <div style={{
@@ -181,11 +204,12 @@
               }}>Live feature queries</div>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 <span style={{
-                  width: 7, height: 7, borderRadius: 999, background: 'var(--beava-success)',
-                  boxShadow: '0 0 0 3px rgba(74,122,58,0.20)',
-                  animation: 'beava-pulse 2s cubic-bezier(0.65,0,0.35,1) infinite',
+                  width: 7, height: 7, borderRadius: 999,
+                  background: isLive ? 'var(--beava-success)' : 'var(--border-strong)',
+                  boxShadow: isLive ? '0 0 0 3px rgba(74,122,58,0.20)' : 'none',
+                  animation: isLive ? 'beava-pulse 2s cubic-bezier(0.65,0,0.35,1) infinite' : 'none',
                 }}/>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg3)' }}>auto-refresh</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg3)' }}>{isLive ? 'live' : 'seed'}</span>
               </span>
             </div>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg3)' }}>GET /q/...</div>
@@ -354,7 +378,7 @@
               lineHeight: 1.1, letterSpacing: '-0.02em',
               color: 'var(--fg1)', margin: '0 0 28px',
               maxWidth: 620, textWrap: 'balance',
-            }}>Real-time user features <em style={{ color: 'var(--accent)', fontStyle: 'italic' }}>without heavy streaming infra.</em></h1>
+            }}>Real-time user features <em style={{ color: 'var(--accent)', fontStyle: 'italic' }}>without streaming infra.</em></h1>
             <p style={{
               fontFamily: 'var(--font-sans)', fontWeight: 400,
               fontSize: 17.5, lineHeight: 1.55,
