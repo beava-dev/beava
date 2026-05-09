@@ -127,6 +127,137 @@ impl TopKState {
             TopKState::Hybrid { cms, heap, .. } => cms.estimated_bytes() + heap.estimated_bytes(),
         }
     }
+
+    /// Promote an Exact-mode state to Hybrid in place (no-op if already
+    /// Hybrid). Same logic as the inline promotion inside `insert`,
+    /// extracted so `merge` can reuse it.
+    fn promote_to_hybrid(&mut self) {
+        if matches!(self, TopKState::Hybrid { .. }) {
+            return;
+        }
+        let TopKState::Exact {
+            counts,
+            k,
+            hybrid_width,
+            hybrid_depth,
+            ..
+        } = std::mem::replace(
+            self,
+            TopKState::Exact {
+                counts: BTreeMap::new(),
+                k: 1,
+                threshold: 2,
+                hybrid_width: 2048,
+                hybrid_depth: 4,
+            },
+        )
+        else {
+            unreachable!("matches!(self, Hybrid) returned false above")
+        };
+        let mut cms = CountMinSketch::new(hybrid_width, hybrid_depth);
+        let mut heap = TopKHeap::new(k);
+        for (val, count) in counts.iter() {
+            cms.update(val.hash64(), *count as i64);
+        }
+        for (val, _) in counts.iter() {
+            let est = cms.estimate(val.hash64()).max(0) as u64;
+            heap.insert_or_bump(val.clone(), est);
+        }
+        *self = TopKState::Hybrid { cms, heap, k };
+    }
+
+    /// Merge `other` into `self` so `self.top()` reflects the union of
+    /// counts from both states.
+    ///
+    /// Used by the windowed-aggregation query path to combine per-bucket
+    /// states across active buckets — without this, the windowed top_k
+    /// query returns only the latest bucket's content (the prod bug
+    /// observed on beava.dev's `top_page_1h` resetting every ~56s).
+    ///
+    /// Mode dispatch:
+    /// * Exact + Exact: sum BTreeMap counts; promote to Hybrid if combined
+    ///   distinct count exceeds the threshold.
+    /// * Hybrid + Exact: fold other's counts into self's CMS, then refresh
+    ///   the heap with the new estimates.
+    /// * Exact + Hybrid: promote self to Hybrid, then recurse.
+    /// * Hybrid + Hybrid: cell-wise CMS merge, then refresh the heap with
+    ///   the combined values from both heaps reading the merged CMS.
+    pub fn merge(&mut self, other: &TopKState) {
+        // Exact + Hybrid: promote self up to Hybrid first, then continue.
+        if matches!(self, TopKState::Exact { .. }) && matches!(other, TopKState::Hybrid { .. }) {
+            self.promote_to_hybrid();
+        }
+
+        match (&mut *self, other) {
+            (TopKState::Exact { counts: s, .. }, TopKState::Exact { counts: o, .. }) => {
+                for (v, n) in o.iter() {
+                    *s.entry(v.clone()).or_insert(0) += *n;
+                }
+            }
+            (
+                TopKState::Hybrid {
+                    cms: s_cms,
+                    heap: s_heap,
+                    ..
+                },
+                TopKState::Exact { counts: o, .. },
+            ) => {
+                for (v, n) in o.iter() {
+                    let h = v.hash64();
+                    s_cms.update(h, *n as i64);
+                }
+                // Heap entries' counts may now under-report; refresh with
+                // post-update estimates and add other's values.
+                let self_vals: Vec<TopKValue> = s_heap.top().into_iter().map(|(v, _)| v).collect();
+                for v in self_vals {
+                    let est = s_cms.estimate(v.hash64()).max(0) as u64;
+                    s_heap.insert_or_bump(v, est);
+                }
+                for (v, _) in o.iter() {
+                    let est = s_cms.estimate(v.hash64()).max(0) as u64;
+                    s_heap.insert_or_bump(v.clone(), est);
+                }
+            }
+            (
+                TopKState::Hybrid {
+                    cms: s_cms,
+                    heap: s_heap,
+                    ..
+                },
+                TopKState::Hybrid {
+                    cms: o_cms,
+                    heap: o_heap,
+                    ..
+                },
+            ) => {
+                s_cms.merge(o_cms);
+                let self_vals: Vec<TopKValue> = s_heap.top().into_iter().map(|(v, _)| v).collect();
+                for v in self_vals {
+                    let est = s_cms.estimate(v.hash64()).max(0) as u64;
+                    s_heap.insert_or_bump(v, est);
+                }
+                for (v, _) in o_heap.top() {
+                    let est = s_cms.estimate(v.hash64()).max(0) as u64;
+                    s_heap.insert_or_bump(v, est);
+                }
+            }
+            // (Exact, Hybrid) was handled by the promote-then-fall-through
+            // branch above; this arm is unreachable in practice.
+            (TopKState::Exact { .. }, TopKState::Hybrid { .. }) => {
+                unreachable!("Exact+Hybrid should have been promoted before the match")
+            }
+        }
+
+        // Post-merge promotion: if we're still Exact and the combined
+        // distinct count crossed the threshold, promote.
+        let need_promote = matches!(
+            self,
+            TopKState::Exact { counts, threshold, .. } if counts.len() > *threshold
+        );
+        if need_promote {
+            self.promote_to_hybrid();
+        }
+    }
 }
 
 #[cfg(test)]

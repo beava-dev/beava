@@ -180,6 +180,22 @@ impl CountMinSketch {
     pub fn estimated_bytes(&self) -> usize {
         std::mem::size_of::<Self>() + self.counters.capacity() * std::mem::size_of::<i64>()
     }
+
+    /// Cell-wise merge of `other` into `self`. Both sketches must share
+    /// the exact (width, depth) configuration — this is enforced because
+    /// merging across different shapes would be meaningless (different
+    /// hash columns).
+    ///
+    /// Used by the windowed-aggregation query path to combine per-bucket
+    /// CMS instances when answering a top_k over a merged window.
+    pub fn merge(&mut self, other: &CountMinSketch) {
+        assert_eq!(self.width, other.width, "CMS width mismatch in merge");
+        assert_eq!(self.depth, other.depth, "CMS depth mismatch in merge");
+        for (s, o) in self.counters.iter_mut().zip(other.counters.iter()) {
+            *s = s.saturating_add(*o).max(0);
+        }
+        self.total = self.total.saturating_add(other.total);
+    }
 }
 
 // ======================== TopKHeap ========================

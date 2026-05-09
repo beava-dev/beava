@@ -438,56 +438,86 @@ impl WindowedOp {
                 }
             }
             AggKind::CountDistinct => {
-                // Pick most recently-active bucket within window (v0 simplification —
-                // future work: merge across buckets via Hll::merge for stable HLL union).
-                let mut best: Option<&AggOp> = None;
-                let mut best_epoch = i64::MIN;
+                // Merge CountDistinctState across active buckets so the
+                // distinct count reflects the full window. The legacy
+                // "pick latest bucket" pattern caused the displayed value
+                // to drop on every bucket rollover (~ window_ms / 64
+                // cadence).
+                let mut combined: Option<crate::sketches::count_distinct::CountDistinctState> =
+                    None;
                 for (epoch, op) in self.buckets.iter() {
                     if !active(*epoch) {
                         continue;
                     }
-                    if *epoch > best_epoch {
-                        best_epoch = *epoch;
-                        best = Some(op.as_ref());
+                    if let AggOp::CountDistinct(s) = op.as_ref() {
+                        match &mut combined {
+                            None => combined = Some(s.inner.clone()),
+                            Some(c) => c.merge(&s.inner),
+                        }
                     }
                 }
-                match best {
-                    Some(AggOp::CountDistinct(s)) => s.query(),
-                    _ => Value::I64(0),
+                match combined {
+                    Some(c) => Value::I64(c.estimate() as i64),
+                    None => Value::I64(0),
                 }
             }
             AggKind::Percentile => {
-                let mut best: Option<&AggOp> = None;
-                let mut best_epoch = i64::MIN;
+                // Merge PercentileState across active buckets so the
+                // quantile reflects the full window, not just the latest
+                // bucket (root cause of beava.dev's `median_dwell_1h`
+                // bouncing every ~56s on a 1h window).
+                let mut combined: Option<crate::sketches::percentile::PercentileState> = None;
+                let mut q: f64 = 0.5;
                 for (epoch, op) in self.buckets.iter() {
                     if !active(*epoch) {
                         continue;
                     }
-                    if *epoch > best_epoch {
-                        best_epoch = *epoch;
-                        best = Some(op.as_ref());
+                    if let AggOp::Percentile(s) = op.as_ref() {
+                        q = s.q;
+                        match &mut combined {
+                            None => combined = Some(s.inner.clone()),
+                            Some(c) => c.merge(&s.inner),
+                        }
                     }
                 }
-                match best {
-                    Some(AggOp::Percentile(s)) => s.query(),
-                    _ => Value::Null,
+                match combined {
+                    Some(c) => match c.quantile(q) {
+                        Some(v) => Value::F64(v),
+                        None => Value::Null,
+                    },
+                    None => Value::Null,
                 }
             }
             AggKind::TopK => {
-                let mut best: Option<&AggOp> = None;
-                let mut best_epoch = i64::MIN;
+                // Merge top_k state across active buckets so the result
+                // reflects the full window. Without this, the displayed
+                // top-1 reset every bucket rollover (~window_ms / 64),
+                // visible as the prod beava.dev `top_page_1h` count
+                // dropping every ~56s on a 1h window.
+                let mut combined: Option<crate::sketches::top_k::TopKState> = None;
                 for (epoch, op) in self.buckets.iter() {
                     if !active(*epoch) {
                         continue;
                     }
-                    if *epoch > best_epoch {
-                        best_epoch = *epoch;
-                        best = Some(op.as_ref());
+                    if let AggOp::TopK(s) = op.as_ref() {
+                        match &mut combined {
+                            None => combined = Some(s.inner.clone()),
+                            Some(c) => c.merge(&s.inner),
+                        }
                     }
                 }
-                match best {
-                    Some(AggOp::TopK(s)) => s.query(),
-                    _ => Value::Json(serde_json::Value::Array(vec![])),
+                match combined {
+                    Some(c) => {
+                        let entries: Vec<serde_json::Value> = c
+                            .top()
+                            .into_iter()
+                            .map(|(v, count)| {
+                                serde_json::json!({"value": v.to_json(), "count": count})
+                            })
+                            .collect();
+                        Value::Json(serde_json::Value::Array(entries))
+                    }
+                    None => Value::Json(serde_json::Value::Array(vec![])),
                 }
             }
             AggKind::Entropy => {
@@ -927,7 +957,14 @@ mod tests {
                 ..Default::default()
             },
         );
-        for (t, v) in [(0_i64, 1.0_f64), (0, 2.0), (0, 3.0), (10, 100.0), (10, 100.0), (10, 100.0)] {
+        for (t, v) in [
+            (0_i64, 1.0_f64),
+            (0, 2.0),
+            (0, 3.0),
+            (10, 100.0),
+            (10, 100.0),
+            (10, 100.0),
+        ] {
             let row = Row::new().with_field("dwell_ms", Value::F64(v));
             op.update(&row, t, Some("dwell_ms"), true);
         }

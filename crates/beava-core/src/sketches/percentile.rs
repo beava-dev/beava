@@ -99,6 +99,70 @@ impl PercentileState {
             PercentileState::Sketch { sketch } => sketch.estimated_bytes(),
         }
     }
+
+    /// Promote an Exact-mode state to Sketch in place. No-op if already a
+    /// Sketch.
+    fn promote_to_sketch(&mut self) {
+        if matches!(self, PercentileState::Sketch { .. }) {
+            return;
+        }
+        if let PercentileState::Exact { values, alpha0, .. } = self {
+            let mut sketch = UDDSketch::new(*alpha0, DEFAULT_MAX_BUCKETS);
+            for v in values.iter() {
+                sketch.insert(*v);
+            }
+            *self = PercentileState::Sketch { sketch };
+        }
+    }
+
+    /// Merge `other` into `self` so `self.quantile(q)` reflects the union
+    /// of values from both states. Used by the windowed-aggregation query
+    /// path so a windowed `quantile()` aggregates across all active
+    /// buckets instead of returning only the latest one's quantile.
+    pub fn merge(&mut self, other: &PercentileState) {
+        // If either side is sketch-mode, promote both to sketch and merge
+        // via UDDSketch::merge. Otherwise (Exact + Exact), append values
+        // and let any over-threshold accumulation promote at the end.
+        if matches!(other, PercentileState::Sketch { .. }) {
+            self.promote_to_sketch();
+        }
+
+        match (&mut *self, other) {
+            (
+                PercentileState::Exact { values: s, .. },
+                PercentileState::Exact { values: o, .. },
+            ) => {
+                s.extend(o.iter().copied());
+            }
+            (
+                PercentileState::Sketch { sketch: s_sk },
+                PercentileState::Sketch { sketch: o_sk },
+            ) => {
+                s_sk.merge(o_sk);
+            }
+            (
+                PercentileState::Sketch { sketch: s_sk },
+                PercentileState::Exact { values: o, .. },
+            ) => {
+                for v in o.iter() {
+                    s_sk.insert(*v);
+                }
+            }
+            (PercentileState::Exact { .. }, PercentileState::Sketch { .. }) => {
+                unreachable!("promote_to_sketch above ensures self is Sketch when other is Sketch")
+            }
+        }
+
+        // Post-merge: promote if Exact accumulated past threshold.
+        let need_promote = matches!(
+            self,
+            PercentileState::Exact { values, threshold, .. }
+                if values.len() > *threshold
+        );
+        if need_promote {
+            self.promote_to_sketch();
+        }
+    }
 }
 
 #[cfg(test)]

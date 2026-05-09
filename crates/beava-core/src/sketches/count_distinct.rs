@@ -153,6 +153,76 @@ impl CountDistinctState {
             CountDistinctState::Hll { sketch } => sketch.estimated_bytes(),
         }
     }
+
+    /// Promote `self` to `Hll` mode in place. No-op if already Hll.
+    fn promote_to_hll(&mut self) {
+        match self {
+            CountDistinctState::Hll { .. } => {}
+            CountDistinctState::ExactArray { values } => {
+                let mut hll = Hll::new();
+                for &h in values.iter() {
+                    hll.add_hash(h);
+                }
+                *self = CountDistinctState::Hll { sketch: hll };
+            }
+            CountDistinctState::HashSet { hashes } => {
+                let mut hll = Hll::new();
+                for &h in hashes.iter() {
+                    hll.add_hash(h);
+                }
+                *self = CountDistinctState::Hll { sketch: hll };
+            }
+        }
+    }
+
+    /// Merge `other` into `self` so `self.estimate()` reflects the
+    /// distinct-count of the union. Used by the windowed-aggregation
+    /// query path so a windowed `count_distinct` aggregates across all
+    /// active buckets instead of returning the latest one's estimate.
+    pub fn merge(&mut self, other: &CountDistinctState) {
+        // If either side is HLL, promote both to HLL and use Hll::merge —
+        // it's the only mode that doesn't expose per-element hashes
+        // (the sketch is lossy by design).
+        if matches!(other, CountDistinctState::Hll { .. }) {
+            self.promote_to_hll();
+        }
+        match (&mut *self, other) {
+            (CountDistinctState::Hll { sketch: s }, CountDistinctState::Hll { sketch: o }) => {
+                s.merge(o)
+            }
+            (CountDistinctState::Hll { sketch: s }, CountDistinctState::ExactArray { values }) => {
+                for &h in values.iter() {
+                    s.add_hash(h);
+                }
+            }
+            (CountDistinctState::Hll { sketch: s }, CountDistinctState::HashSet { hashes }) => {
+                for &h in hashes.iter() {
+                    s.add_hash(h);
+                }
+            }
+            // Self is non-HLL and other is non-HLL: feed other's hashes
+            // through `self.add_hash` so promotion thresholds fire as
+            // they would for inserts. `add_hash` mutably borrows self,
+            // and we already non-mutably borrowed other for the match;
+            // collect first to release that borrow.
+            (_, CountDistinctState::ExactArray { values }) => {
+                let collected: Vec<u64> = values.clone();
+                for h in collected {
+                    self.add_hash(h);
+                }
+            }
+            (_, CountDistinctState::HashSet { hashes }) => {
+                let collected: Vec<u64> = hashes.iter().copied().collect();
+                for h in collected {
+                    self.add_hash(h);
+                }
+            }
+            // (_, Hll) handled by the promote-then-fall-through above.
+            (_, CountDistinctState::Hll { .. }) => {
+                unreachable!("promote_to_hll above ensures self is Hll when other is Hll")
+            }
+        }
+    }
 }
 
 #[cfg(test)]
