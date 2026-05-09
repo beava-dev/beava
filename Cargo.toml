@@ -12,7 +12,7 @@ members = [
 version = "0.0.0"
 edition = "2021"
 license = "Apache-2.0"
-repository = "https://github.com/petrpan26/tally"
+repository = "https://github.com/beava-dev/beava"
 rust-version = "1.75"
 
 [workspace.dependencies]

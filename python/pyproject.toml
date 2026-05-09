@@ -40,8 +40,8 @@ dev = ["pytest>=8,<9", "ruff>=0.5,<1", "mypy>=1.10,<2", "hypothesis>=6", "pytest
 
 [project.urls]
 Homepage = "https://beava.dev"
-Repository = "https://github.com/petrpan26/beava"
-Issues = "https://github.com/petrpan26/beava/issues"
+Repository = "https://github.com/beava-dev/beava"
+Issues = "https://github.com/beava-dev/beava/issues"
 
 [tool.maturin]
 # python-source = "." means pyproject.toml's directory (python/) is the
