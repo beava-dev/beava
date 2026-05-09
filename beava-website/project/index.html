@@ -28,27 +28,36 @@
     // Values rotate on a slow loop so the panel feels alive without strobing.
     // Replaces the prior LiveMetrics dashboard; the production /api/get poll
     // moved to PipelineOutput below (closes the loop with the 13-line example).
+    //
+    // Signatures match the real beava query surface (`app.get(table, key)`
+    // → row dict). Tables shown here are illustrative; the live SiteMetrics
+    // pipeline that backs this site is what PipelineOutput below polls
+    // against. Register-time aggregation operators (bv.count / bv.quantile /
+    // bv.top_k) — the "what" — appear in the 13-line Python below.
     const seedQueries = () => ([
       {
         id: 'pv',
-        fn: 'bv.count',
-        args: [{ k: 'user_id', v: '"u_8412"' }, { k: 'window', v: '"24h"' }],
+        fn: 'app.get',
+        // positional args (no `k=` rendered): app.get("UserActivity", "u_8412")
+        args: [{ v: '"UserActivity"' }, { v: '"u_8412"' }],
+        // Show the named feature the caller would unpack from the row.
         value: 74,
         fmt: (n) => Math.round(n).toLocaleString('en-US'),
         drift: () => 1 + Math.floor(Math.random() * 3),
       },
       {
         id: 'mt',
-        fn: 'bv.p50',
-        args: [{ k: 'path', v: '"/"' }, { k: 'window', v: '"1h"' }],
+        fn: 'app.get',
+        args: [{ v: '"PathStats"' }, { v: '"/"' }],
         value: 1.2,
         fmt: (n) => `${n.toFixed(1)}s`,
         drift: () => (Math.random() - 0.5) * 0.18,
       },
       {
         id: 'tp',
-        fn: 'bv.top_k',
-        args: [{ k: 'metric', v: '"page_view"' }, { k: 'k', v: '1' }, { k: 'window', v: '"1h"' }],
+        fn: 'app.get',
+        // Global table per ADR-003: no key, single positional arg.
+        args: [{ v: '"SiteMetrics"' }],
         value: { path: '"/"', count: 382 },
         rotateThru: [
           { path: '"/"',                       count: 382 },
@@ -76,8 +85,12 @@
               {row.args.map((a, i) => (
                 <React.Fragment key={i}>
                   {i > 0 && <span style={{ color: 'var(--fg3)' }}>, </span>}
-                  <span style={{ color: 'var(--code-keyword)' }}>{a.k}</span>
-                  <span style={{ color: 'var(--fg3)' }}>=</span>
+                  {a.k && (
+                    <>
+                      <span style={{ color: 'var(--code-keyword)' }}>{a.k}</span>
+                      <span style={{ color: 'var(--fg3)' }}>=</span>
+                    </>
+                  )}
                   <span style={{ color: 'var(--code-string)' }}>{a.v}</span>
                 </React.Fragment>
               ))}
@@ -176,8 +189,8 @@
             fontFamily: 'var(--font-sans)', fontSize: 12.5, color: 'var(--fg3)',
             fontStyle: 'italic', lineHeight: 1.5,
           }}>
-            Three live beava queries. Each is a function defined in Python, fed by HTTP events,
-            queryable by key in <span style={{ color: 'var(--fg2)', fontStyle: 'normal' }}>&lt;1ms</span>.
+            Three <code style={{ fontFamily: 'var(--font-mono)', fontStyle: 'normal', color: 'var(--fg2)' }}>app.get(table, key)</code> reads against tables
+            defined with <code style={{ fontFamily: 'var(--font-mono)', fontStyle: 'normal', color: 'var(--fg2)' }}>bv.count</code>, <code style={{ fontFamily: 'var(--font-mono)', fontStyle: 'normal', color: 'var(--fg2)' }}>bv.quantile</code>, <code style={{ fontFamily: 'var(--font-mono)', fontStyle: 'normal', color: 'var(--fg2)' }}>bv.top_k</code>. Fed by HTTP events, queryable by key in <span style={{ color: 'var(--fg2)', fontStyle: 'normal' }}>&lt;1ms</span>.
             {' '}
             <a href="#pipeline" style={{
               color: 'var(--accent)', textDecoration: 'none',
@@ -272,10 +285,10 @@
     };
 
     const Hero = () => (
-      <section style={{ padding: '56px 24px 96px', position: 'relative' }}>
+      <section style={{ padding: '56px 24px 96px', position: 'relative', overflow: 'hidden' }}>
         <div className="beava-hero-grid" style={{
           maxWidth: 1200, margin: '0 auto',
-          display: 'grid', gridTemplateColumns: '1.05fr 1fr', gap: 80, alignItems: 'center',
+          display: 'grid', gridTemplateColumns: 'minmax(0, 1.05fr) minmax(0, 1fr)', gap: 80, alignItems: 'center',
         }}>
           <div>
             {/* Eyebrow does work now: license · binary · language. Clickable to GitHub. */}
@@ -341,11 +354,14 @@
               <span style={{ color: 'var(--border-strong)' }}> · </span> scales to one big box
             </div>
           </div>
-          <div style={{ position: 'relative' }}>
-            {/* Mascot peek — top-right, slight rotation, drop-shadow */}
+          <div style={{ position: 'relative', minWidth: 0 }}>
+            {/* Mascot peek — top-right, slight rotation, drop-shadow.
+                Anchored to the right column's right edge (right: 0) so it
+                can't push past the viewport on narrower grids — clamps
+                inward instead of outward. */}
             <img src="/assets/mascot-pose-2.svg" alt="" width={108} height={108} className="beava-hero-mascot" style={{
               position: 'absolute',
-              top: -82, right: -12,
+              top: -82, right: 0,
               transform: 'rotate(8deg)',
               filter: 'drop-shadow(0 6px 14px rgba(26,23,20,0.12))',
               pointerEvents: 'none', zIndex: 2,
