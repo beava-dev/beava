@@ -335,7 +335,11 @@
             <code style={{
               fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--code-fg)',
               background: 'transparent', border: 0, padding: 0, flex: 1, minWidth: 0,
-              whiteSpace: 'pre', overflowX: 'auto', lineHeight: 1.55,
+              /* `pre-wrap` honors literal \n in the cmd while soft-wrapping long
+                 lines (URLs, mostly) on width. `overflow-wrap: anywhere` lets URLs
+                 break at any character; without it pre-wrap would still let an
+                 unbroken URL push past the column edge. */
+              whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', lineHeight: 1.55,
             }}>{tab.cmd}</code>
             <button onClick={copy} title="Copy" style={{
               fontFamily: 'var(--font-mono)', fontSize: 12,
