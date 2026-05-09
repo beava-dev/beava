@@ -41,7 +41,12 @@ on:
 
 concurrency:
   group: release-wheels-${{ github.ref }}
-  cancel-in-progress: false
+  # PR pushes should cancel any in-flight matrix from earlier commits;
+  # the only thing we want to verify is whether HEAD's wheels build,
+  # not every intermediate commit's. For tag pushes the ref is unique
+  # per tag, so the concurrency group never collides — `true` is safe
+  # for the publish path too.
+  cancel-in-progress: true
 
 permissions:
   contents: read
