@@ -23,41 +23,42 @@
   <script type="text/babel">
     // beava.dev homepage — Hero · PipelineShowcase · Pillars · FinalCTA
 
-    // LiveQueriesPanel — chat7 (2026-05-09) hero redesign. Three live beava
-    // queries, function-call signature on the left, fresh value on the right.
-    // Values rotate on a slow loop so the panel feels alive without strobing.
-    // Replaces the prior LiveMetrics dashboard; the production /api/get poll
-    // moved to PipelineOutput below (closes the loop with the 13-line example).
+    // LiveQueriesPanel — chat7 (2026-05-09) hero redesign, refit 2026-05-09pm
+    // to show both sides of the loop in each card:
     //
-    // Signatures match the real beava query surface (`app.get(table, key)`
-    // → row dict). Tables shown here are illustrative; the live SiteMetrics
-    // pipeline that backs this site is what PipelineOutput below polls
-    // against. Register-time aggregation operators (bv.count / bv.quantile /
-    // bv.top_k) — the "what" — appear in the 13-line Python below.
+    //   Top row:    app.get(table, key)        ← the query the client makes
+    //   Bottom row: → bv.<op>(...) = value     ← the operator that computes it,
+    //                                            with the live value appended
+    //
+    // This anchors WHY the displayed value is what it is — `74` isn't magic,
+    // it's the count over 24h that the table was registered with. The same
+    // bv.* operators appear at register-time in the 13-line Python pipeline
+    // below; the right column makes the link visible.
+    //
+    // Tables shown are illustrative; the live SiteMetrics pipeline that
+    // backs this site is what PipelineOutput below polls against.
     const seedQueries = () => ([
       {
         id: 'pv',
-        fn: 'app.get',
-        // positional args (no `k=` rendered): app.get("UserActivity", "u_8412")
-        args: [{ v: '"UserActivity"' }, { v: '"u_8412"' }],
-        // Show the named feature the caller would unpack from the row.
+        query: { fn: 'app.get', args: [{ v: '"UserActivity"' }, { v: '"u_8412"' }] },
+        op:    { fn: 'bv.count', args: [{ k: 'window', v: '"24h"' }] },
         value: 74,
         fmt: (n) => Math.round(n).toLocaleString('en-US'),
         drift: () => 1 + Math.floor(Math.random() * 3),
       },
       {
         id: 'mt',
-        fn: 'app.get',
-        args: [{ v: '"PathStats"' }, { v: '"/"' }],
+        query: { fn: 'app.get',     args: [{ v: '"PathStats"' }, { v: '"/"' }] },
+        op:    { fn: 'bv.quantile', args: [{ v: '"dwell_ms"' }, { k: 'q', v: '0.5' }, { k: 'window', v: '"1h"' }] },
         value: 1.2,
         fmt: (n) => `${n.toFixed(1)}s`,
         drift: () => (Math.random() - 0.5) * 0.18,
       },
       {
         id: 'tp',
-        fn: 'app.get',
-        // Global table per ADR-003: no key, single positional arg.
-        args: [{ v: '"SiteMetrics"' }],
+        // Global table per ADR-003: no key, single positional arg to app.get.
+        query: { fn: 'app.get',  args: [{ v: '"SiteMetrics"' }] },
+        op:    { fn: 'bv.top_k', args: [{ v: '"path"' }, { k: 'k', v: '1' }, { k: 'window', v: '"1h"' }] },
         value: { path: '"/"', count: 382 },
         rotateThru: [
           { path: '"/"',                       count: 382 },
@@ -69,44 +70,70 @@
       },
     ]);
 
+    // Renders `fn(arg, key=val, ...)` with syntax-coloured tokens. Args
+    // shaped `{ v }` render positional; `{ k, v }` render as kwargs.
+    const Signature = ({ fn, args }) => (
+      <React.Fragment>
+        <span style={{ color: 'var(--code-fn)' }}>{fn}</span>
+        <span style={{ color: 'var(--fg3)' }}>(</span>
+        {args.map((a, i) => (
+          <React.Fragment key={i}>
+            {i > 0 && <span style={{ color: 'var(--fg3)' }}>, </span>}
+            {a.k && (
+              <React.Fragment>
+                <span style={{ color: 'var(--code-keyword)' }}>{a.k}</span>
+                <span style={{ color: 'var(--fg3)' }}>=</span>
+              </React.Fragment>
+            )}
+            <span style={{ color: 'var(--code-string)' }}>{a.v}</span>
+          </React.Fragment>
+        ))}
+        <span style={{ color: 'var(--fg3)' }}>)</span>
+      </React.Fragment>
+    );
+
     const QueryCard = ({ row, pulse }) => {
       const text = row.fmt ? row.fmt(row.value) : String(row.value);
       return (
         <div style={{
           background: '#fff', border: '1px solid var(--border)', borderRadius: 14,
-          padding: '14px 18px', boxShadow: 'var(--shadow-sm)',
-          display: 'flex', flexWrap: 'wrap',
-          alignItems: 'center', columnGap: 12, rowGap: 6, minHeight: 56,
+          padding: '12px 16px', boxShadow: 'var(--shadow-sm)',
+          display: 'flex', flexDirection: 'column', gap: 6,
+          minWidth: 0,
         }}>
-          <div style={{ minWidth: 0, flex: '1 1 60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13.5, color: 'var(--fg2)', fontWeight: 500 }}>
-              <span style={{ color: 'var(--code-fn)' }}>{row.fn}</span>
-              <span style={{ color: 'var(--fg3)' }}>(</span>
-              {row.args.map((a, i) => (
-                <React.Fragment key={i}>
-                  {i > 0 && <span style={{ color: 'var(--fg3)' }}>, </span>}
-                  {a.k && (
-                    <>
-                      <span style={{ color: 'var(--code-keyword)' }}>{a.k}</span>
-                      <span style={{ color: 'var(--fg3)' }}>=</span>
-                    </>
-                  )}
-                  <span style={{ color: 'var(--code-string)' }}>{a.v}</span>
-                </React.Fragment>
-              ))}
-              <span style={{ color: 'var(--fg3)' }}>)</span>
-            </span>
+          {/* Top row — the client query */}
+          <div style={{
+            fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 500,
+            color: 'var(--fg2)', minWidth: 0, overflow: 'hidden',
+            textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            <Signature {...row.query}/>
           </div>
-          <span style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 600 }}>→</span>
-          <span key={text} style={{
-            fontFamily: 'var(--font-mono)', fontSize: 15.5, fontWeight: 600,
-            color: 'var(--fg1)',
-            background: pulse ? 'var(--beava-orange-wash)' : 'transparent',
-            padding: '2px 8px', borderRadius: 6,
-            transition: 'background 600ms cubic-bezier(0.22,1,0.36,1)',
-            whiteSpace: 'nowrap',
-            animation: 'beava-fade-up 320ms cubic-bezier(0.22,1,0.36,1)',
-          }}>{text}</span>
+          {/* Bottom row — arrow → operator that computed the result = value */}
+          <div style={{
+            display: 'flex', alignItems: 'baseline', flexWrap: 'wrap',
+            columnGap: 8, rowGap: 4, minWidth: 0,
+            fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 500,
+            color: 'var(--fg2)',
+          }}>
+            <span style={{ color: 'var(--accent)', fontSize: 14, fontWeight: 600 }}>→</span>
+            <span style={{
+              minWidth: 0, overflow: 'hidden',
+              textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%',
+            }}>
+              <Signature {...row.op}/>
+            </span>
+            <span style={{ color: 'var(--fg3)' }}>=</span>
+            <span key={text} style={{
+              fontFamily: 'var(--font-mono)', fontSize: 14.5, fontWeight: 600,
+              color: 'var(--fg1)',
+              background: pulse ? 'var(--beava-orange-wash)' : 'transparent',
+              padding: '1px 8px', borderRadius: 6,
+              transition: 'background 600ms cubic-bezier(0.22,1,0.36,1)',
+              whiteSpace: 'nowrap',
+              animation: 'beava-fade-up 320ms cubic-bezier(0.22,1,0.36,1)',
+            }}>{text}</span>
+          </div>
         </div>
       );
     };
@@ -189,8 +216,7 @@
             fontFamily: 'var(--font-sans)', fontSize: 12.5, color: 'var(--fg3)',
             fontStyle: 'italic', lineHeight: 1.5,
           }}>
-            Three <code style={{ fontFamily: 'var(--font-mono)', fontStyle: 'normal', color: 'var(--fg2)' }}>app.get(table, key)</code> reads against tables
-            defined with <code style={{ fontFamily: 'var(--font-mono)', fontStyle: 'normal', color: 'var(--fg2)' }}>bv.count</code>, <code style={{ fontFamily: 'var(--font-mono)', fontStyle: 'normal', color: 'var(--fg2)' }}>bv.quantile</code>, <code style={{ fontFamily: 'var(--font-mono)', fontStyle: 'normal', color: 'var(--fg2)' }}>bv.top_k</code>. Fed by HTTP events, queryable by key in <span style={{ color: 'var(--fg2)', fontStyle: 'normal' }}>&lt;1ms</span>.
+            Read with <code style={{ fontFamily: 'var(--font-mono)', fontStyle: 'normal', color: 'var(--fg2)' }}>app.get</code>; values come from a <code style={{ fontFamily: 'var(--font-mono)', fontStyle: 'normal', color: 'var(--fg2)' }}>bv.*</code> aggregation defined once at register time. Fed by HTTP events, queryable by key in <span style={{ color: 'var(--fg2)', fontStyle: 'normal' }}>&lt;1ms</span>.
             {' '}
             <a href="#pipeline" style={{
               color: 'var(--accent)', textDecoration: 'none',
