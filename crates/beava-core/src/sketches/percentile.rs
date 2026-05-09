@@ -267,7 +267,13 @@ mod tests {
     }
 
     #[test]
-    fn merge_exact_plus_exact_promotes_at_threshold() {
+    fn merge_exact_plus_exact_promotes_and_preserves_distribution() {
+        // Same risk shape as the TopK Exact-cutover test: a buggy
+        // Exact→Sketch promotion during merge could silently drop values
+        // and only the mode name would flip. Verify the merged-then-
+        // promoted state's quantile actually reflects the union.
+        //
+        // Threshold = 10 → combined 16 values must promote to UDDSketch.
         let mut a = PercentileState::new(10, 0.01);
         let mut b = PercentileState::new(10, 0.01);
         for v in 1..=8 {
@@ -276,12 +282,30 @@ mod tests {
         for v in 9..=16 {
             b.insert(v as f64);
         }
-        // a.values=8, b.values=8 → combined 16 > threshold 10 → promote.
+        // Both still Exact pre-merge (8 ≤ threshold 10 each).
+        assert_eq!(a.mode_name(), "v0_percentile_exact");
+        assert_eq!(b.mode_name(), "v0_percentile_exact");
+
         a.merge(&b);
+
         assert_eq!(
             a.mode_name(),
             "v0_percentile_uddsketch",
             "combined size 16 must promote across threshold 10"
+        );
+        // p50 of [1..=16] is 8.5. UDDSketch tolerance is ~1% relative,
+        // but since the values are dense integers the post-promotion
+        // sketch should land within 10% of 8.5.
+        let p50 = a.quantile(0.5).unwrap();
+        assert!(
+            (p50 - 8.5).abs() / 8.5 < 0.10,
+            "merged p50 must reflect the union [1..=16] after promotion; got {p50}"
+        );
+        // p99 should also be close to 16 (max of the union).
+        let p99 = a.quantile(0.99).unwrap();
+        assert!(
+            (14.0..=17.0).contains(&p99),
+            "merged p99 must reflect ~max(union)=16 after promotion; got {p99}"
         );
     }
 

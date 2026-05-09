@@ -407,21 +407,53 @@ mod tests {
     }
 
     #[test]
-    fn merge_exact_plus_exact_promotes_when_combined_exceeds_threshold() {
-        // Threshold = 5 → combined 8 distinct must promote to Hybrid.
+    fn merge_exact_plus_exact_promotes_and_preserves_counts() {
+        // The Exact→Hybrid cutover during merge is the highest-risk path:
+        // a buggy promotion could silently lose values and only the mode
+        // name would flip. Make the test assert the dominant value's
+        // count survives, not just that `mode_name` changed.
+        //
+        // Threshold = 5 → combined 12 distinct must promote to Hybrid.
+        // "winner" appears in BOTH a (1000x) and b (500x) so the merge
+        // must sum the BTreeMap entries before promoting; the promoted
+        // Hybrid must then have CMS estimate ~1500 for "winner".
         let mut a = TopKState::new(2, 5, 2048, 4);
         let mut b = TopKState::new(2, 5, 2048, 4);
+        // Each side: 5 distinct values total ("winner" + 4 fillers),
+        // so counts.len() == threshold, the > comparison is false, and
+        // they STAY Exact pre-merge. The merge brings combined to 9
+        // distinct ("winner" plus 4+4 unique fillers), tripping the
+        // threshold check and forcing the cutover.
+        for _ in 0..1000 {
+            a.insert(TopKValue::Str("winner".into()));
+        }
         for i in 0..4 {
             a.insert(TopKValue::Str(format!("a{i}")));
+        }
+        for _ in 0..500 {
+            b.insert(TopKValue::Str("winner".into()));
         }
         for i in 0..4 {
             b.insert(TopKValue::Str(format!("b{i}")));
         }
+        assert_eq!(a.mode_name(), "v0_top_k_exact");
+        assert_eq!(b.mode_name(), "v0_top_k_exact");
+
         a.merge(&b);
+
+        // Mode flipped: 1 + 4 + 4 = 9 distinct values > threshold 5.
         assert_eq!(
             a.mode_name(),
             "v0_top_k_hybrid",
-            "8 distinct values must promote across threshold=5"
+            "9 distinct values must promote across threshold=5"
+        );
+        // Counts preserved through the cutover: "winner" still on top.
+        let top = a.top();
+        assert_eq!(top[0].0, TopKValue::Str("winner".into()));
+        assert!(
+            top[0].1 >= 1500,
+            "winner count must reflect the merged 1000+500 after promotion; got {}",
+            top[0].1
         );
     }
 

@@ -406,10 +406,41 @@ mod tests {
     }
 
     #[test]
-    fn merge_promotes_through_thresholds_naturally() {
-        // a is in ExactArray (4 entries); b is in ExactArray (4 entries).
-        // Combined 8 distinct → promotes past EXACT_THRESHOLD=8 (default).
-        // Combined 1100+ would promote to HLL.
+    fn merge_array_plus_array_promotes_to_hashset_with_count_preserved() {
+        // The small cutover: ExactArray (cap 16) → HashSet during
+        // merge. a has 10 distinct; b has 10 distinct; combined 20 > 16
+        // must promote during the merge AND preserve every distinct
+        // value (HashSet mode reports exact count, so a buggy promotion
+        // that dropped values would surface immediately as a mismatched
+        // estimate).
+        let mut a = CountDistinctState::new(1024);
+        let mut b = CountDistinctState::new(1024);
+        for i in 0..10 {
+            a.add_hash(hash_str(&format!("a{i}")));
+        }
+        for i in 0..10 {
+            b.add_hash(hash_str(&format!("b{i}")));
+        }
+        // Both still ExactArray pre-merge (10 ≤ EXACT_THRESHOLD=16 each).
+        assert_eq!(a.mode_name(), "v0_count_distinct_exact_array");
+        assert_eq!(b.mode_name(), "v0_count_distinct_exact_array");
+
+        a.merge(&b);
+
+        assert_eq!(a.mode_name(), "v0_count_distinct_hash_set");
+        assert_eq!(
+            a.estimate(),
+            20,
+            "all 20 distinct values must survive the ExactArray→HashSet cutover"
+        );
+    }
+
+    #[test]
+    fn merge_promotes_through_thresholds_naturally_to_hll() {
+        // The bigger cutover: HashSet → HLL during merge. Both sides
+        // are already in HashSet mode pre-merge; their merge crosses
+        // HASH_THRESHOLD=1024 and the cutover must preserve approximate
+        // cardinality (within HLL's 5% tolerance).
         let mut a = CountDistinctState::new(1024);
         let mut b = CountDistinctState::new(1024);
         for i in 0..600 {
@@ -418,13 +449,18 @@ mod tests {
         for i in 0..600 {
             b.add_hash(hash_str(&format!("b{i}")));
         }
-        // Both should already be in HashSet mode (>EXACT_THRESHOLD=8 each).
         assert_eq!(a.mode_name(), "v0_count_distinct_hash_set");
+        assert_eq!(b.mode_name(), "v0_count_distinct_hash_set");
+
         a.merge(&b);
-        // Combined 1200 distinct > HASH_THRESHOLD=1024 → promotes to HLL.
+
+        // Combined 1200 > HASH_THRESHOLD=1024 → promotes to HLL.
         assert_eq!(a.mode_name(), "v0_count_distinct_hll");
         let err = (a.estimate() as i64 - 1200).abs() as f64 / 1200.0;
-        assert!(err < 0.05, "merged HLL estimate err {err}");
+        assert!(
+            err < 0.05,
+            "merged HLL estimate must reflect 1200-union after cutover; err {err}"
+        );
     }
 
     #[test]
