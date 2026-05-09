@@ -208,8 +208,11 @@
     // detects platform, pulls the matching wheel from the latest GH Release,
     // pip install --user's it. Docker is the zero-deps host alternative.
     // cargo is the from-source path for Rust-toolchain users.
+    // Backslash-newline continuation in `cmd` is honored by the renderer
+    // (whiteSpace: 'pre') and copy-pastes correctly: shell ignores `\\\n`
+    // and runs the command as one logical line.
     const INSTALL_TABS = [
-      { id: 'curl',   label: 'curl',   cmd: 'curl -fsSL https://raw.githubusercontent.com/beava-dev/beava/main/scripts/install.sh | sh', recommended: true },
+      { id: 'curl',   label: 'curl',   cmd: 'curl -fsSL https://raw.githubusercontent.com/beava-dev/beava/main/scripts/install.sh \\\n  | sh', recommended: true },
       { id: 'docker', label: 'docker', cmd: 'docker run -p 8080:8080 beavadev/beava:edge' },
       { id: 'cargo',  label: 'cargo',  cmd: 'cargo install --git https://github.com/beava-dev/beava beava-server' },
     ];
@@ -257,17 +260,17 @@
             <div style={{ flex: 1, borderBottom: '1px solid var(--border)' }}/>
           </div>
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 12,
+            display: 'flex', alignItems: 'flex-start', gap: 12,
             padding: '12px 14px',
             background: 'var(--code-bg)', border: '1px solid var(--border)', borderTop: 'none',
             borderRadius: '0 10px 10px 10px',
             boxShadow: 'var(--shadow-inset)',
           }}>
-            <span style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 14, userSelect: 'none' }}>$</span>
+            <span style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 14, userSelect: 'none', lineHeight: 1.55 }}>$</span>
             <code style={{
               fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--code-fg)',
-              background: 'transparent', border: 0, padding: 0, flex: 1,
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              background: 'transparent', border: 0, padding: 0, flex: 1, minWidth: 0,
+              whiteSpace: 'pre', overflowX: 'auto', lineHeight: 1.55,
             }}>{tab.cmd}</code>
             <button onClick={copy} title="Copy" style={{
               fontFamily: 'var(--font-mono)', fontSize: 12,
