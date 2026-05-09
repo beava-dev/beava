@@ -53,22 +53,22 @@
     const QUERY_ROWS = [
       {
         id: 'page_views_24h',
-        query: { fn: 'app.get', args: [{ v: '"SiteMetrics"' }], index: 'page_views_24h' },
-        op:    { fn: 'bv.count', args: [{ k: 'window', v: '"24h"' }] },
+        feature: 'page_views_24h',
+        op: { fn: 'bv.count', args: [{ k: 'window', v: '"24h"' }] },
         fmt: (n) => Math.round(n || 0).toLocaleString('en-US'),
         pick: (d) => d.page_views_24h ?? 0,
       },
       {
         id: 'median_dwell_1h',
-        query: { fn: 'app.get', args: [{ v: '"SiteMetrics"' }], index: 'median_dwell_1h' },
-        op:    { fn: 'bv.quantile', args: [{ v: '"dwell_ms"' }, { k: 'q', v: '0.5' }, { k: 'window', v: '"1h"' }] },
+        feature: 'median_dwell_1h',
+        op: { fn: 'bv.quantile', args: [{ v: '"dwell_ms"' }, { k: 'q', v: '0.5' }, { k: 'window', v: '"1h"' }] },
         fmt: (ms) => `${((ms || 0) / 1000).toFixed(1)}s`,
         pick: (d) => d.median_dwell_1h ?? 0,
       },
       {
         id: 'top_page_1h',
-        query: { fn: 'app.get', args: [{ v: '"SiteMetrics"' }], index: 'top_page_1h' },
-        op:    { fn: 'bv.top_k', args: [{ v: '"path"' }, { k: 'k', v: '1' }, { k: 'window', v: '"1h"' }] },
+        feature: 'top_page_1h',
+        op: { fn: 'bv.top_k', args: [{ v: '"path"' }, { k: 'k', v: '1' }, { k: 'window', v: '"1h"' }] },
         fmt: (top) => top ? `${JSON.stringify(top.value)} · ${(top.count || 0).toLocaleString('en-US')}` : '—',
         pick: (d) => Array.isArray(d.top_page_1h) ? d.top_page_1h[0] : null,
       },
@@ -114,13 +114,16 @@
           display: 'flex', flexDirection: 'column', gap: 6,
           minWidth: 0,
         }}>
-          {/* Top row — the client query */}
+          {/* Top row — the dict-access on `row` (hoisted to panel header) */}
           <div style={{
             fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 500,
             color: 'var(--fg2)', minWidth: 0, overflow: 'hidden',
             textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
-            <Signature {...row.query}/>
+            <span style={{ color: 'var(--fg3)' }}>row</span>
+            <span style={{ color: 'var(--fg3)' }}>[</span>
+            <span style={{ color: 'var(--code-string)' }}>"{row.feature}"</span>
+            <span style={{ color: 'var(--fg3)' }}>]</span>
           </div>
           {/* Bottom row — arrow → operator that computed the result = value */}
           <div style={{
@@ -194,7 +197,7 @@
         <div style={{ position: 'relative' }}>
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            marginBottom: 14, paddingLeft: 4,
+            marginBottom: 8, paddingLeft: 4,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{
@@ -212,7 +215,19 @@
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg3)' }}>{isLive ? 'live' : 'seed'}</span>
               </span>
             </div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg3)' }}>GET /q/...</div>
+          </div>
+          {/* Hoisted query — every card below reads a feature out of `row` */}
+          <div style={{
+            fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--fg2)',
+            paddingLeft: 4, marginBottom: 14, fontWeight: 500,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            <span style={{ color: 'var(--fg3)' }}>row </span>
+            <span style={{ color: 'var(--fg3)' }}>=</span>{' '}
+            <span style={{ color: 'var(--code-fn)' }}>app.get</span>
+            <span style={{ color: 'var(--fg3)' }}>(</span>
+            <span style={{ color: 'var(--code-string)' }}>"SiteMetrics"</span>
+            <span style={{ color: 'var(--fg3)' }}>)</span>
           </div>
           <div style={{
             display: 'grid', gridTemplateColumns: 'auto 1fr auto', alignItems: 'center', gap: 10,
@@ -240,7 +255,7 @@
             fontFamily: 'var(--font-sans)', fontSize: 12.5, color: 'var(--fg3)',
             fontStyle: 'italic', lineHeight: 1.5,
           }}>
-            Read with <code style={{ fontFamily: 'var(--font-mono)', fontStyle: 'normal', color: 'var(--fg2)' }}>app.get</code>; values come from a <code style={{ fontFamily: 'var(--font-mono)', fontStyle: 'normal', color: 'var(--fg2)' }}>bv.*</code> aggregation defined once at register time. Fed by HTTP events, queryable by key in <span style={{ color: 'var(--fg2)', fontStyle: 'normal' }}>&lt;1ms</span>.
+            One <code style={{ fontFamily: 'var(--font-mono)', fontStyle: 'normal', color: 'var(--fg2)' }}>app.get</code> reads the row; each feature is a <code style={{ fontFamily: 'var(--font-mono)', fontStyle: 'normal', color: 'var(--fg2)' }}>bv.*</code> aggregation defined once at register time. Fed by HTTP events, served in <span style={{ color: 'var(--fg2)', fontStyle: 'normal' }}>&lt;1ms</span>.
             {' '}
             <a href="#pipeline" style={{
               color: 'var(--accent)', textDecoration: 'none',
