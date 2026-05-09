@@ -88,445 +88,330 @@
         <p class="lede">Synchronous Python client for the beava feature server. Seven wire-mapped methods plus a context-manager lifecycle. One transport per <code>App</code>; pick HTTP, TCP, or embed at construction time.</p>
       </header>
 
-      <!-- =============== OVERVIEW =============== -->
+      <!-- BEGIN MDX BODY (auto-generated; edit docs/<slug>.mdx) -->
       <h2 id="overview">Overview</h2>
       <p>Every interaction with a running beava server flows through a single <code>bv.App</code> instance. The constructor picks a transport from the URL scheme; from then on, the seven methods below are 1:1 wire calls.</p>
-
       <div class="codeblock">
         <div class="codeblock-head">
           <span class="filename">signature</span>
+          <button class="copy-btn">Copy</button>
         </div>
-<pre><span class="tk-fn">bv.App</span><span class="tk-p">(</span>
-    url<span class="tk-p">:</span> <span class="tk-t">str</span> <span class="tk-p">|</span> <span class="tk-k">None</span> <span class="tk-p">=</span> <span class="tk-k">None</span><span class="tk-p">,</span>
-    <span class="tk-p">*</span><span class="tk-p">,</span>
-    timeout<span class="tk-p">:</span> <span class="tk-t">float</span> <span class="tk-p">=</span> <span class="tk-n">30.0</span><span class="tk-p">,</span>
-    test_mode<span class="tk-p">:</span> <span class="tk-t">bool</span> <span class="tk-p">=</span> <span class="tk-k">False</span><span class="tk-p">,</span>
-<span class="tk-p">)</span></pre>
+<pre>bv.App(
+    url: str | None = None,
+    *,
+    timeout: float = 30.0,
+    test_mode: bool = False,
+)</pre>
       </div>
-
       <p>Three transport modes, picked from the URL scheme:</p>
       <ul>
-        <li><code>http://</code> / <code>https://</code> — JSON over HTTP/1.1 on the data-plane port (default <code>8080</code>).</li>
-        <li><code>tcp://</code> — custom-framed TCP fast-path (default <code>8081</code>). Strict-FIFO, one in-flight request per connection.</li>
-        <li><code>None</code> — embed mode. The SDK locates the <code>beava</code> binary on <code>$PATH</code> and spawns it on ephemeral ports for the lifetime of a <code>with</code> block.</li>
+        <li>http:// / https:// — JSON over HTTP/1.1 on the data-plane port (default 8080).</li>
+        <li>tcp:// — custom-framed TCP fast-path (default 8081). Strict-FIFO, one in-flight request per connection.</li>
+        <li>None — embed mode. The SDK locates the beava binary on $PATH and spawns it on ephemeral ports for the lifetime of a with block.</li>
       </ul>
-
       <div class="callout note">
-        <span class="ic">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-        </span>
-        <p><strong>Embed mode requires a <code>with</code> block.</strong> The spawned binary is torn down on context exit. Calling any method on an embed-mode <code>App</code> outside <code>with</code> raises <code>RuntimeError</code>.</p>
+        <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>
+        <p>Embed mode requires a with block. The spawned binary is torn down on context exit. Calling any method on an embed-mode App outside with raises RuntimeError.</p>
       </div>
-
-      <!-- =============== CONSTRUCTOR =============== -->
-      <h2 id="constructor">Constructor parameters</h2>
-
+      <h2 id="constructor-parameters">Constructor parameters</h2>
       <div class="params">
         <div class="param">
           <div class="param-head">
             <span class="param-name">url</span>
-            <span class="param-tags">
-              <span class="param-tag type">str | None</span>
-            </span>
+            <span class="param-tags"><span class="param-tag type">str | None</span></span>
           </div>
           <div class="param-body">
             <p>Server URL. <code>http://...</code> / <code>https://...</code> for HTTP transport, <code>tcp://...</code> for the framed-TCP fast-path. <code>None</code> selects embed mode.</p>
-            <p class="default">default <code>None</code></p>
+          <p class="default">default <code>None</code></p>
           </div>
         </div>
+      </div>
+      <div class="params">
         <div class="param">
           <div class="param-head">
             <span class="param-name">timeout</span>
-            <span class="param-tags">
-              <span class="param-tag type">float</span>
-            </span>
+            <span class="param-tags"><span class="param-tag type">float</span></span>
           </div>
           <div class="param-body">
             <p>Per-request transport-level I/O timeout in seconds. Applies to both HTTP and TCP transports.</p>
-            <p class="default">default <code>30.0</code></p>
+          <p class="default">default <code>30.0</code></p>
           </div>
         </div>
+      </div>
+      <div class="params">
         <div class="param">
           <div class="param-head">
             <span class="param-name">test_mode</span>
-            <span class="param-tags">
-              <span class="param-tag type">bool</span>
-            </span>
+            <span class="param-tags"><span class="param-tag type">bool</span></span>
           </div>
           <div class="param-body">
             <p>Embed-mode only. Sets <code>BEAVA_TEST_MODE=1</code> in the spawned binary's env so test-only opcodes (<code>OP_RESET</code>) are accepted. Setting <code>test_mode=True</code> against a network URL emits a <code>UserWarning</code> and is otherwise ignored — server-side configuration controls test mode for shared servers.</p>
-            <p class="default">default <code>False</code></p>
+          <p class="default">default <code>False</code></p>
           </div>
         </div>
       </div>
-
       <p>An unrecognised URL scheme (anything other than <code>http</code> / <code>https</code> / <code>tcp</code> / <code>None</code>) raises <code>ValueError</code> at construction time.</p>
-
-      <!-- =============== METHODS =============== -->
       <h2 id="methods">Methods</h2>
       <p>Seven public methods. Each maps 1:1 to a wire opcode; the SDK does not batch, retry, or buffer on your behalf.</p>
-
-      <!-- ----- register ----- -->
-      <div class="method-head">
-        <h3 id="register" data-toc-label="register" class="name">register(*descriptors, force=False, dry_run=False)</h3>
-<div class="sig">register(*descriptors: Any, force: bool = False, dry_run: bool = False) -&gt; dict[str, Any]</div>
-      </div>
+      <h3 id="register-descriptors-force-false-dryrun-false" data-toc-label="register" class="name">register(*descriptors, force=False, dry_run=False)</h3>
       <p>Register one or more event/table descriptors with the server. Hot-reloadable — the server picks up new pipelines without restarting; <code>registry_version</code> increments on each successful call.</p>
-
       <h3>Args</h3>
       <ul>
-        <li><code>*descriptors</code> — descriptor objects produced by <code>@bv.event</code> or <code>@bv.table</code>. May also be plain dicts matching the wire shape (passthrough — used in tests).</li>
-        <li><code>force</code> — replace any existing pipeline of the same name.</li>
-        <li><code>dry_run</code> — server validates and returns a categorized diff payload (<code>{diff, would_apply: false}</code>) without committing.</li>
+        <li>*descriptors — descriptor objects produced by @bv.event or @bv.table. May also be plain dicts matching the wire shape (passthrough — used in tests).</li>
+        <li>force — replace any existing pipeline of the same name.</li>
+        <li>dry_run — server validates and returns a categorized diff payload ({diff, would_apply: false}) without committing.</li>
       </ul>
-
       <h3>Returns</h3>
       <p>The parsed server response — a flat dict whose shape varies by request:</p>
       <div class="codeblock">
         <div class="codeblock-head">
           <span class="filename">success body</span>
+          <button class="copy-btn">Copy</button>
         </div>
-<pre><span class="tk-p">{</span>
-  <span class="tk-fn">"status"</span>: <span class="tk-s">"ok"</span><span class="tk-p">,</span>
-  <span class="tk-fn">"registry_version"</span>: <span class="tk-n">1</span><span class="tk-p">,</span>
-  <span class="tk-fn">"added"</span>: <span class="tk-p">[</span><span class="tk-s">"PageView"</span><span class="tk-p">,</span> <span class="tk-s">"UserStats"</span><span class="tk-p">],</span>
-  <span class="tk-fn">"already_present"</span>: <span class="tk-p">[],</span>
-  <span class="tk-fn">"registered_descriptors"</span>: <span class="tk-p">[</span> <span class="tk-c">/* full registry snapshot */</span> <span class="tk-p">]</span>
-<span class="tk-p">}</span></pre>
+<pre>{
+  "status": "ok",
+  "registry_version": 1,
+  "added": ["PageView", "UserStats"],
+  "already_present": [],
+  "registered_descriptors": [ /* full registry snapshot */ ]
+}</pre>
       </div>
-
       <h3>Raises</h3>
       <ul>
-        <li><code>RegistrationError</code> — a passed descriptor is a raw <code>EventDerivation</code> (a chain expression that wasn't wrapped in <code>@bv.event def F(...)</code>). The error message includes the canonical rewrite. Also raised when the server returns a 4xx/5xx with a structured error body.</li>
+        <li>RegistrationError — a passed descriptor is a raw EventDerivation (a chain expression that wasn't wrapped in @bv.event def F(...)). The error message includes the canonical rewrite. Also raised when the server returns a 4xx/5xx with a structured error body.</li>
       </ul>
-
       <h3>Example</h3>
       <div class="codeblock">
         <div class="codeblock-head">
           <span class="filename">register.py</span>
           <button class="copy-btn">Copy</button>
         </div>
-<pre><span class="tk-k">import</span> beava <span class="tk-k">as</span> bv
+<pre>import beava as bv
 
-<span class="tk-p">@</span><span class="tk-fn">bv.event</span>
-<span class="tk-k">class</span> <span class="tk-t">PageView</span><span class="tk-p">:</span>
-    user_id<span class="tk-p">:</span> <span class="tk-t">str</span>
-    path<span class="tk-p">:</span> <span class="tk-t">str</span>
+@bv.event
+class PageView:
+    user_id: str
+    path: str
 
-<span class="tk-p">@</span><span class="tk-fn">bv.table</span><span class="tk-p">(</span>key<span class="tk-p">=</span><span class="tk-s">"user_id"</span><span class="tk-p">)</span>
-<span class="tk-k">def</span> <span class="tk-fn">UserStats</span><span class="tk-p">(</span>pv<span class="tk-p">:</span> <span class="tk-t">PageView</span><span class="tk-p">):</span>
-    <span class="tk-k">return</span> pv<span class="tk-p">.</span>group_by<span class="tk-p">(</span><span class="tk-s">"user_id"</span><span class="tk-p">).</span>agg<span class="tk-p">(</span>
-        visits<span class="tk-p">=</span>bv<span class="tk-p">.</span>count<span class="tk-p">(</span>window<span class="tk-p">=</span><span class="tk-s">"1h"</span><span class="tk-p">)</span><span class="tk-p">,</span>
-    <span class="tk-p">)</span>
+@bv.table(key="user_id")
+def UserStats(pv: PageView):
+    return pv.group_by("user_id").agg(
+        visits=bv.count(window="1h"),
+    )
 
-app <span class="tk-p">=</span> bv<span class="tk-p">.</span>App<span class="tk-p">(</span><span class="tk-s">"http://localhost:8080"</span><span class="tk-p">)</span>
-result <span class="tk-p">=</span> app<span class="tk-p">.</span>register<span class="tk-p">(</span>PageView<span class="tk-p">,</span> UserStats<span class="tk-p">)</span>
-<span class="tk-fn">print</span><span class="tk-p">(</span>result<span class="tk-p">[</span><span class="tk-s">"registry_version"</span><span class="tk-p">])</span>  <span class="tk-c"># → 1</span></pre>
+app = bv.App("http://localhost:8080")
+result = app.register(PageView, UserStats)
+print(result["registry_version"])  # → 1</pre>
       </div>
-
-      <!-- ----- push ----- -->
-      <div class="method-head">
-        <h3 id="push" data-toc-label="push" class="name">push(event_name, fields)</h3>
-<div class="sig">push(event_name: str, fields: dict[str, Any]) -&gt; dict[str, Any]</div>
-      </div>
+      <h3 id="push-eventname-fields" data-toc-label="push" class="name">push(event_name, fields)</h3>
       <p>Push a single event to the server. Ack-on-write — the server returns a write-ahead-log offset and a registry-version stamp on every push.</p>
-
       <h3>Args</h3>
       <ul>
-        <li><code>event_name</code> — the registered event type's name (e.g. <code>"PageView"</code>).</li>
-        <li><code>fields</code> — event fields as a plain dict. Keys must match the event's <code>schema.fields</code>; types are coerced where possible.</li>
+        <li>event_name — the registered event type's name (e.g. "PageView").</li>
+        <li>fields — event fields as a plain dict. Keys must match the event's schema.fields; types are coerced where possible.</li>
       </ul>
-
       <h3>Returns</h3>
       <div class="codeblock">
         <div class="codeblock-head">
           <span class="filename">success body</span>
+          <button class="copy-btn">Copy</button>
         </div>
-<pre><span class="tk-p">{</span>
-  <span class="tk-fn">"ack_lsn"</span>: <span class="tk-n">62</span><span class="tk-p">,</span>
-  <span class="tk-fn">"idempotent_replay"</span>: <span class="tk-k">false</span><span class="tk-p">,</span>
-  <span class="tk-fn">"registry_version"</span>: <span class="tk-n">1</span>
-<span class="tk-p">}</span></pre>
+<pre>{
+  "ack_lsn": 62,
+  "idempotent_replay": false,
+  "registry_version": 1
+}</pre>
       </div>
       <p><code>idempotent_replay</code> is <code>true</code> when the server identified this push as a re-delivery of a prior event (via the event's <code>dedupe_key</code>); the underlying state was not mutated.</p>
-
       <h3>Raises</h3>
       <ul>
-        <li><code>RegistrationError</code> with <code>code="event_not_found"</code> — <code>event_name</code> isn't registered.</li>
-        <li><code>RegistrationError</code> with <code>code="schema_mismatch"</code> — <code>fields</code> doesn't match the event's declared schema.</li>
-        <li><code>RegistrationError</code> with <code>code="invalid_event"</code> — the request body is malformed JSON or missing required keys.</li>
+        <li>RegistrationError with code="event_not_found" — event_name isn't registered.</li>
+        <li>RegistrationError with code="schema_mismatch" — fields doesn't match the event's declared schema.</li>
+        <li>RegistrationError with code="invalid_event" — the request body is malformed JSON or missing required keys.</li>
       </ul>
-
       <h3>Example</h3>
       <div class="codeblock">
         <div class="codeblock-head">
           <span class="filename">push.py</span>
           <button class="copy-btn">Copy</button>
         </div>
-<pre>app<span class="tk-p">.</span>push<span class="tk-p">(</span><span class="tk-s">"PageView"</span><span class="tk-p">,</span> <span class="tk-p">{</span>
-    <span class="tk-s">"user_id"</span><span class="tk-p">:</span> <span class="tk-s">"alice"</span><span class="tk-p">,</span>
-    <span class="tk-s">"path"</span><span class="tk-p">:</span>    <span class="tk-s">"/home"</span><span class="tk-p">,</span>
-<span class="tk-p">})</span>
-<span class="tk-c"># → {"ack_lsn": 62, "idempotent_replay": false, "registry_version": 1}</span></pre>
+<pre>app.push("PageView", {
+    "user_id": "alice",
+    "path":    "/home",
+})
+# → {"ack_lsn": 62, "idempotent_replay": false, "registry_version": 1}</pre>
       </div>
-
-      <!-- ----- get ----- -->
-      <div class="method-head">
-        <h3 id="get" data-toc-label="get" class="name">get(table, key=None, features=None)</h3>
-<div class="sig">get(
-    table: str,
-    key: str | list[str | int | bool] | None = None,
-    features: list[str] | None = None,
-) -&gt; dict[str, Any]</div>
-      </div>
+      <h3 id="get-table-key-none-features-none" data-toc-label="get" class="name">get(table, key=None, features=None)</h3>
       <p>Get a single feature row by entity key. Cold-start (no events for that key) returns <code>{}</code>, not an error.</p>
-
       <h3>Args</h3>
       <ul>
-        <li><code>table</code> — the registered table's name.</li>
-        <li><code>key</code> — entity key. Pass a string for single-column keys, a list for composite keys (matching the table's <code>key=[...]</code> declaration). <code>None</code> routes to the empty-string sentinel that addresses the single row of a global table (registered with <code>key=[]</code>).</li>
-        <li><code>features</code> — narrow the response to the named subset. <code>None</code> (default) returns the full row.</li>
+        <li>table — the registered table's name.</li>
+        <li>key — entity key. Pass a string for single-column keys, a list for composite keys (matching the table's key=[...] declaration). None routes to the empty-string sentinel that addresses the single row of a global table (registered with key=[]).</li>
+        <li>features — narrow the response to the named subset. None (default) returns the full row.</li>
       </ul>
-
       <h3>Returns</h3>
       <p>A flat dict mapping feature name → value. Examples:</p>
-      <div class="reqres">
-        <div class="codeblock">
-          <div class="codeblock-head">
-            <span class="filename">request</span>
-          </div>
-<pre>app<span class="tk-p">.</span>get<span class="tk-p">(</span><span class="tk-s">"UserStats"</span><span class="tk-p">,</span> <span class="tk-s">"alice"</span><span class="tk-p">)</span></pre>
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">request</span>
+          <button class="copy-btn">Copy</button>
         </div>
-        <div class="codeblock">
-          <div class="codeblock-head">
-            <span class="filename">response</span>
-          </div>
-<pre><span class="tk-p">{</span> <span class="tk-fn">"visits"</span>: <span class="tk-n">2</span> <span class="tk-p">}</span></pre>
-        </div>
+<pre>app.get("UserStats", "alice")</pre>
       </div>
-      <div class="reqres">
-        <div class="codeblock">
-          <div class="codeblock-head">
-            <span class="filename">cold-start request</span>
-          </div>
-<pre>app<span class="tk-p">.</span>get<span class="tk-p">(</span><span class="tk-s">"UserStats"</span><span class="tk-p">,</span> <span class="tk-s">"newuser"</span><span class="tk-p">)</span></pre>
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">response</span>
+          <button class="copy-btn">Copy</button>
         </div>
-        <div class="codeblock">
-          <div class="codeblock-head">
-            <span class="filename">response</span>
-          </div>
-<pre><span class="tk-p">{}</span></pre>
-        </div>
+<pre>{ "visits": 2 }</pre>
       </div>
-
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">cold-start request</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+<pre>app.get("UserStats", "newuser")</pre>
+      </div>
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">response</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+<pre>{}</pre>
+      </div>
       <h3>Raises</h3>
       <ul>
-        <li><code>RegistrationError</code> with <code>code="unknown_table"</code> — <code>table</code> isn't registered.</li>
+        <li>RegistrationError with code="unknown_table" — table isn't registered.</li>
       </ul>
-
-      <!-- ----- batch_get ----- -->
-      <div class="method-head">
-        <h3 id="batch_get" data-toc-label="batch_get" class="name">batch_get(requests)</h3>
-<div class="sig">batch_get(
-    requests: list[
-        tuple[str, str | list[str | int | bool]]
-        | tuple[str, str | list[str | int | bool], list[str] | None]
-    ],
-) -&gt; list[dict[str, Any]]</div>
-      </div>
+      <h3 id="batchget-requests" data-toc-label="batch_get" class="name">batch_get(requests)</h3>
       <p>Multi-key fetch in a single round-trip. Returns a list of rows in request order; cold-start per-entry is <code>{}</code>.</p>
-
       <h3>Args</h3>
       <ul>
-        <li><code>requests</code> — list of per-entry tuples. Each entry is either <code>(table, key)</code> or <code>(table, key, features)</code>. The 2-tuple form returns the full row; the 3-tuple form narrows to the named features. Both shapes can be mixed in the same call.</li>
+        <li>requests — list of per-entry tuples. Each entry is either (table, key) or (table, key, features). The 2-tuple form returns the full row; the 3-tuple form narrows to the named features. Both shapes can be mixed in the same call.</li>
       </ul>
-
       <h3>Returns</h3>
       <p><code>list[dict[str, Any]]</code> — one row per request, in the order requests were submitted.</p>
-
       <h3>Raises</h3>
       <ul>
-        <li><code>TypeError</code> — a request entry is neither a 2-tuple nor a 3-tuple. Raised client-side.</li>
-        <li><code>RegistrationError</code> — server returned a structured error (e.g. one of the requested tables is unknown).</li>
+        <li>TypeError — a request entry is neither a 2-tuple nor a 3-tuple. Raised client-side.</li>
+        <li>RegistrationError — server returned a structured error (e.g. one of the requested tables is unknown).</li>
       </ul>
-
       <h3>Example</h3>
       <div class="codeblock">
         <div class="codeblock-head">
           <span class="filename">batch_get.py</span>
           <button class="copy-btn">Copy</button>
         </div>
-<pre>rows <span class="tk-p">=</span> app<span class="tk-p">.</span>batch_get<span class="tk-p">([</span>
-    <span class="tk-p">(</span><span class="tk-s">"UserStats"</span><span class="tk-p">,</span> <span class="tk-s">"alice"</span><span class="tk-p">),</span>
-    <span class="tk-p">(</span><span class="tk-s">"UserStats"</span><span class="tk-p">,</span> <span class="tk-s">"bob"</span><span class="tk-p">,</span> <span class="tk-p">[</span><span class="tk-s">"visits"</span><span class="tk-p">]),</span>
-<span class="tk-p">])</span>
-<span class="tk-c"># → [{"visits": 2}, {"visits": 0}]</span></pre>
+<pre>rows = app.batch_get([
+    ("UserStats", "alice"),
+    ("UserStats", "bob", ["visits"]),
+])
+# → [{"visits": 2}, {"visits": 0}]</pre>
       </div>
-
-      <!-- ----- reset ----- -->
-      <div class="method-head">
-        <h3 id="reset" data-toc-label="reset" class="name">reset()</h3>
-<div class="sig">reset() -&gt; None</div>
-      </div>
+      <h3 id="reset" data-toc-label="reset" class="name">reset()</h3>
       <p>Wipe all server state — every registered descriptor, every per-entity aggregate. <strong>Test-mode-gated.</strong> Use it in tests, never in production.</p>
-
       <h3>Behavior</h3>
       <ul>
-        <li>In embed mode, <code>test_mode=True</code> is required at construction time so the spawned binary accepts <code>OP_RESET</code>.</li>
-        <li>In network mode, the server itself must be running with <code>--test-mode</code>; the SDK has no way to flip the flag remotely.</li>
-        <li>Returns <code>None</code> on success.</li>
+        <li>In embed mode, test_mode=True is required at construction time so the spawned binary accepts OP_RESET.</li>
+        <li>In network mode, the server itself must be running with --test-mode; the SDK has no way to flip the flag remotely.</li>
+        <li>Returns None on success.</li>
       </ul>
-
       <h3>Raises</h3>
       <ul>
-        <li><code>RegistrationError</code> with <code>code="reset_disabled"</code> — server is not in test mode.</li>
-        <li><code>RuntimeError</code> — embed-mode <code>App</code> used outside its <code>with</code> block.</li>
+        <li>RegistrationError with code="reset_disabled" — server is not in test mode.</li>
+        <li>RuntimeError — embed-mode App used outside its with block.</li>
       </ul>
-
       <h3>Example</h3>
       <div class="codeblock">
         <div class="codeblock-head">
           <span class="filename">test_setup.py</span>
           <button class="copy-btn">Copy</button>
         </div>
-<pre><span class="tk-k">with</span> bv<span class="tk-p">.</span>App<span class="tk-p">(</span>test_mode<span class="tk-p">=</span><span class="tk-k">True</span><span class="tk-p">)</span> <span class="tk-k">as</span> app<span class="tk-p">:</span>
-    app<span class="tk-p">.</span>register<span class="tk-p">(</span>PageView<span class="tk-p">,</span> UserStats<span class="tk-p">)</span>
-    <span class="tk-c"># run a test ...</span>
-    app<span class="tk-p">.</span>reset<span class="tk-p">()</span>  <span class="tk-c"># clean slate for the next test</span></pre>
+<pre>with bv.App(test_mode=True) as app:
+    app.register(PageView, UserStats)
+    # run a test ...
+    app.reset()  # clean slate for the next test</pre>
       </div>
-
-      <!-- ----- ping ----- -->
-      <div class="method-head">
-        <h3 id="ping" data-toc-label="ping" class="name">ping()</h3>
-<div class="sig">ping() -&gt; dict[str, Any]</div>
-      </div>
+      <h3 id="ping" data-toc-label="ping" class="name">ping()</h3>
       <p>Cheap liveness probe on the data plane. Returns the current registry version — useful as a cache-key invalidation / schema-evolution signal on long-lived connections.</p>
-
       <h3>Returns</h3>
       <div class="codeblock">
         <div class="codeblock-head">
           <span class="filename">success body</span>
+          <button class="copy-btn">Copy</button>
         </div>
-<pre><span class="tk-p">{</span>
-  <span class="tk-fn">"pong"</span>: <span class="tk-k">true</span><span class="tk-p">,</span>
-  <span class="tk-fn">"registry_version"</span>: <span class="tk-n">1</span>
-<span class="tk-p">}</span></pre>
+<pre>{
+  "pong": true,
+  "registry_version": 1
+}</pre>
       </div>
-
       <h3>Raises</h3>
       <ul>
-        <li><code>RegistrationError</code> — non-200 from the server (defensively wrapped so callers don't deal with raw <code>httpx</code> exceptions).</li>
+        <li>RegistrationError — non-200 from the server (defensively wrapped so callers don't deal with raw httpx exceptions).</li>
       </ul>
-
-      <!-- ----- close ----- -->
-      <div class="method-head">
-        <h3 id="close" data-toc-label="close" class="name">close()</h3>
-<div class="sig">close() -&gt; None</div>
-      </div>
+      <h3 id="close" data-toc-label="close" class="name">close()</h3>
       <p>Release the underlying transport (closes the HTTP connection pool, the TCP socket, or tears down the embed-mode subprocess). Idempotent — safe to call twice. Calling any wire method after <code>close()</code> raises <code>RuntimeError</code>.</p>
-
       <p>You normally don't call this directly:</p>
       <ul>
-        <li><code>__exit__</code> calls it (so <code>with bv.App(...)</code> is enough).</li>
-        <li><code>__del__</code> calls it (best-effort cleanup; suppressed exceptions).</li>
+        <li>__exit__ calls it (so with bv.App(...) is enough).</li>
+        <li>__del__ calls it (best-effort cleanup; suppressed exceptions).</li>
       </ul>
-
-      <!-- =============== LIFECYCLE =============== -->
       <h2 id="lifecycle">Lifecycle</h2>
       <p>Network mode (<code>http</code>, <code>tcp</code>) is flexible — you can use the <code>App</code> as a long-lived module-level singleton or as a context manager. Embed mode <strong>requires</strong> a context manager so the spawned binary is torn down on exit.</p>
-
-      <div class="reqres">
-        <div class="codeblock">
-          <div class="codeblock-head">
-            <span class="filename">embed mode (with-required)</span>
-          </div>
-<pre><span class="tk-k">with</span> bv<span class="tk-p">.</span>App<span class="tk-p">()</span> <span class="tk-k">as</span> app<span class="tk-p">:</span>
-    app<span class="tk-p">.</span>register<span class="tk-p">(</span>PageView<span class="tk-p">,</span> UserStats<span class="tk-p">)</span>
-    app<span class="tk-p">.</span>push<span class="tk-p">(</span><span class="tk-s">"PageView"</span><span class="tk-p">,</span> <span class="tk-p">{...}</span><span class="tk-p">)</span>
-<span class="tk-c"># subprocess torn down here</span></pre>
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">embed mode (with-required)</span>
+          <button class="copy-btn">Copy</button>
         </div>
-        <div class="codeblock">
-          <div class="codeblock-head">
-            <span class="filename">network mode (either form)</span>
-          </div>
-<pre>app <span class="tk-p">=</span> bv<span class="tk-p">.</span>App<span class="tk-p">(</span><span class="tk-s">"http://localhost:8080"</span><span class="tk-p">)</span>
-app<span class="tk-p">.</span>register<span class="tk-p">(</span>PageView<span class="tk-p">,</span> UserStats<span class="tk-p">)</span>
-<span class="tk-c"># ... use it for the lifetime of the process</span>
-app<span class="tk-p">.</span>close<span class="tk-p">()</span>  <span class="tk-c"># optional — __del__ also closes</span></pre>
-        </div>
+<pre>with bv.App() as app:
+    app.register(PageView, UserStats)
+    app.push("PageView", {...})
+# subprocess torn down here</pre>
       </div>
-
-      <p>Each embed-mode spawn allocates a unique tmpdir under <code>$TMPDIR/beava-embed-&lt;pid&gt;-&lt;ms&gt;-&lt;hex&gt;/</code> and registers an <code>atexit</code> hook to clean it up if the context manager isn't used.</p>
-
-      <!-- =============== FAQ =============== -->
-      <h2 id="faq">Common questions</h2>
-
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">network mode (either form)</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+<pre>app = bv.App("http://localhost:8080")
+app.register(PageView, UserStats)
+# ... use it for the lifetime of the process
+app.close()  # optional — __del__ also closes</pre>
+      </div>
+      <p>Each embed-mode spawn allocates a unique tmpdir under <code>$TMPDIR/beava-embed---/</code> and registers an <code>atexit</code> hook to clean it up if the context manager isn't used.</p>
+      <h2 id="common-questions">Common questions</h2>
       <div class="accordion">
         <details>
-          <summary>Is <code>App</code> thread-safe?</summary>
+          <summary>Is App thread-safe?</summary>
           <div class="acc-body">
-            <p>The HTTP transport (httpx-backed) is thread-safe. The TCP transport is <strong>not</strong> — strict-FIFO at the protocol layer means one in-flight request per connection; sharing a TCP-mode <code>App</code> across threads will interleave frames and corrupt state. If you need TCP from multiple threads, give each thread its own <code>App</code>.</p>
+          <p>The HTTP transport (httpx-backed) is thread-safe. The TCP transport is <strong>not</strong> — strict-FIFO at the protocol layer means one in-flight request per connection; sharing a TCP-mode <code>App</code> across threads will interleave frames and corrupt state. If you need TCP from multiple threads, give each thread its own <code>App</code>.</p>
           </div>
         </details>
         <details>
           <summary>Does the SDK retry?</summary>
           <div class="acc-body">
-            <p>No. Each method is one wire call; transient transport errors propagate as <code>httpx</code>/socket exceptions. Retries belong in your application — beava's contract is that successful pushes are durable (WAL-acked), so you can safely re-push on connection loss.</p>
+          <p>No. Each method is one wire call; transient transport errors propagate as <code>httpx</code>/socket exceptions. Retries belong in your application — beava's contract is that successful pushes are durable (WAL-acked), so you can safely re-push on connection loss.</p>
           </div>
         </details>
         <details>
           <summary>What's the async story?</summary>
           <div class="acc-body">
-            <p><code>bv.App</code> is sync. v0 doesn't ship an async client — wrap calls in <code>asyncio.to_thread(...)</code> from your event loop, or open multiple <code>App</code> instances in worker threads (HTTP transport is thread-safe).</p>
+          <p><code>bv.App</code> is sync. v0 doesn't ship an async client — wrap calls in <code>asyncio.to_thread(...)</code> from your event loop, or open multiple <code>App</code> instances in worker threads (HTTP transport is thread-safe).</p>
           </div>
         </details>
         <details>
-          <summary>Can I use one <code>App</code> against two servers?</summary>
+          <summary>Can I use one App against two servers?</summary>
           <div class="acc-body">
-            <p>No — one transport per <code>App</code>. Construct two <code>App</code> instances if you need to talk to two servers. Their state is independent.</p>
+          <p>No — one transport per <code>App</code>. Construct two <code>App</code> instances if you need to talk to two servers. Their state is independent.</p>
           </div>
         </details>
       </div>
-
-      <!-- =============== NEXT =============== -->
-      <h2 id="next">Where to go next</h2>
+      <h2 id="where-to-go-next">Where to go next</h2>
       <p>You've got the client. The next thing to learn is what to register:</p>
+      <p>→ <strong>@bv.event</strong> (<a href="/python/event">/python/event</a>) — Declare event sources — the typed inputs you push into beava. Covers the class form, the def form, and the optional kwargs (dedupe, retention, cold-after).</p>
+      <p>→ <strong>@bv.table</strong> (<a href="/python/table">/python/table</a>) — Declare per-entity feature tables with group_by(...).agg(...). Composite keys, global tables, and the chain primitives.</p>
+      <!-- END MDX BODY -->
 
-      <div class="card-grid">
-        <a class="card" href="/sdk/python/event/">
-          <div class="ttl">@bv.event</div>
-          <p class="desc">Declare event sources — the typed inputs you push into beava. Covers the class form, the def form, and the optional kwargs (dedupe, retention, cold-after).</p>
-          <span class="go">Decorator reference <span class="arrow">→</span></span>
-        </a>
-        <a class="card" href="/sdk/python/table/">
-          <div class="ttl">@bv.table</div>
-          <p class="desc">Declare per-entity feature tables with <code>group_by(...).agg(...)</code>. Composite keys, global tables, and the chain primitives.</p>
-          <span class="go">Decorator reference <span class="arrow">→</span></span>
-        </a>
-      </div>
-
-      <!-- =============== FOOTER =============== -->
-      <div class="footer-area">
-        <div class="feedback">
-          <div class="ask">Was this page useful?</div>
-          <div class="feedback-btns">
-            <button>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3z"/><line x1="7" y1="22" x2="7" y2="11"/></svg>
-              Yes
-            </button>
-            <button>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3z"/><line x1="17" y1="2" x2="17" y2="13"/></svg>
-              Not really
-            </button>
-            <button>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-              Suggest an edit
-            </button>
-          </div>
-        </div>
-
-        <div id="bv-sdk-pager"></div>
-      </div>
     </main>
 
     <!-- ============ RIGHT TOC ============ -->

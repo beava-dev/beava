@@ -459,11 +459,8 @@
               borderRadius: 8, padding: '12px 14px', margin: 0,
               overflowX: 'auto',
             }}>
-{'# brew (recommended)\n'}
-{'$ brew tap beava-dev/beava && brew install beava\n'}
-{'\n'}
-{'# pip\n'}
-{'$ pip install beava\n'}
+{'# curl (recommended) — fetches the platform wheel from latest GH Release\n'}
+{'$ curl -fsSL https://raw.githubusercontent.com/beava-dev/beava/main/scripts/install.sh | sh\n'}
 {'\n'}
 {'# docker (zero deps on host — :edge tag rebuilt from main on every push)\n'}
 {'$ docker run -p 8080:8080 -p 8081:8081 beavadev/beava:edge\n'}
@@ -602,7 +599,7 @@
             lineHeight: 1.55, margin: 0, color: 'var(--code-fg)',
             whiteSpace: 'pre',
           }}>
-<span className="cmt">$ </span>pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"{'\n'}
+<span className="cmt">$ </span>curl -fsSL https://raw.githubusercontent.com/beava-dev/beava/main/scripts/install.sh | sh{'\n'}
 <span className="cmt">$ </span>python {file}{'\n'}
 <span style={{ color: 'var(--beava-success)' }}>✓ </span>
 {replaced

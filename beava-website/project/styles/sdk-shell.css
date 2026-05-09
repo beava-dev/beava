@@ -140,7 +140,11 @@
   background: var(--beava-paper); border: 1px solid var(--border-inset);
   padding: 1px 5px; border-radius: 4px; color: var(--fg1);
 }
-.content strong { color: var(--fg1); font-weight: 700; }
+/* Inter Tight 700 reads as heavy/blocky in body sizes against the
+ * cream + brown palette. Drop to 600 for legibility (matches the
+ * docs-kit's `.bv-content strong` rule on the /docs/ pages — both
+ * surfaces now share the same body-bold weight). */
+.content strong { color: var(--fg1); font-weight: 600; }
 
 /* ===== CARDS =====
  * .content a sets text-decoration: underline for all anchors (the
@@ -466,69 +470,56 @@
  * the spacings below. Explicit font-family on `.toc li a` defends
  * against unexpected inheritance — h3 method anchors must NOT pick
  * up the serif weight of the source `<h3 class="name">` heading. */
+/* Right-rail "On this page" TOC. Visual rules align with the
+ * docs-kit's `.bv-toc` (used by /docs/* pages) so SDK and Docs share
+ * one TOC look. The SDK auto-scans h2/h3 (vs Docs which takes a
+ * curated `items` prop), so the only structural addition over
+ * `.bv-toc` is the `.h3` indent rule. */
 .toc {
-  /* Sticky offset = SiteHeader height (60px) + 32px breathing room
-     so the kicker doesn't kiss the header border. */
-  position: sticky; top: 92px;
+  position: sticky; top: 88px;
   align-self: start;
-  padding: 32px 0 32px 28px;
-  max-height: calc(100vh - 92px);
+  padding: 36px 0 40px;
+  max-height: calc(100vh - 88px);
   overflow-y: auto;
 }
 .toc .kicker {
-  font-family: var(--font-sans); font-weight: 600; font-size: 11px;
-  text-transform: uppercase; letter-spacing: 0.1em;
-  color: var(--fg3); margin: 0 0 10px;
+  font-family: var(--font-sans); font-weight: 600; font-size: 13px;
+  color: var(--fg1); margin: 0 0 14px;
 }
-/* Hierarchical right-rail TOC.
- *
- * Pattern follows the docs-page TOC (docs.css `.docs-toc`): a single
- * continuous 1px left border on the <ul> with each <li><a>'s 2px
- * border-left negative-margined onto it. The active item's border
- * becomes the orange accent — visually it "fills in" a slot on the
- * shared rail. Two refinements over docs.css:
- *
- *   1. h2 vs h3: h3 entries are indented 10px further and rendered
- *      slightly smaller for hierarchy.
- *   2. h2 groups: a 6px margin-top on non-first h2 LIs gives subtle
- *      grouping WITHOUT a horizontal divider line — the previous
- *      attempt at horizontal rules looked busy on a narrow column. */
 .toc ul {
   list-style: none; padding: 0; margin: 0;
-  border-left: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 1px;
 }
 .toc li a {
   display: block;
-  margin-left: -1px;
-  padding: 3px 0 3px 12px;
+  padding: 5px 0 5px 12px;
   font-family: var(--font-sans);
-  font-size: 12.5px; line-height: 1.4;
-  font-weight: 500;
-  color: var(--fg2); text-decoration: none;
+  /* Explicit font-weight + line-height so the TOC text-styling
+   * doesn't pick up anything from the surrounding `.shell` /
+   * `aside.toc` parent that the `.bv-toc` sibling-of-`<main>` on
+   * docs pages doesn't see. Both sides now match: 400 weight,
+   * 1.5 line-height, 13px on cream. */
+  font-size: 13px; font-weight: 400; line-height: 1.5;
+  color: var(--fg3); text-decoration: none;
   border-left: 2px solid transparent;
+  margin-left: -2px;
   transition: color 120ms var(--ease-out), border-color 120ms var(--ease-out);
 }
-.toc li a:hover { color: var(--accent); }
-.toc li.h3 a {
-  padding-left: 22px;
-  font-size: 12px;
-  color: var(--fg3);
-}
-.toc li.h2 + li.h2 { margin-top: 6px; }
+.toc li a:hover { color: var(--fg1); }
+.toc li.h3 a { padding-left: 24px; font-size: 12.5px; }
 .toc li.active a {
   color: var(--accent); font-weight: 600;
   border-left-color: var(--accent);
 }
 .toc .footer-links {
-  margin-top: 18px; padding-top: 14px;
+  margin-top: 22px; padding-top: 16px;
   border-top: 1px solid var(--border);
   display: flex; flex-direction: column; gap: 8px;
-  font-size: 12.5px;
+  font-family: var(--font-sans); font-size: 12.5px;
 }
 .toc .footer-links a {
   color: var(--fg3); text-decoration: none;
-  display: inline-flex; align-items: center; gap: 7px;
-  font-family: var(--font-sans);
+  display: inline-flex; align-items: center; gap: 6px;
 }
 .toc .footer-links a:hover { color: var(--accent); }
 

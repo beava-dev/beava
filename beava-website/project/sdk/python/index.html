@@ -126,28 +126,28 @@
 
       <!-- =============== INSTALL =============== -->
       <h2 id="install"><span class="step-num">01</span> Install beava</h2>
-      <p>One <code>pip install beava</code> ships the SDK <em>and</em> the Rust server binary (~14 MB wheel, polars / ruff / uv pattern). If you'd rather run the server in a container, Docker is the alternative.</p>
+      <p>One <code>curl | sh</code> drops a platform wheel from the latest GitHub Release and <code>pip install --user</code>'s it. The wheel ships the SDK <em>and</em> the Rust server binary together (~14 MB, polars / ruff / uv pattern). If you'd rather run the server in a container, Docker is the alternative.</p>
 
       <div class="tabs" data-tabs="server">
         <div class="tabs-strip">
-          <button class="active" data-target="t-pip">pip</button>
+          <button class="active" data-target="t-curl">curl</button>
           <button data-target="t-docker">docker</button>
         </div>
 
-        <div class="tabs-panel active" id="t-pip">
+        <div class="tabs-panel active" id="t-curl">
           <div class="codeblock">
             <div class="codeblock-head">
               <span class="filename">terminal</span>
               <button class="copy-btn">Copy</button>
             </div>
-<pre><span class="tk-k">pip</span> install beava
+<pre><span class="tk-k">curl</span> -fsSL https://raw.githubusercontent.com/beava-dev/beava/main/scripts/install.sh | <span class="tk-k">sh</span>
 
-<span class="tk-c"># SDK + server binary land together; `beava` is now on PATH</span>
+<span class="tk-c"># SDK + server binary land together; `beava` is on PATH</span>
 <span class="tk-k">beava</span> --data-dir ./.beava/
 <span class="tk-c"># → HTTP listen   : 127.0.0.1:8080</span>
 <span class="tk-c"># → TCP listen    : 127.0.0.1:8081 (enabled=true)</span></pre>
           </div>
-          <p>The wheel bundles the production <code>beava</code> binary into <code>&lt;sysconfig.get_path("scripts")&gt;/beava</code>, so embed mode (<code>bv.App()</code> with no URL) finds it without extra setup. Drop <code>--data-dir</code> for an in-process tryout — defaults to <code>./.beava/</code>. Add <code>--memory-only</code> to skip the WAL entirely.</p>
+          <p>The installer detects your platform (<code>uname -s/-m</code>), grabs the matching wheel from the latest release on <code>beava-dev/beava</code>, and <code>pip install --user</code>'s it. The bundled <code>beava</code> binary lands in your Python user-scripts dir (<code>~/.local/bin/beava</code> on Linux, <code>~/Library/Python/&lt;ver&gt;/bin/beava</code> on macOS), so embed mode (<code>bv.App()</code> with no URL) finds it without extra setup. Pin a specific version with <code>BEAVA_VERSION=v0.4.0 curl ... | sh</code>. Add <code>--memory-only</code> to skip the WAL entirely.</p>
         </div>
 
         <div class="tabs-panel" id="t-docker">
@@ -162,9 +162,9 @@
   -v beava-data:/data \
   beavadev/beava:edge
 
-<span class="tk-c"># SDK install — the wheel still works without the bundled binary</span>
-<span class="tk-c"># on PATH; pass an explicit URL to `bv.App(url=...)`.</span>
-<span class="tk-k">pip</span> install beava
+<span class="tk-c"># SDK install — same curl|sh fetches the wheel without needing</span>
+<span class="tk-c"># the bundled binary on PATH; pass an explicit URL to `bv.App(url=...)`.</span>
+<span class="tk-k">curl</span> -fsSL https://raw.githubusercontent.com/beava-dev/beava/main/scripts/install.sh | <span class="tk-k">sh</span>
 
 <span class="tk-c"># verify</span>
 <span class="tk-k">curl</span> -X POST http://localhost:8080/ping

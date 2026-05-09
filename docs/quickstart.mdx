@@ -19,13 +19,22 @@ This is the SDK reference. For the why — vision, concepts, recipes — see Doc
 
 ## 01 Install beava
 
-You install two things: the **server** (the single binary that holds state) and the **Python client** (the SDK that talks to it).
+One command. The wheel ships the **server binary** and the **Python SDK** together (~14 MB, polars / ruff / uv pattern). No Rust toolchain on your box.
 
-### Server
+```bash title="terminal"
+curl -fsSL https://raw.githubusercontent.com/beava-dev/beava/main/scripts/install.sh | sh
 
-          docker
-          cargo
-          from source
+# `beava` is now on your PATH; start it
+beava --memory-only
+# → HTTP listen   : 127.0.0.1:8080
+# → TCP listen    : 127.0.0.1:8081 (enabled=true)
+```
+
+The installer detects your platform (`uname -s/-m`), pulls the matching wheel from the latest release on `beava-dev/beava`, and `pip install --user`'s it. `--memory-only` skips the WAL for a kick-the-tyres run — drop it for production (state lands under `./.beava/` by default). Pin a specific version with `BEAVA_VERSION=v0.4.0 curl ... | sh`.
+
+Port `8080` is the HTTP data plane (push, get, batch_get, register, ping). Port `8081` is the framed-TCP fast-path (sub-millisecond JSON). Admin endpoints (`/health`, `/ready`, `/metrics`, `/registry`) live on a separate sidecar port that you opt into via the `--http-addr` / `--config` flags.
+
+### Alternative: docker
 
 ```bash title="terminal"
 # persistent volume keeps your features across restarts
@@ -34,36 +43,16 @@ docker run -d --name beava \
   -v beava-data:/data \
   beavadev/beava:edge
 
+# the SDK still installs via curl|sh; pass an explicit URL to bv.App(url=...)
+curl -fsSL https://raw.githubusercontent.com/beava-dev/beava/main/scripts/install.sh | sh
+
 # verify
 curl -X POST http://localhost:8080/ping
 # → {"pong":true,"registry_version":0}
 ```
 
-Port `8080` is the HTTP data plane (push, get, batch_get, register, ping). Port `8081` is the framed-TCP fast-path (sub-millisecond JSON). Admin endpoints (`/health`, `/ready`, `/metrics`, `/registry`) live on a separate sidecar port that you opt into via the `--http-addr` / `--config` flags.
-
-```bash title="terminal"
-cargo install --git https://github.com/beava-dev/beava beava-server
-beava --memory-only
-# → HTTP listen   : 127.0.0.1:8080
-# → TCP listen    : 127.0.0.1:8081 (enabled=true)
-```
-
-Requires Rust 1.74+. `--memory-only` skips the WAL — useful for kicking the tyres. Drop it for production (state lands under `./.beava/` by default).
-
-```bash title="terminal"
-git clone https://github.com/beava-dev/beava
-cd beava
-cargo run --release --bin beava
-```
-
-### Python client
-
-```bash title="terminal"
-pip install "git+https://github.com/beava-dev/beava.git#subdirectory=python"
-```
-
 <Note>
-PyPI publish lands at v0.0.x — pip install beava will work then. For the v0.0.0 cut the SDK installs from the GitHub source above. Both URLs keep working after the PyPI cut.
+PyPI publish lands at v0.0.x — `pip install beava` will work then. For now the wheels ship from GitHub Releases and `curl | sh` is the canonical install path. Both surfaces will coexist after the PyPI cut.
 </Note>
 
 <Tip>

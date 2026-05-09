@@ -5,16 +5,18 @@ Python SDK for [Beava](https://github.com/beava-dev/beava), the single-binary re
 ## Install
 
 ```bash
-pip install beava
+curl -fsSL https://raw.githubusercontent.com/beava-dev/beava/main/scripts/install.sh | sh
 ```
 
-The wheel ships the SDK **and** the Rust `beava` server binary (v0.4.0+, polars-style). After install, the `beava` shell command is on `PATH` and the SDK can run against it directly — including embed mode (`bv.App()` with no URL).
+The installer pulls the platform wheel from the latest GitHub Release and `pip install --user`'s it. The wheel ships the SDK **and** the Rust `beava` server binary (v0.4.0+, polars-style); after install, the `beava` shell command is on `PATH` and the SDK can run against it directly — including embed mode (`bv.App()` with no URL). Pin a specific version with `BEAVA_VERSION=v0.4.0 curl ... | sh`.
 
 If you'd rather run the server in a container, Docker is the alternative:
 
 ```bash
 docker run -p 8080:8080 -p 8081:8081 beavadev/beava:edge
 ```
+
+Once PyPI publishing lands at v0.0.x, `pip install beava` will work too — both surfaces will ship the same wheel.
 
 ## Quickstart
 
@@ -58,7 +60,7 @@ app = bv.App(url="tcp://localhost:8081")
 app = bv.App()
 ```
 
-Embed mode finds the `beava` binary that ships with `pip install beava` automatically. Override with `BEAVA_BINARY=/path/to/beava` if you want to point at a different build.
+Embed mode finds the `beava` binary that ships with the curl-installed wheel automatically. Override with `BEAVA_BINARY=/path/to/beava` if you want to point at a different build.
 
 ## Surface
 

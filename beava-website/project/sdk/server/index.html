@@ -453,7 +453,7 @@ log_level<span class="tk-p">:</span> info</pre>
         <details>
           <summary>Why doesn't beava look for <code>./beava.yaml</code> automatically?</summary>
           <div class="acc-body">
-            <p>Because <code>pip install beava &amp;&amp; beava</code> is the canonical first-touch path, and an implicit lookup would force every fresh install to pre-create a YAML file (or hit "config file not found"). The locked behavior: no YAML unless you ask for one with <code>-c</code>. Built-in defaults handle every other case.</p>
+            <p>Because <code>curl … | sh &amp;&amp; beava</code> is the canonical first-touch path, and an implicit lookup would force every fresh install to pre-create a YAML file (or hit "config file not found"). The locked behavior: no YAML unless you ask for one with <code>-c</code>. Built-in defaults handle every other case.</p>
           </div>
         </details>
         <details>

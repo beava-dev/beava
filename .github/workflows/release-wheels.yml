@@ -63,24 +63,18 @@ jobs:
     name: wheel (${{ matrix.os }} / ${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
-    # Platform exclusions:
+    # Platform coverage: Linux x86_64, Linux aarch64, macOS arm64,
+    # macOS x86_64 (cross-compiled from macos-14 via Rosetta target
+    # x86_64-apple-darwin — avoids the hour-plus queue on macos-13's
+    # x86_64 runner pool while still producing a binary intel Macs
+    # can run natively).
     #
+    # Excluded:
     # - Windows: beava-server uses POSIX-only APIs
     #   (`tokio::signal::unix::{signal, SignalKind}` for graceful
     #   shutdown, `libc::pthread_t` + `libc::pthread_self` for thread-CPU
     #   accounting). The repo's standard CI also runs ubuntu-latest only.
     #   Windows is a follow-up port, not a wheel-build issue.
-    #
-    # - macOS x86_64 (macos-13): GitHub-hosted x86_64 mac runners have
-    #   hour-plus queue times since the runner pool shifted to Apple
-    #   Silicon. Apple's last x86_64 Mac shipped 2020 and Rosetta runs
-    #   the arm64 wheel binary fine on the shrinking intel-Mac
-    #   population, so the cost-benefit doesn't justify keeping the
-    #   cell. Intel Macs install via the sdist (Rust + maturin pulled
-    #   in transparently by pip's PEP 517 build isolation; ~1 min cold
-    #   build). Future enhancement: build a universal2 wheel from
-    #   macos-14 covering both arches in one file (polars / ruff
-    #   currently ship separate macos wheels but pay the queue tax).
     strategy:
       fail-fast: false
       matrix:
@@ -91,6 +85,8 @@ jobs:
             target: aarch64
           - os: macos-14
             target: aarch64
+          - os: macos-14
+            target: x86_64
     steps:
       - uses: actions/checkout@v4
 
@@ -182,8 +178,43 @@ jobs:
         run: ls -la dist/
 
       - name: Publish to PyPI
+        # Skipped silently until Trusted Publishing is configured on
+        # PyPI (first-time publish requires a one-time pending-publisher
+        # setup at pypi.org). The GH-Release asset upload below makes
+        # `curl ... | sh` work regardless.
+        if: ${{ vars.PYPI_TRUSTED_PUBLISHER_READY == 'true' }}
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist
-          # Verbose output so a failed first publish is debuggable.
           verbose: true
+
+  # `curl -fsSL .../install.sh | sh` fetches wheels from GH Releases —
+  # keeps the install path working before PyPI Trusted Publishing is
+  # set up. Once PyPI publish is live, both surfaces ship the same
+  # wheel; this job is the always-on path.
+  attach-to-release:
+    name: Attach wheels to GH Release
+    needs: [build, sdist]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - run: ls -la dist/
+      - name: Upload wheels + sdist to the tagged Release
+        uses: softprops/action-gh-release@v2
+        with:
+          # release.yml already creates the tag's GH Release (with
+          # the linux-x86_64 standalone binary). Passing the same
+          # `tag_name` UPDATES that release, leaving the binary alone
+          # and ADDING the wheels + sdist alongside it.
+          tag_name: ${{ github.ref_name }}
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+          fail_on_unmatched_files: true

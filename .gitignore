@@ -154,7 +154,13 @@ secrets/
 /.planning/
 /.agents/
 /CLAUDE.md
-/scripts/
+# /scripts/ is mostly internal tooling, so ignore its contents — but
+# whitelist install.sh, the public curl|sh entry point referenced from
+# beava.dev / README / SDK install snippets. The pattern uses /scripts/*
+# (not /scripts/) so the directory itself isn't fully excluded; gitignore
+# negation can't re-include a file whose parent dir is excluded.
+/scripts/*
+!/scripts/install.sh
 
 # SDKs deferred from public OSS for now (Python SDK ships under python/)
 /sdk/go/
