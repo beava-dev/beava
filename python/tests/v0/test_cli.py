@@ -107,14 +107,19 @@ def test_main_binary_not_found_clean_exit(capsys: pytest.CaptureFixture[str]) ->
 
 
 def test_pyproject_declares_maturin_bundled_binary() -> None:
-    """`pip install beava` must ship the Rust server binary directly.
-    The build backend is maturin in `bindings = "bin"` mode pointed at
-    the workspace `crates/beava-server/Cargo.toml`, with `bins =
-    ["beava"]` filtering out dev-only second binaries (log_probe).
-    These three together are the contract that produces a `beava`
-    shell command at `<sysconfig.get_path("scripts")>/beava` after
-    install — without them, `pip install beava` ships only the SDK
-    and the bundled-server promise on the homepage breaks."""
+    """`pip install beava` must ship ONLY the production `beava` binary,
+    not the dev-only `log_probe`. The contract has three layers:
+
+    1. python/pyproject.toml: build-backend = maturin, bindings = "bin",
+       and NO `[project.scripts] beava` (the native bundled binary IS
+       the shell command — a Python shim would shadow it).
+    2. crates/beava-server/Cargo.toml: a `dev-tools` Cargo feature
+       gates the log_probe bin (`required-features = ["dev-tools"]`)
+       so default cargo + maturin builds skip it. Maturin 1.13.x has
+       no pyproject-level bin filter, so the gate has to live at the
+       Cargo level.
+    3. [project.scripts] does NOT declare `beava` — the maturin native
+       binary occupies that name slot directly."""
     # tomllib is stdlib on Python 3.11+; on 3.10 we fall back to the
     # text-mode regex contract below (the package supports 3.10).
     try:
@@ -124,13 +129,22 @@ def test_pyproject_declares_maturin_bundled_binary() -> None:
         text = pyproject.read_text()
         assert 'build-backend = "maturin"' in text
         assert 'bindings = "bin"' in text
-        assert '"beava"' in text and "bins = " in text
         # `[project.scripts]` may exist for other entries; what matters
         # is that no line wires `beava = ...` under it.
         assert "[project.scripts]" not in text or "beava = " not in text
+        # Cargo-level gate on log_probe (text-mode contract).
+        cargo_toml = (
+            Path(__file__).resolve().parents[3]
+            / "crates"
+            / "beava-server"
+            / "Cargo.toml"
+        ).read_text()
+        assert 'name = "log_probe"' in cargo_toml
+        assert 'required-features = ["dev-tools"]' in cargo_toml
         return
 
-    pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
+    repo_root = Path(__file__).resolve().parents[3]
+    pyproject = repo_root / "python" / "pyproject.toml"
     cfg = tomllib.loads(pyproject.read_text())
 
     assert cfg["build-system"]["build-backend"] == "maturin", (
@@ -143,11 +157,6 @@ def test_pyproject_declares_maturin_bundled_binary() -> None:
         "[tool.maturin] bindings must be 'bin' — without it the wheel "
         "would build a C-extension shim instead of the server binary."
     )
-    assert "beava" in maturin.get("bins", []), (
-        "[tool.maturin].bins must include 'beava' — the production "
-        "server binary that becomes the `beava` shell command after "
-        "pip install."
-    )
 
     # `[project.scripts]` must NOT wire a Python `beava` console script:
     # the maturin-bundled native binary IS the `beava` shell command. A
@@ -158,4 +167,23 @@ def test_pyproject_declares_maturin_bundled_binary() -> None:
     assert "beava" not in project_scripts, (
         "[project.scripts] must not declare a `beava` entry — the "
         "maturin bundled binary IS the shell command."
+    )
+
+    # The dev-tools Cargo feature gates log_probe out of the wheel.
+    # Without this gate, `pip install beava` would land a `log_probe`
+    # binary on the user's PATH alongside `beava` — Beava's wheel
+    # stays narrow.
+    cargo_cfg = tomllib.loads(
+        (repo_root / "crates" / "beava-server" / "Cargo.toml").read_text()
+    )
+    bins = [b for b in cargo_cfg.get("bin", []) if b.get("name") == "log_probe"]
+    assert bins, "crates/beava-server must declare a [[bin]] log_probe target"
+    assert bins[0].get("required-features") == ["dev-tools"], (
+        "log_probe must be gated by `required-features = ['dev-tools']` "
+        "so the maturin-built wheel doesn't ship it."
+    )
+    features = cargo_cfg.get("features", {})
+    assert "dev-tools" in features, (
+        "crates/beava-server [features] must declare `dev-tools` for "
+        "the log_probe gate to compile."
     )

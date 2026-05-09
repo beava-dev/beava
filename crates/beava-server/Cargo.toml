@@ -10,6 +10,12 @@ description = "Beava v2 server — single-binary real-time feature server (fraud
 [features]
 default = []
 testing = ["dep:reqwest", "dep:tempfile"]
+# `dev-tools` gates dev-only artifacts (log_probe binary, logging_smoke
+# test) so they don't leak into the maturin-built `pip install beava`
+# wheel, which would otherwise place a `log_probe` binary on the user's
+# PATH alongside `beava`. CI gates run `--features testing,dev-tools`
+# to keep the smoke test in coverage; production wheel builds do not.
+dev-tools = []
 
 [[bin]]
 name = "beava"
@@ -18,7 +24,12 @@ path = "src/main.rs"
 [[bin]]
 name = "log_probe"
 path = "src/bin/log_probe.rs"
-required-features = []
+required-features = ["dev-tools"]
+
+[[test]]
+name = "logging_smoke"
+path = "tests/logging_smoke.rs"
+required-features = ["dev-tools"]
 
 [[test]]
 name = "foundation_smoke"

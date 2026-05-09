@@ -7,7 +7,11 @@ name = "beava"
 version = "0.4.0"
 requires-python = ">=3.10"
 description = "Beava: real-time feature server with composable streaming pipelines (Python SDK + bundled Rust server binary)."
-readme = "../README.md"
+# Maturin's sdist refuses `..` paths (different from hatchling), so we
+# point at the python/-local README. The SDK-scoped tone is also the
+# right shape for the PyPI long_description; root README.md targets
+# repo-level readers.
+readme = "README.md"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Hoang Phan", email = "phan.minhhoang2606@gmail.com" }]
 keywords = ["streaming", "real-time", "feature-store", "rust", "python"]
@@ -55,11 +59,16 @@ manifest-path = "../crates/beava-server/Cargo.toml"
 # Binary mode (not C-extension): builds the listed Rust binaries and
 # ships them in the wheel's scripts/ dir, polars/ruff/uv style.
 bindings = "bin"
-# beava-server crate has multiple bins (`beava`, `log_probe`); the
-# wheel ships only the production server binary.
-bins = ["beava"]
+# Wheel filtering note: maturin 1.13.x has no pyproject-level filter to
+# pick a subset of bins from a multi-bin crate. The dev-only `log_probe`
+# binary is gated behind `--features dev-tools` in `crates/beava-server/
+# Cargo.toml` (`required-features = ["dev-tools"]`); `pip install`
+# triggers a default-features build, so log_probe is not compiled and
+# does not land in the wheel. CI runs `--features testing,dev-tools`
+# to keep its coverage.
 # Strip debug symbols from the wheel binary — keeps wheel size near
-# ~14 MB; debug builds remain available via `cargo build` in dev.
+# ~3.5 MB on macOS arm64; debug builds remain available via
+# `cargo build` in dev.
 strip = true
 # Demo dataset JSON / JSONL files live inside the `beava.demos`
 # package but aren't .py modules; explicit include guarantees they

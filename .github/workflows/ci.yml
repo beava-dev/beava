@@ -44,9 +44,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # io-uring backend (dep:io-uring-crate, Linux-only opt-in) excluded from
       # --all-features per v0.0.0 scope; pre-existing borrow-checker errors in
-      # the io_uring backend tracked as v0.0.x backlog. Use --features testing
-      # which is what the smoke-clone gate validates.
-      - run: cargo clippy --workspace --all-targets --features testing -- -D warnings
+      # the io_uring backend tracked as v0.0.x backlog. Use --features
+      # testing,dev-tools — testing wires up the smoke-clone gate; dev-tools
+      # is the maturin-pristine-wheel gate that keeps log_probe + its smoke
+      # test in CI coverage while excluding them from production wheels.
+      - run: cargo clippy --workspace --all-targets --features testing,dev-tools -- -D warnings
 
   test:
     name: cargo nextest run
@@ -60,9 +62,10 @@ jobs:
         with:
           tool: cargo-nextest
       # io-uring backend excluded from --all-features per v0.0.0 scope (see
-      # clippy job above). Use --features testing — same feature set the
-      # smoke-clone gate validates GREEN at HEAD 14dacb2.
-      - run: cargo nextest run --features testing --no-fail-fast
+      # clippy job above). Use --features testing,dev-tools — testing wires
+      # up the smoke-clone gate; dev-tools keeps log_probe + logging_smoke
+      # in test coverage (they're excluded from the maturin-built wheel).
+      - run: cargo nextest run --features testing,dev-tools --no-fail-fast
 
   python:
     name: Python SDK (${{ matrix.python-version }})
