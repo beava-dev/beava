@@ -312,19 +312,19 @@
 .bv-toc {
   position: sticky; top: 88px;
   align-self: start;
-  padding: 36px 0 40px;
+  padding: 24px 0 28px;
   max-height: calc(100vh - 88px);
   overflow-y: auto;
 }
 .bv-toc-kicker {
   font-family: var(--font-sans); font-weight: 600; font-size: 13px;
-  color: var(--fg1); margin: 0 0 14px;
+  color: var(--fg1); margin: 0 0 8px;
 }
-.bv-toc ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 1px; }
+.bv-toc ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0; }
 .bv-toc li a {
   display: block;
-  padding: 5px 0 5px 12px;
-  font-family: var(--font-sans); font-size: 13px;
+  padding: 3px 0 3px 12px;
+  font-family: var(--font-sans); font-size: 13px; line-height: 1.4;
   color: var(--fg3); text-decoration: none;
   border-left: 2px solid transparent;
   margin-left: -2px;
@@ -337,9 +337,9 @@
   border-left-color: var(--accent);
 }
 .bv-toc-foot {
-  margin-top: 22px; padding-top: 16px;
+  margin-top: 14px; padding-top: 12px;
   border-top: 1px solid var(--border);
-  display: flex; flex-direction: column; gap: 8px;
+  display: flex; flex-direction: column; gap: 6px;
   font-family: var(--font-sans); font-size: 12.5px;
 }
 .bv-toc-foot a {
