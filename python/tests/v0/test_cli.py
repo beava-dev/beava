@@ -122,30 +122,36 @@ def test_pyproject_declares_maturin_bundled_binary() -> None:
        binary occupies that name slot directly."""
     # tomllib is stdlib on Python 3.11+; on 3.10 we fall back to the
     # text-mode regex contract below (the package supports 3.10).
+    # Skip when the source tree isn't reachable from the test file's
+    # location (e.g. tests mounted standalone into a Docker validation
+    # container that only mounts `tests/v0/`). A wheel that survived
+    # CI's full v0 suite already passed this contract — running it
+    # again from the install side has no value.
+    test_file = Path(__file__).resolve()
+    if len(test_file.parents) < 4:
+        pytest.skip("source tree not available; build contract is a CI-time gate")
+    repo_root = test_file.parents[3]
+    pyproject_path = repo_root / "python" / "pyproject.toml"
+    cargo_path = repo_root / "crates" / "beava-server" / "Cargo.toml"
+    if not pyproject_path.exists() or not cargo_path.exists():
+        pytest.skip("source tree not available; build contract is a CI-time gate")
+
     try:
         import tomllib
     except ImportError:
-        pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
-        text = pyproject.read_text()
+        text = pyproject_path.read_text()
         assert 'build-backend = "maturin"' in text
         assert 'bindings = "bin"' in text
         # `[project.scripts]` may exist for other entries; what matters
         # is that no line wires `beava = ...` under it.
         assert "[project.scripts]" not in text or "beava = " not in text
         # Cargo-level gate on log_probe (text-mode contract).
-        cargo_toml = (
-            Path(__file__).resolve().parents[3]
-            / "crates"
-            / "beava-server"
-            / "Cargo.toml"
-        ).read_text()
+        cargo_toml = cargo_path.read_text()
         assert 'name = "log_probe"' in cargo_toml
         assert 'required-features = ["dev-tools"]' in cargo_toml
         return
 
-    repo_root = Path(__file__).resolve().parents[3]
-    pyproject = repo_root / "python" / "pyproject.toml"
-    cfg = tomllib.loads(pyproject.read_text())
+    cfg = tomllib.loads(pyproject_path.read_text())
 
     assert cfg["build-system"]["build-backend"] == "maturin", (
         "python/pyproject.toml build-backend must be 'maturin' — the "
@@ -173,9 +179,7 @@ def test_pyproject_declares_maturin_bundled_binary() -> None:
     # Without this gate, `pip install beava` would land a `log_probe`
     # binary on the user's PATH alongside `beava` — Beava's wheel
     # stays narrow.
-    cargo_cfg = tomllib.loads(
-        (repo_root / "crates" / "beava-server" / "Cargo.toml").read_text()
-    )
+    cargo_cfg = tomllib.loads(cargo_path.read_text())
     bins = [b for b in cargo_cfg.get("bin", []) if b.get("name") == "log_probe"]
     assert bins, "crates/beava-server must declare a [[bin]] log_probe target"
     assert bins[0].get("required-features") == ["dev-tools"], (
