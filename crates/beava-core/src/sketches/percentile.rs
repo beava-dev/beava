@@ -239,4 +239,112 @@ mod tests {
         let j = serde_json::to_string(&s).unwrap();
         assert!(j.contains("v0_percentile_exact"));
     }
+
+    // ── merge ──────────────────────────────────────────────────────────
+    //
+    // Coverage gap: pre-fix the windowed query for percentile only read
+    // the latest active bucket — there was no merge primitive on
+    // PercentileState. These tests pin the new merge contract.
+
+    #[test]
+    fn merge_exact_plus_exact_unions_values() {
+        let mut a = PercentileState::new(256, 0.01);
+        let mut b = PercentileState::new(256, 0.01);
+        for v in 1..=10 {
+            a.insert(v as f64);
+        }
+        for v in 11..=20 {
+            b.insert(v as f64);
+        }
+        a.merge(&b);
+        // Combined values [1..=20]; median ≈ 10.5
+        let p50 = a.quantile(0.5).unwrap();
+        assert!(
+            (p50 - 10.5).abs() < 1.0,
+            "merged median should be ~10.5; got {p50}"
+        );
+        assert_eq!(a.mode_name(), "v0_percentile_exact");
+    }
+
+    #[test]
+    fn merge_exact_plus_exact_promotes_at_threshold() {
+        let mut a = PercentileState::new(10, 0.01);
+        let mut b = PercentileState::new(10, 0.01);
+        for v in 1..=8 {
+            a.insert(v as f64);
+        }
+        for v in 9..=16 {
+            b.insert(v as f64);
+        }
+        // a.values=8, b.values=8 → combined 16 > threshold 10 → promote.
+        a.merge(&b);
+        assert_eq!(
+            a.mode_name(),
+            "v0_percentile_uddsketch",
+            "combined size 16 must promote across threshold 10"
+        );
+    }
+
+    #[test]
+    fn merge_sketch_plus_sketch_uses_uddsketch_merge() {
+        let mut a = PercentileState::new(50, 0.01);
+        let mut b = PercentileState::new(50, 0.01);
+        for v in 1..=200 {
+            a.insert(v as f64);
+        }
+        for v in 201..=400 {
+            b.insert(v as f64);
+        }
+        assert_eq!(a.mode_name(), "v0_percentile_uddsketch");
+        assert_eq!(b.mode_name(), "v0_percentile_uddsketch");
+        a.merge(&b);
+        // Combined values [1..=400]; median ≈ 200.5 (within UDDSketch tolerance).
+        let p50 = a.quantile(0.5).unwrap();
+        let err = (p50 - 200.5).abs() / 200.5;
+        assert!(err < 0.05, "merged p50={p50} err={err}");
+    }
+
+    #[test]
+    fn merge_exact_plus_sketch_promotes_self() {
+        let mut a = PercentileState::new(256, 0.01);
+        for v in 1..=20 {
+            a.insert(v as f64);
+        }
+        let mut b = PercentileState::new(50, 0.01);
+        for v in 21..=200 {
+            b.insert(v as f64);
+        }
+        assert_eq!(a.mode_name(), "v0_percentile_exact");
+        assert_eq!(b.mode_name(), "v0_percentile_uddsketch");
+        a.merge(&b);
+        assert_eq!(a.mode_name(), "v0_percentile_uddsketch");
+        // Combined ~ [1..=200]; median ≈ 100.5
+        let p50 = a.quantile(0.5).unwrap();
+        assert!(
+            (p50 - 100.5).abs() / 100.5 < 0.1,
+            "merged p50 should be ~100.5; got {p50}"
+        );
+    }
+
+    #[test]
+    fn merge_sketch_plus_exact_folds_values() {
+        let mut a = PercentileState::new(50, 0.01);
+        for v in 1..=200 {
+            a.insert(v as f64);
+        }
+        let mut b = PercentileState::new(256, 0.01);
+        for v in 201..=300 {
+            b.insert(v as f64);
+        }
+        assert_eq!(a.mode_name(), "v0_percentile_uddsketch");
+        assert_eq!(b.mode_name(), "v0_percentile_exact");
+        a.merge(&b);
+        assert_eq!(a.mode_name(), "v0_percentile_uddsketch");
+        // Combined ~ [1..=300]; median ≈ 150.5
+        let p50 = a.quantile(0.5).unwrap();
+        assert!(
+            (p50 - 150.5).abs() / 150.5 < 0.1,
+            "merged p50 should be ~150.5; got {p50}"
+        );
+    }
 }

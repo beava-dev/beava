@@ -983,6 +983,140 @@ mod tests {
         );
     }
 
+    #[test]
+    fn windowed_count_distinct_merges_across_active_buckets() {
+        // Same shape as the top_k + percentile regressions: insert
+        // distinct values across two buckets, query at a time both are
+        // active, expect the merged distinct count rather than just the
+        // latest bucket's count.
+        let mut op = WindowedOp::new(AggKind::CountDistinct, 64);
+        for (t, name) in [(0_i64, "a"), (0, "b"), (0, "c"), (10, "d"), (10, "e")] {
+            let row = Row::new().with_field("user_id", Value::Str(name.into()));
+            op.update(&row, t, Some("user_id"), true);
+        }
+        let result = op.query(20);
+        assert_eq!(
+            result,
+            Value::I64(5),
+            "merged distinct count must reflect both buckets (3 + 2 distinct = 5)"
+        );
+    }
+
+    #[test]
+    fn windowed_top_k_merges_across_active_buckets_in_hybrid_mode() {
+        // Force Hybrid mode by registering many distinct values so the
+        // exact-mode threshold is exceeded; verify the merge still picks
+        // the dominant value as top-1. Without this test, a regression
+        // that breaks only the Hybrid-merge path could ship green.
+        let mut op = WindowedOp::new_with_params(
+            AggKind::TopK,
+            64,
+            SketchParams {
+                top_k_k: Some(3),
+                ..Default::default()
+            },
+        );
+        // Bucket 0: dominant value "winner" (1500x) plus many low-count
+        // distinct fillers to push past the exact-mode threshold (1024).
+        for _ in 0..1500 {
+            let row = Row::new().with_field("path", Value::Str("winner".into()));
+            op.update(&row, 0, Some("path"), true);
+        }
+        for i in 0..1500 {
+            let row = Row::new().with_field("path", Value::Str(format!("filler-{i}").into()));
+            op.update(&row, 0, Some("path"), true);
+        }
+        // Bucket 10: more "winner" hits.
+        for _ in 0..500 {
+            let row = Row::new().with_field("path", Value::Str("winner".into()));
+            op.update(&row, 10, Some("path"), true);
+        }
+        let result = op.query(20);
+        let arr = match result {
+            Value::Json(serde_json::Value::Array(arr)) => arr,
+            other => panic!("expected Json(Array), got {other:?}"),
+        };
+        let top0 = &arr[0];
+        assert_eq!(
+            top0.get("value").and_then(|v| v.as_str()),
+            Some("winner"),
+            "winner must remain top-1 after Hybrid merge; got {top0:?}"
+        );
+        // CMS-estimated count is approximate but must reflect both
+        // buckets; a regression that picks one bucket only would yield
+        // ≤1500.
+        let count = top0.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
+        assert!(
+            count >= 1900,
+            "winner count must reflect the merged 1500+500; got {count}"
+        );
+    }
+
+    // ── Cross-bucket merge tripwire (regression gate) ─────────────────────
+    //
+    // Catches the next time someone adds a windowable AggKind without a
+    // proper cross-bucket merge: applies the same event stream two ways
+    // — every event in one bucket vs each event in its own bucket — and
+    // asserts the windowed query returns the same result. The buggy
+    // "best-epoch active bucket" pattern fails this immediately, since
+    // distributing events across buckets makes the latest-bucket-only
+    // result diverge from the all-in-one-bucket result.
+    //
+    // Currently exercises Count, Sum, Min, Max, Variance, CountDistinct
+    // (kinds with `Value::Eq` results that compare cleanly). Top_k +
+    // Percentile have dedicated tests because their result shapes
+    // (Json(Array) and approximate F64) don't compare with raw `==`.
+
+    #[test]
+    fn windowed_query_invariant_under_bucket_distribution() {
+        let kinds = [
+            AggKind::Count,
+            AggKind::Sum,
+            AggKind::Min,
+            AggKind::Max,
+            AggKind::Variance,
+            AggKind::CountDistinct,
+        ];
+        let values: [f64; 8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+        let window_ms: u64 = 64; // bucket_ms = 1ms
+
+        for kind in kinds {
+            let needs_field = !matches!(kind, AggKind::Count);
+
+            let mut op_a = WindowedOp::new(kind, window_ms);
+            for &v in values.iter() {
+                let row = if needs_field {
+                    Row::new().with_field("amount", Value::F64(v))
+                } else {
+                    Row::new()
+                };
+                let field = if needs_field { Some("amount") } else { None };
+                op_a.update(&row, 0, field, true);
+            }
+            let result_a = op_a.query(10);
+
+            let mut op_b = WindowedOp::new(kind, window_ms);
+            for (i, &v) in values.iter().enumerate() {
+                let row = if needs_field {
+                    Row::new().with_field("amount", Value::F64(v))
+                } else {
+                    Row::new()
+                };
+                let field = if needs_field { Some("amount") } else { None };
+                op_b.update(&row, i as i64, field, true);
+            }
+            // Query at t=15: all 8 buckets still active (window=64ms).
+            let result_b = op_b.query(15);
+
+            assert_eq!(
+                result_a, result_b,
+                "windowed {kind:?}: bucket distribution must not change \
+                 the query result. single-bucket={result_a:?} \
+                 multi-bucket={result_b:?}"
+            );
+        }
+    }
+
     // ── Replay determinism ────────────────────────────────────────────────
 
     #[test]

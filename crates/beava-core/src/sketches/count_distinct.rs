@@ -368,4 +368,131 @@ mod tests {
             est
         );
     }
+
+    // ── merge ──────────────────────────────────────────────────────────
+    //
+    // Coverage gap: pre-fix the windowed query for count_distinct only
+    // read the latest active bucket (existing comment at the broken arm
+    // even called this out as "v0 simplification — future work"). These
+    // tests pin the new merge contract for all 9 mode-pair combinations
+    // (3 self-modes × 3 other-modes); the cross-mode cases collapse into
+    // the same code paths so we only exercise the representatives.
+
+    #[test]
+    fn merge_array_plus_array_unions() {
+        let mut a = CountDistinctState::new(1024);
+        let mut b = CountDistinctState::new(1024);
+        for i in 0..5 {
+            a.add_hash(hash_str(&format!("a{i}")));
+        }
+        for i in 0..5 {
+            b.add_hash(hash_str(&format!("b{i}")));
+        }
+        a.merge(&b);
+        assert_eq!(a.estimate(), 10, "10 distinct values across the union");
+    }
+
+    #[test]
+    fn merge_array_plus_array_deduplicates_overlap() {
+        let mut a = CountDistinctState::new(1024);
+        let mut b = CountDistinctState::new(1024);
+        for i in 0..5 {
+            let h = hash_str(&format!("shared{i}"));
+            a.add_hash(h);
+            b.add_hash(h);
+        }
+        a.merge(&b);
+        assert_eq!(a.estimate(), 5, "overlapping hashes must dedupe");
+    }
+
+    #[test]
+    fn merge_promotes_through_thresholds_naturally() {
+        // a is in ExactArray (4 entries); b is in ExactArray (4 entries).
+        // Combined 8 distinct → promotes past EXACT_THRESHOLD=8 (default).
+        // Combined 1100+ would promote to HLL.
+        let mut a = CountDistinctState::new(1024);
+        let mut b = CountDistinctState::new(1024);
+        for i in 0..600 {
+            a.add_hash(hash_str(&format!("a{i}")));
+        }
+        for i in 0..600 {
+            b.add_hash(hash_str(&format!("b{i}")));
+        }
+        // Both should already be in HashSet mode (>EXACT_THRESHOLD=8 each).
+        assert_eq!(a.mode_name(), "v0_count_distinct_hash_set");
+        a.merge(&b);
+        // Combined 1200 distinct > HASH_THRESHOLD=1024 → promotes to HLL.
+        assert_eq!(a.mode_name(), "v0_count_distinct_hll");
+        let err = (a.estimate() as i64 - 1200).abs() as f64 / 1200.0;
+        assert!(err < 0.05, "merged HLL estimate err {err}");
+    }
+
+    #[test]
+    fn merge_hll_plus_hll_uses_hll_merge() {
+        let mut a = CountDistinctState::new(1024);
+        let mut b = CountDistinctState::new(1024);
+        for i in 0..2000 {
+            a.add_hash(hash_str(&format!("a{i}")));
+        }
+        for i in 0..2000 {
+            b.add_hash(hash_str(&format!("b{i}")));
+        }
+        assert_eq!(a.mode_name(), "v0_count_distinct_hll");
+        assert_eq!(b.mode_name(), "v0_count_distinct_hll");
+        a.merge(&b);
+        assert_eq!(a.mode_name(), "v0_count_distinct_hll");
+        let err = (a.estimate() as i64 - 4000).abs() as f64 / 4000.0;
+        assert!(err < 0.05, "merged HLL estimate err {err}");
+    }
+
+    #[test]
+    fn merge_hll_plus_array_promotes_other_through_hll_path() {
+        // Self is HLL; other is ExactArray. The (Hll, ExactArray) arm
+        // walks other's array and feeds each hash into self's Hll.
+        let mut a = CountDistinctState::new(1024);
+        for i in 0..2000 {
+            a.add_hash(hash_str(&format!("a{i}")));
+        }
+        assert_eq!(a.mode_name(), "v0_count_distinct_hll");
+        let mut b = CountDistinctState::new(1024);
+        for i in 0..5 {
+            b.add_hash(hash_str(&format!("b{i}")));
+        }
+        assert_eq!(b.mode_name(), "v0_count_distinct_exact_array");
+        a.merge(&b);
+        assert_eq!(a.mode_name(), "v0_count_distinct_hll");
+        let err = (a.estimate() as i64 - 2005).abs() as f64 / 2005.0;
+        assert!(err < 0.05, "merged HLL estimate err {err}");
+    }
+
+    #[test]
+    fn merge_array_plus_hll_promotes_self() {
+        // Self is ExactArray; other is HLL. Self gets promoted to HLL
+        // first, then merged via Hll::merge.
+        let mut a = CountDistinctState::new(1024);
+        for i in 0..5 {
+            a.add_hash(hash_str(&format!("a{i}")));
+        }
+        let mut b = CountDistinctState::new(1024);
+        for i in 0..2000 {
+            b.add_hash(hash_str(&format!("b{i}")));
+        }
+        assert_eq!(a.mode_name(), "v0_count_distinct_exact_array");
+        assert_eq!(b.mode_name(), "v0_count_distinct_hll");
+        a.merge(&b);
+        assert_eq!(a.mode_name(), "v0_count_distinct_hll");
+        let err = (a.estimate() as i64 - 2005).abs() as f64 / 2005.0;
+        assert!(err < 0.05, "merged HLL estimate err {err}");
+    }
+
+    #[test]
+    fn merge_into_empty_self_yields_other() {
+        let mut a = CountDistinctState::new(1024);
+        let mut b = CountDistinctState::new(1024);
+        for i in 0..5 {
+            b.add_hash(hash_str(&format!("b{i}")));
+        }
+        a.merge(&b);
+        assert_eq!(a.estimate(), 5);
+    }
 }

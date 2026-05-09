@@ -370,4 +370,159 @@ mod tests {
         let j = serde_json::to_string(&s).unwrap();
         assert!(j.contains("v0_top_k_exact"));
     }
+
+    // ── merge ──────────────────────────────────────────────────────────
+    //
+    // Coverage gap pinned by these: the prod bug surfaced because the
+    // windowed-aggregation query used to pick only the latest bucket, and
+    // there was no `merge` method on TopKState to do better. These tests
+    // pin the new merge contract so a regression can't sneak back in.
+
+    #[test]
+    fn merge_exact_plus_exact_sums_counts_per_value() {
+        let mut a = TopKState::new(3, 1024, 2048, 4);
+        let mut b = TopKState::new(3, 1024, 2048, 4);
+        for _ in 0..5 {
+            a.insert(TopKValue::Str("x".into()));
+        }
+        for _ in 0..3 {
+            a.insert(TopKValue::Str("y".into()));
+        }
+        for _ in 0..7 {
+            b.insert(TopKValue::Str("y".into()));
+        }
+        for _ in 0..2 {
+            b.insert(TopKValue::Str("z".into()));
+        }
+
+        a.merge(&b);
+        let top = a.top();
+        // y: 3+7=10, x: 5, z: 2
+        assert_eq!(top.len(), 3);
+        assert_eq!(top[0], (TopKValue::Str("y".into()), 10));
+        assert_eq!(top[1], (TopKValue::Str("x".into()), 5));
+        assert_eq!(top[2], (TopKValue::Str("z".into()), 2));
+        // Mode stays Exact — combined cardinality (3) is well below threshold.
+        assert_eq!(a.mode_name(), "v0_top_k_exact");
+    }
+
+    #[test]
+    fn merge_exact_plus_exact_promotes_when_combined_exceeds_threshold() {
+        // Threshold = 5 → combined 8 distinct must promote to Hybrid.
+        let mut a = TopKState::new(2, 5, 2048, 4);
+        let mut b = TopKState::new(2, 5, 2048, 4);
+        for i in 0..4 {
+            a.insert(TopKValue::Str(format!("a{i}")));
+        }
+        for i in 0..4 {
+            b.insert(TopKValue::Str(format!("b{i}")));
+        }
+        a.merge(&b);
+        assert_eq!(
+            a.mode_name(),
+            "v0_top_k_hybrid",
+            "8 distinct values must promote across threshold=5"
+        );
+    }
+
+    #[test]
+    fn merge_hybrid_plus_hybrid_picks_dominant_key() {
+        // Both sides force-promoted (threshold=5); each has a copy of
+        // "dominant" in its heap. After merge, "dominant" must remain
+        // top-1 with summed count.
+        let mut a = TopKState::new(2, 5, 2048, 4);
+        let mut b = TopKState::new(2, 5, 2048, 4);
+        for _ in 0..1000 {
+            a.insert(TopKValue::Str("dominant".into()));
+        }
+        for i in 0..10 {
+            a.insert(TopKValue::Str(format!("a{i}")));
+        }
+        for _ in 0..500 {
+            b.insert(TopKValue::Str("dominant".into()));
+        }
+        for i in 0..10 {
+            b.insert(TopKValue::Str(format!("b{i}")));
+        }
+        assert_eq!(a.mode_name(), "v0_top_k_hybrid");
+        assert_eq!(b.mode_name(), "v0_top_k_hybrid");
+        a.merge(&b);
+        let top = a.top();
+        assert_eq!(top[0].0, TopKValue::Str("dominant".into()));
+        assert!(
+            top[0].1 >= 1500,
+            "dominant must reflect both contributions; got {}",
+            top[0].1
+        );
+    }
+
+    #[test]
+    fn merge_exact_plus_hybrid_via_promotion() {
+        let mut a = TopKState::new(2, 1024, 2048, 4);
+        for _ in 0..50 {
+            a.insert(TopKValue::Str("shared".into()));
+        }
+        let mut b = TopKState::new(2, 5, 2048, 4);
+        for _ in 0..200 {
+            b.insert(TopKValue::Str("shared".into()));
+        }
+        for i in 0..10 {
+            b.insert(TopKValue::Str(format!("b{i}")));
+        }
+        assert_eq!(a.mode_name(), "v0_top_k_exact");
+        assert_eq!(b.mode_name(), "v0_top_k_hybrid");
+        a.merge(&b);
+        assert_eq!(a.mode_name(), "v0_top_k_hybrid");
+        let top = a.top();
+        assert_eq!(top[0].0, TopKValue::Str("shared".into()));
+        assert!(
+            top[0].1 >= 250,
+            "shared must reflect 50 from self + 200 from other; got {}",
+            top[0].1
+        );
+    }
+
+    #[test]
+    fn merge_hybrid_plus_exact_folds_counts() {
+        let mut a = TopKState::new(2, 5, 2048, 4);
+        for _ in 0..1000 {
+            a.insert(TopKValue::Str("x".into()));
+        }
+        for i in 0..10 {
+            a.insert(TopKValue::Str(format!("a{i}")));
+        }
+        let mut b = TopKState::new(2, 1024, 2048, 4);
+        for _ in 0..500 {
+            b.insert(TopKValue::Str("x".into()));
+        }
+        for _ in 0..200 {
+            b.insert(TopKValue::Str("y".into()));
+        }
+        assert_eq!(a.mode_name(), "v0_top_k_hybrid");
+        assert_eq!(b.mode_name(), "v0_top_k_exact");
+        a.merge(&b);
+        let top = a.top();
+        assert_eq!(top[0].0, TopKValue::Str("x".into()));
+        assert!(
+            top[0].1 >= 1500,
+            "x must reflect 1000+500; got {}",
+            top[0].1
+        );
+        assert!(
+            top.iter()
+                .any(|(v, _)| matches!(v, TopKValue::Str(s) if s == "y")),
+            "y (count 200) should be in the merged top-2"
+        );
+    }
+
+    #[test]
+    fn merge_into_empty_self_yields_other() {
+        let mut a = TopKState::new(2, 1024, 2048, 4);
+        let mut b = TopKState::new(2, 1024, 2048, 4);
+        for _ in 0..5 {
+            b.insert(TopKValue::Str("x".into()));
+        }
+        a.merge(&b);
+        assert_eq!(a.top(), vec![(TopKValue::Str("x".into()), 5)]);
+    }
 }
