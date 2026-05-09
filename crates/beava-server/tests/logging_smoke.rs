@@ -78,7 +78,10 @@ fn probe_stdout_has_structured_field() {
         String::from_utf8_lossy(&out.stderr)
     );
 
-    // Look for the structured `version = "0.1.0"` field on the info event.
+    // Look for the structured `version` field on the info event. The expected
+    // value is the workspace's CARGO_PKG_VERSION at compile time so this test
+    // stays in lockstep with version bumps without manual edits.
+    let expected = env!("CARGO_PKG_VERSION");
     let mut found = false;
     for line in combined.lines() {
         let trimmed = line.trim();
@@ -86,7 +89,7 @@ fn probe_stdout_has_structured_field() {
             continue;
         }
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(trimmed) {
-            if v.get("version").and_then(|x| x.as_str()) == Some("0.1.0") {
+            if v.get("version").and_then(|x| x.as_str()) == Some(expected) {
                 found = true;
                 break;
             }
@@ -94,6 +97,6 @@ fn probe_stdout_has_structured_field() {
     }
     assert!(
         found,
-        "no structured `version=0.1.0` field found in:\n{combined}"
+        "no structured `version={expected}` field found in:\n{combined}"
     );
 }

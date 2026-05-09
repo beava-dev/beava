@@ -673,7 +673,7 @@ mod tests {
 
     fn fake_result() -> QuickstartResult {
         QuickstartResult {
-            server_version: "0.1.0".into(),
+            server_version: env!("CARGO_PKG_VERSION").into(),
             bind_addr: "127.0.0.1:8081".parse().unwrap(),
             ready_in: Duration::from_millis(180),
             registry_version: 1,

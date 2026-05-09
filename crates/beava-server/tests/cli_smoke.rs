@@ -43,7 +43,14 @@ fn version_flag_works() {
         .expect("spawn beava --version");
     assert!(out.status.success());
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout.contains("0.1.0"), "stdout: {stdout}");
+    // CARGO_PKG_VERSION resolves at compile time to the workspace version
+    // in Cargo.toml — keeps this assertion in lockstep with version bumps
+    // without manual edits.
+    let expected = env!("CARGO_PKG_VERSION");
+    assert!(
+        stdout.contains(expected),
+        "expected version {expected} in stdout: {stdout}"
+    );
 }
 
 /// Allocate a free TCP port by binding briefly then releasing it.

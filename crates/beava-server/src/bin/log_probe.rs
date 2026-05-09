@@ -6,7 +6,7 @@ use tracing::{error, info, warn};
 
 fn main() {
     beava_server::logging::init("info").expect("init logging");
-    info!(target: "beava.probe", version = "0.1.0", "probe started");
+    info!(target: "beava.probe", version = env!("CARGO_PKG_VERSION"), "probe started");
     warn!(target: "beava.probe", code = 42i64, "probe warn event");
     error!(target: "beava.probe", "probe error event");
 }
