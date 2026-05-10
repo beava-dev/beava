@@ -37,8 +37,8 @@ cargo run
 
 Defaults (override via `--http-addr` / `--tcp-addr` or env vars — see `cargo run -- --help`):
 
-- HTTP / JSON listener: `127.0.0.1:7379`
-- Binary-framed TCP listener: `127.0.0.1:7380`
+- HTTP / JSON listener: `127.0.0.1:8080`
+- Binary-framed TCP listener: `127.0.0.1:8081`
 
 ## Run the tests
 
