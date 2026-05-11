@@ -96,10 +96,11 @@ Replaces Postgres triggers + Redis counters + the cron job that heals drift. Sam
 
 ## Wire surface
 
-beava binds two listeners:
+beava binds three listeners:
 
-- **HTTP/JSON on `127.0.0.1:8080`** — curl-compatible debugging path.
-- **Framed TCP on `127.0.0.1:8081`** — sub-millisecond fast-path. JSON or msgpack content.
+- **HTTP/JSON on `127.0.0.1:8080`** - curl-compatible debugging path.
+- **Framed TCP on `127.0.0.1:8081`** - sub-millisecond fast-path. JSON or msgpack content.
+- **Admin sidecar on `127.0.0.1:8090`** - observability endpoints for `/health`, `/ready`, `/metrics`, and `/registry`. Override with `BEAVA_ADMIN_ADDR`.
 
 ### HTTP
 
@@ -156,6 +157,7 @@ subcommands
 env vars
   BEAVA_LOG_LEVEL=debug|info|warn     default: info
   BEAVA_TEST_MODE=1                   alias for --test-mode
+  BEAVA_ADMIN_ADDR                    admin sidecar address; default: 127.0.0.1:8090
   BEAVA_WAL_DIR / BEAVA_SNAPSHOT_DIR  per-dir overrides (use --data-dir
                                       for a single-root convenience flag)
   BEAVA_LISTEN_ADDR                   alias for --http-addr
