@@ -40,6 +40,16 @@ Defaults (override via `--http-addr` / `--tcp-addr` or env vars — see `cargo r
 - HTTP / JSON listener: `127.0.0.1:8080`
 - Binary-framed TCP listener: `127.0.0.1:8081`
 
+When working on the Python SDK in editable mode, point it at the
+freshly built local server binary with `BEAVA_BINARY`. This is useful
+when you want `pip install -e .` to exercise the current Rust build
+instead of a released binary on your `PATH`.
+
+```bash
+export BEAVA_BINARY=$(pwd)/target/debug/beava
+python -m pytest python/tests
+```
+
 ## Run the tests
 
 Run the same gates CI runs before opening a pull request.
