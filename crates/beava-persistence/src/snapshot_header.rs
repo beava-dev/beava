@@ -87,11 +87,28 @@ impl SnapshotHeader {
             });
         }
         let flags = u16::from_le_bytes([bytes[10], bytes[11]]);
-        let created_at_ms = i64::from_le_bytes(bytes[12..20].try_into().unwrap());
-        let snapshot_lsn = u64::from_le_bytes(bytes[20..28].try_into().unwrap());
-        let registry_version = u64::from_le_bytes(bytes[28..36].try_into().unwrap());
-        let body_len = u64::from_le_bytes(bytes[36..44].try_into().unwrap());
-        let body_crc32c = u32::from_le_bytes(bytes[44..48].try_into().unwrap());
+        let created_at_ms = i64::from_le_bytes(
+            bytes[12..20]
+                .try_into()
+                .expect("snapshot header: created_at_ms"),
+        );
+        let snapshot_lsn = u64::from_le_bytes(
+            bytes[20..28]
+                .try_into()
+                .expect("snapshot header: snapshot_lsn"),
+        );
+        let registry_version = u64::from_le_bytes(
+            bytes[28..36]
+                .try_into()
+                .expect("snapshot header: registry_version"),
+        );
+        let body_len =
+            u64::from_le_bytes(bytes[36..44].try_into().expect("snapshot header: body_len"));
+        let body_crc32c = u32::from_le_bytes(
+            bytes[44..48]
+                .try_into()
+                .expect("snapshot header: body_crc32c"),
+        );
         Ok(SnapshotHeader {
             format_version,
             flags,
