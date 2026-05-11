@@ -21,7 +21,7 @@ fn beava_bin() -> &'static str {
 }
 
 #[test]
-fn help_exits_zero_and_mentions_config_flag() {
+fn help_exits_zero_and_mentions_config_and_durability_env_vars() {
     let out = Command::new(beava_bin())
         .arg("--help")
         .output()
@@ -32,7 +32,19 @@ fn help_exits_zero_and_mentions_config_flag() {
         out.status
     );
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout.contains("--config"), "stdout: {stdout}");
+    for needle in [
+        "--config",
+        "Environment variables:",
+        "BEAVA_WAL_DIR=./beava-wal",
+        "BEAVA_WAL_BUFFERS=4",
+        "BEAVA_WAL_BUFFER_SIZE_MB=32",
+        "BEAVA_WAL_TICK_MS=20",
+        "BEAVA_SNAPSHOT_DIR=./beava-snapshots",
+        "BEAVA_SNAPSHOT_INTERVAL_MS=30000",
+        "BEAVA_SNAPSHOT_RETAIN_COUNT=2",
+    ] {
+        assert!(stdout.contains(needle), "stdout: {stdout}");
+    }
 }
 
 #[test]

@@ -10,6 +10,22 @@ use std::path::PathBuf;
     version,
     about = "Beava v2 — real-time feature server for fraud, ad-tech, and behavioral analytics",
     long_about = None,
+    after_long_help = r#"Environment variables:
+  BEAVA_WAL_DIR=./beava-wal
+      Directory for WAL segment files.
+  BEAVA_WAL_BUFFERS=4
+      Number of WAL ring buffers; values clamp to 2..32.
+  BEAVA_WAL_BUFFER_SIZE_MB=32
+      Size of each WAL ring buffer in MiB; values clamp to 4..256.
+  BEAVA_WAL_TICK_MS=20
+      WAL writer flush tick in milliseconds; values clamp to 1..1000.
+  BEAVA_SNAPSHOT_DIR=./beava-snapshots
+      Directory for snapshot files.
+  BEAVA_SNAPSHOT_INTERVAL_MS=30000
+      Periodic snapshot cadence in milliseconds.
+  BEAVA_SNAPSHOT_RETAIN_COUNT=2
+      Number of committed snapshots to retain after pruning.
+"#,
 )]
 pub struct Cli {
     /// Path to YAML config file. Optional — when omitted, beava falls
@@ -95,6 +111,18 @@ mod tests {
             help.contains("--config"),
             "help must document --config: {help}"
         );
+        for needle in [
+            "Environment variables:",
+            "BEAVA_WAL_DIR=./beava-wal",
+            "BEAVA_WAL_BUFFERS=4",
+            "BEAVA_WAL_BUFFER_SIZE_MB=32",
+            "BEAVA_WAL_TICK_MS=20",
+            "BEAVA_SNAPSHOT_DIR=./beava-snapshots",
+            "BEAVA_SNAPSHOT_INTERVAL_MS=30000",
+            "BEAVA_SNAPSHOT_RETAIN_COUNT=2",
+        ] {
+            assert!(help.contains(needle), "help must document {needle}: {help}");
+        }
     }
 
     #[test]
