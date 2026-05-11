@@ -199,7 +199,7 @@ def read_frame(sock: socket.socket, max_frame_bytes: int = MAX_FRAME_BYTES) -> F
     return Frame(op=op, ct=ct, payload=payload)
 
 
-def parse_register_response(frame: Frame) -> dict:  # type: ignore[type-arg]
+def parse_register_response(frame: Frame) -> dict[str, Any]:
     """Parse a register response frame into a dict or raise.
 
     Args:

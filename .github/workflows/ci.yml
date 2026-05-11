@@ -109,10 +109,6 @@ jobs:
 
       - name: mypy --strict
         working-directory: python
-        # Strict mode per python/pyproject.toml [tool.mypy]. Advisory for
-        # now (continue-on-error) — drop the flag once the codebase is
-        # green. Removing it is a one-liner; the gate stays wired.
-        continue-on-error: true
         run: mypy beava
 
       - name: Run pytest (v0 acceptance suite via pyproject testpaths)

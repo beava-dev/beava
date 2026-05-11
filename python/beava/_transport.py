@@ -57,7 +57,7 @@ class Transport:
     backend doesn't support raise ``NotImplementedError`` from this base.
     """
 
-    def send_register(self, payload_json: bytes) -> dict:  # type: ignore[type-arg]
+    def send_register(self, payload_json: bytes) -> dict[str, Any]:
         raise NotImplementedError
 
     def send_push(
@@ -90,7 +90,7 @@ class Transport:
     def send_reset(self) -> None:
         raise NotImplementedError
 
-    def send_ping(self) -> dict:  # type: ignore[type-arg]
+    def send_ping(self) -> dict[str, Any]:
         raise NotImplementedError
 
     def close(self) -> None:
@@ -123,7 +123,7 @@ class HttpTransport(Transport):
         self.base_url = base_url.rstrip("/")
         self._client = httpx.Client(base_url=self.base_url, timeout=timeout)
 
-    def send_register(self, payload_json: bytes) -> dict:  # type: ignore[type-arg]
+    def send_register(self, payload_json: bytes) -> dict[str, Any]:
         """POST ``/register`` with a JSON payload.
 
         Args:
@@ -142,9 +142,9 @@ class HttpTransport(Transport):
             content=payload_json,
             headers={"Content-Type": "application/json"},
         )
-        body = r.json()
+        body = cast(dict[str, Any], r.json())
         if r.status_code == 200:
-            return body  # type: ignore[no-any-return]
+            return body
         error = body.get("error", {})
         raise RegistrationError(
             code=error.get("code", "unknown"),
@@ -180,9 +180,9 @@ class HttpTransport(Transport):
             content=body_bytes,
             headers={"Content-Type": "application/json"},
         )
-        body = r.json()
+        body = cast(dict[str, Any], r.json())
         if r.status_code == 200:
-            return body  # type: ignore[no-any-return]
+            return body
         error = body.get("error", {})
         raise RegistrationError(
             code=error.get("code", "unknown"),
@@ -216,9 +216,9 @@ class HttpTransport(Transport):
             content=body_bytes,
             headers={"Content-Type": "application/json"},
         )
-        body = r.json()
+        body = cast(dict[str, Any], r.json())
         if r.status_code == 200:
-            return body  # type: ignore[no-any-return]
+            return body
         error = body.get("error", {})
         raise RegistrationError(
             code=error.get("code", "unknown"),
@@ -320,7 +320,7 @@ class HttpTransport(Transport):
             errors=[],
         )
 
-    def send_ping(self) -> dict:  # type: ignore[type-arg]
+    def send_ping(self) -> dict[str, Any]:
         """``POST /ping`` → ``{"pong": True, "registry_version": <n>}``.
 
         Verb-style liveness probe on the data plane (locked v0 surface).
@@ -342,7 +342,7 @@ class HttpTransport(Transport):
             headers={"Content-Type": "application/json"},
         )
         if r.status_code == 200:
-            return cast(dict, r.json())
+            return cast(dict[str, Any], r.json())
         try:
             body = r.json()
             error = body.get("error", {})
@@ -423,7 +423,7 @@ class TcpTransport(Transport):
             )
         return self._socket
 
-    def send_register(self, payload_json: bytes) -> dict:  # type: ignore[type-arg]
+    def send_register(self, payload_json: bytes) -> dict[str, Any]:
         """Send an ``OP_REGISTER`` frame; return the parsed response dict.
 
         Args:
@@ -603,7 +603,7 @@ class TcpTransport(Transport):
             ),
         )
 
-    def send_ping(self) -> dict:  # type: ignore[type-arg]
+    def send_ping(self) -> dict[str, Any]:
         """Send an ``OP_PING`` frame; return the parsed response dict.
 
         Returns:
@@ -654,7 +654,7 @@ class TcpTransport(Transport):
         body_dict = {"feature": feature, "key": key}
         if wire_format == "msgpack":
             try:
-                import msgpack  # type: ignore[import-untyped]
+                import msgpack
             except ImportError as exc:
                 raise ImportError(
                     "wire_format='msgpack' requires the 'msgpack' package: "
@@ -752,7 +752,7 @@ class EmbedTransport(Transport):
         # can assert ``BEAVA_TEST_MODE=1`` propagation.
         self._spawn_env: dict[str, str] = spawn_env or {}
 
-    def send_register(self, payload_json: bytes) -> dict:  # type: ignore[type-arg]
+    def send_register(self, payload_json: bytes) -> dict[str, Any]:
         return self._tcp.send_register(payload_json)
 
     def send_push(
@@ -786,7 +786,7 @@ class EmbedTransport(Transport):
     def send_reset(self) -> None:
         self._tcp.send_reset()
 
-    def send_ping(self) -> dict:  # type: ignore[type-arg]
+    def send_ping(self) -> dict[str, Any]:
         return self._tcp.send_ping()
 
     def _tcp_get_single(
