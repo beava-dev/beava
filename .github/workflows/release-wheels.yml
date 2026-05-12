@@ -188,12 +188,20 @@ jobs:
           packages-dir: dist
           verbose: true
 
-  # `curl -fsSL .../install.sh | sh` fetches wheels from GH Releases —
-  # keeps the install path working before PyPI Trusted Publishing is
-  # set up. Once PyPI publish is live, both surfaces ship the same
-  # wheel; this job is the always-on path.
+  # Attaches three asset classes to the tagged GH Release:
+  #   1. The platform wheels themselves (for `curl ... | sh` install path
+  #      and for users who want to download wheels directly).
+  #   2. The sdist (for `pip install` on platforms without a prebuilt wheel).
+  #   3. Per-platform tarballs containing just the `beava` binary, named
+  #      `beava-<platform>.tar.gz` with a `.sha256` sidecar. Consumed by
+  #      `homebrew-bump.yml` to populate the Homebrew formula.
+  #
+  # The tarballs reuse the wheel matrix's binaries — wheels are zip files,
+  # the binary lives at `beava-<version>.data/scripts/beava` per maturin's
+  # `bindings = "bin"` convention. Extracting + repackaging avoids a
+  # second build matrix.
   attach-to-release:
-    name: Attach wheels to GH Release
+    name: Attach wheels + tarballs to GH Release
     needs: [build, sdist]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
@@ -206,15 +214,54 @@ jobs:
           path: dist
           merge-multiple: true
       - run: ls -la dist/
-      - name: Upload wheels + sdist to the tagged Release
+
+      - name: Extract per-platform binaries into tarballs for Homebrew
+        run: |
+          set -euo pipefail
+          mkdir -p tarballs
+          for whl in dist/*.whl; do
+            name="$(basename "$whl" .whl)"
+            # Map wheel-platform-tag → homebrew platform name. The wheel
+            # filename ends in `…-<python_tag>-<abi>-<platform_tag>.whl`.
+            case "$name" in
+              *macosx_*_arm64*)    platform=macos-arm64  ;;
+              *macosx_*_x86_64*)   platform=macos-x86_64 ;;
+              *manylinux*_x86_64*) platform=linux-x86_64 ;;
+              *manylinux*_aarch64*) platform=linux-arm64  ;;
+              *)
+                echo "warn: skipping wheel with unrecognised platform tag: $name"
+                continue
+                ;;
+            esac
+            workdir="$(mktemp -d)"
+            unzip -q -d "$workdir" "$whl"
+            # Binary lands at <pkg>-<version>.data/scripts/beava
+            bin="$(find "$workdir" -type f -name beava -path '*.data/scripts/*' | head -1)"
+            if [ -z "$bin" ] || [ ! -x "$bin" ]; then
+              echo "error: no executable beava binary inside $whl"
+              ls -R "$workdir" >&2
+              exit 1
+            fi
+            chmod +x "$bin"
+            tar -czf "tarballs/beava-${platform}.tar.gz" -C "$(dirname "$bin")" beava
+            # Sidecar format matches release.yml: `<hash>  <filename>`
+            (cd tarballs && sha256sum "beava-${platform}.tar.gz" > "beava-${platform}.tar.gz.sha256")
+            echo "✓ packaged beava-${platform}.tar.gz"
+            rm -rf "$workdir"
+          done
+          ls -la tarballs/
+
+      - name: Upload wheels + sdist + platform tarballs to the tagged Release
         uses: softprops/action-gh-release@v2
         with:
           # release.yml already creates the tag's GH Release (with
           # the linux-x86_64 standalone binary). Passing the same
           # `tag_name` UPDATES that release, leaving the binary alone
-          # and ADDING the wheels + sdist alongside it.
+          # and ADDING the wheels + sdist + tarballs alongside it.
           tag_name: ${{ github.ref_name }}
           files: |
             dist/*.whl
             dist/*.tar.gz
+            tarballs/beava-*.tar.gz
+            tarballs/beava-*.tar.gz.sha256
           fail_on_unmatched_files: true
