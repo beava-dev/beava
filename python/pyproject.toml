@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "beava"
-version = "0.0.1"
+version = "0.0.2"
 requires-python = ">=3.10"
 description = "Beava: real-time feature server with composable streaming pipelines (Python SDK + bundled Rust server binary)."
 # Maturin's sdist refuses `..` paths (different from hatchling), so we

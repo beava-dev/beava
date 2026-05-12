@@ -7,6 +7,14 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.0.2] - 2026-05-12
+
+Homebrew install path. Wires per-platform tarballs into the release pipeline
+so the `homebrew-bump.yml` workflow can bump `Formula/beava.rb` cleanly.
+Also syncs the Rust crate version with the Python package version so
+`beava --version` matches the pip metadata. Otherwise source-identical to
+v0.0.1.
+
 ## [0.0.1] - 2026-05-12
 
 First release published to PyPI. Source-identical to v0.0.0; the version bump
