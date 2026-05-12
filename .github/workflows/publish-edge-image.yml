@@ -1,14 +1,14 @@
 name: Publish edge image to Docker Hub
 
 on:
-  # Fire on every push to main — the image build is buildx-cached, so
-  # commits that don't touch crates/** finish in 2-3 minutes (layers
-  # cache-hit, manifest re-tags). Eliminates the trigger-race with
-  # deploy-hetzner.yml: deploy now chains exclusively off this workflow's
-  # completion via `workflow_run`, so this workflow's success is the
-  # single deploy gate.
+  # main pushes → `:edge` rolling tag (plus the immutable sha tag).
+  # v* tag pushes → `:<version>` pinned tag + `:latest` alias for the
+  # most recently released version. The two trigger paths share the
+  # build matrix; the `tags:` block below switches output tag set on
+  # `github.ref_type`.
   push:
     branches: [main]
+    tags: ['v*.*.*']
   workflow_dispatch:
 
 # Default-deny GITHUB_TOKEN. Docker Hub auth is via DOCKERHUB_TOKEN;
@@ -45,6 +45,23 @@ jobs:
       - name: Set up QEMU (for arm64 emulation)
         uses: docker/setup-qemu-action@v3
 
+      # docker/metadata-action handles the cross-trigger tag fanout:
+      #   refs/heads/main         →  :edge + :sha-<sha>
+      #   refs/tags/v0.0.2        →  :0.0.2 + :0.0 + :latest + :sha-<sha>
+      # The `type=semver,pattern=…` lines strip the leading `v` and the
+      # `type=raw,value=latest` only emits :latest on tag pushes (event=tag).
+      - name: Compute image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: beavadev/beava
+          tags: |
+            type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha,prefix=sha-,format=long
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -56,11 +73,8 @@ jobs:
           # emulation when running the chapter-1 tutorial. Also covers
           # production amd64 servers.
           platforms: linux/amd64,linux/arm64
-          # `:edge` always tracks the latest main commit; `:sha-<sha>`
-          # gives an immutable handle for rollback / pinning.
-          tags: |
-            beavadev/beava:edge
-            beavadev/beava:sha-${{ github.sha }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           # Buildx layer cache speeds up subsequent runs.
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -69,8 +83,12 @@ jobs:
         run: |
           cat >> "$GITHUB_STEP_SUMMARY" <<EOF
           ## Docker Hub image published
-          - \`beavadev/beava:edge\` (rolling)
-          - \`beavadev/beava:sha-${{ github.sha }}\` (immutable)
-          - Pull: \`docker pull beavadev/beava:edge\`
-          - Run:  \`docker run -p 8080:8080 beavadev/beava:edge\`
+          Tags emitted this run:
+          \`\`\`
+          ${{ steps.meta.outputs.tags }}
+          \`\`\`
+          Common pulls:
+          - \`docker pull beavadev/beava:latest\` — most recent released version
+          - \`docker pull beavadev/beava:edge\` — latest main commit (snapshot)
+          - \`docker pull beavadev/beava:0.0.X\` — pinned to a specific release
           EOF

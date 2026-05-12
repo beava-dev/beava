@@ -278,8 +278,8 @@
     // and runs the command as one logical line.
     const INSTALL_TABS = [
       { id: 'curl',   label: 'curl',   cmd: 'curl -fsSL https://raw.githubusercontent.com/beava-dev/beava/main/scripts/install.sh \\\n  | sh', recommended: true },
-      { id: 'docker', label: 'docker', cmd: 'docker run -p 8080:8080 beavadev/beava:edge' },
-      { id: 'cargo',  label: 'cargo',  cmd: 'cargo install --git https://github.com/beava-dev/beava beava-server' },
+      { id: 'docker', label: 'docker', cmd: 'docker run -p 8080:8080 beavadev/beava:latest' },
+      { id: 'brew',   label: 'brew',   cmd: 'brew install beava-dev/beava/beava' },
     ];
 
     const InstallTabs = () => {

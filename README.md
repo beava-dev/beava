@@ -31,11 +31,11 @@ Pick whichever install path matches your box. All three deliver the same `beava`
 #          Pin a version with `pip install beava==0.0.0`.
 pip install beava
 
-# docker — zero deps on the host
-docker run -p 8080:8080 -p 8081:8081 beavadev/beava:edge
+# brew   — Homebrew formula (macOS + Linuxbrew)
+brew install beava-dev/beava/beava
 
-# cargo  — from source, for Rust-toolchain users
-cargo install --git https://github.com/beava-dev/beava beava-server
+# docker — zero deps on the host
+docker run -p 8080:8080 -p 8081:8081 beavadev/beava:latest
 ```
 
 Then start the server:
