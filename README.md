@@ -26,12 +26,10 @@ Think **Redis for stateful streaming features**, with 50+ purpose-built aggregat
 Pick whichever install path matches your box. All three deliver the same `beava` binary.
 
 ```bash
-# curl  — fetches the platform wheel from the latest GitHub Release
-#         (~14 MB, ships SDK + Rust server binary together;
-#          polars / ruff / uv pattern). `beava` lands on PATH.
-#          Pin a version with BEAVA_VERSION=v0.0.0.
-curl -fsSL https://raw.githubusercontent.com/beava-dev/beava/main/scripts/install.sh \
-  | sh
+# pip    — installs SDK + bundled Rust server binary from PyPI
+#          (~14 MB, polars / ruff / uv pattern). `beava` lands on PATH.
+#          Pin a version with `pip install beava==0.0.0`.
+pip install beava
 
 # docker — zero deps on the host
 docker run -p 8080:8080 -p 8081:8081 beavadev/beava:edge

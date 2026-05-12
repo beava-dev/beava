@@ -267,11 +267,11 @@
       );
     };
 
-    // v0 install surface: curl (recommended) / docker / cargo. brew + pip
+    // v0 install surface: pip (recommended) / docker / cargo. brew
     // retired (pip wheels still ship to GH Releases / PyPI for SDK users —
-    // see python/README.md). curl|sh is the canonical first-touch path:
+    // see python/README.md). pip install is the canonical first-touch path:
     // detects platform, pulls the matching wheel from the latest GH Release,
-    // pip install --user's it. Docker is the zero-deps host alternative.
+    // Docker is the zero-deps host alternative.
     // cargo is the from-source path for Rust-toolchain users.
     // Backslash-newline continuation in `cmd` is honored by the renderer
     // (whiteSpace: 'pre') and copy-pastes correctly: shell ignores `\\\n`

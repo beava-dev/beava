@@ -6,7 +6,7 @@ const FinalCTA = () => {
   const [copied, setCopied] = React.useState(false);
   const TABS = [
     { id: 'brew',   cmd: 'brew install beava' },
-    { id: 'curl',   cmd: 'curl -fsSL beava.dev/install.sh | sh' },
+    { id: 'pip', cmd: 'pip install beava' },
     { id: 'docker', cmd: 'docker run -p 6400:6400 beava/beava:latest' },
   ];
   const tab = TABS.find(t => t.id === tabId);

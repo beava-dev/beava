@@ -224,7 +224,7 @@ const LiveMetrics = () => {
 // ----- InstallTabs -----
 const INSTALL_TABS = [
   { id: 'brew',   label: 'brew',   cmd: 'brew install beava' },
-  { id: 'curl',   label: 'curl',   cmd: 'curl -fsSL beava.dev/install.sh | sh' },
+  { id: 'pip', label: 'pip', cmd: 'pip install beava' },
   { id: 'docker', label: 'docker', cmd: 'docker run -p 6400:6400 beava/beava:latest' },
 ];
 

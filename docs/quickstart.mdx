@@ -22,7 +22,7 @@ This is the SDK reference. For the why — vision, concepts, recipes — see Doc
 One command. The wheel ships the **server binary** and the **Python SDK** together (~14 MB, polars / ruff / uv pattern). No Rust toolchain on your box.
 
 ```bash title="terminal"
-curl -fsSL https://raw.githubusercontent.com/beava-dev/beava/main/scripts/install.sh | sh
+pip install beava
 
 # `beava` is now on your PATH; start it
 beava --memory-only
@@ -30,7 +30,7 @@ beava --memory-only
 # → TCP listen    : 127.0.0.1:8081 (enabled=true)
 ```
 
-The installer detects your platform (`uname -s/-m`), pulls the matching wheel from the latest release on `beava-dev/beava`, and `pip install --user`'s it. `--memory-only` skips the WAL for a kick-the-tyres run — drop it for production (state lands under `./.beava/` by default). Pin a specific version with `BEAVA_VERSION=v0.0.0 curl ... | sh`.
+The wheel ships the SDK and the server binary together. `--memory-only` skips the WAL for a kick-the-tyres run — drop it for production (state lands under `./.beava/` by default). Pin a specific version with `pip install beava==0.0.0`.
 
 Port `8080` is the HTTP data plane (push, get, batch_get, register, ping). Port `8081` is the framed-TCP fast-path (sub-millisecond JSON). Admin endpoints (`/health`, `/ready`, `/metrics`, `/registry`) live on a separate sidecar port that you opt into via the `--http-addr` / `--config` flags.
 
@@ -43,8 +43,8 @@ docker run -d --name beava \
   -v beava-data:/data \
   beavadev/beava:edge
 
-# the SDK still installs via curl|sh; pass an explicit URL to bv.App(url=...)
-curl -fsSL https://raw.githubusercontent.com/beava-dev/beava/main/scripts/install.sh | sh
+# the SDK still installs from PyPI; pass an explicit URL to bv.App(url=...)
+pip install beava
 
 # verify
 curl -X POST http://localhost:8080/ping
@@ -52,7 +52,7 @@ curl -X POST http://localhost:8080/ping
 ```
 
 <Note>
-PyPI publish lands at v0.0.x — `pip install beava` will work then. For now the wheels ship from GitHub Releases and `curl | sh` is the canonical install path. Both surfaces will coexist after the PyPI cut.
+The wheel ships SDK + server binary together. `docker run beavadev/beava` is for users who want zero deps on the host; `pip install beava` is the canonical install for Python users.
 </Note>
 
 <Tip>
