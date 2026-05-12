@@ -7,6 +7,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.0.1] - 2026-05-12
+
+First release published to PyPI. Source-identical to v0.0.0; the version bump
+exists so the inaugural PyPI publish can claim the `beava` project name
+under the Trusted-Publisher OIDC flow enabled in this release cycle.
+
 ## [0.0.0] - 2026-05-12
 
 Initial public release. Beava is a single-binary real-time feature server for fraud,
