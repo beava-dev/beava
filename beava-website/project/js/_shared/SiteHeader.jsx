@@ -349,7 +349,7 @@ const SiteHeader = ({ active = null, search = false, maxWidth = 1200 }) => {
       { id: 'docs',      label: 'Docs',      href: '/docs/' },
       { id: 'community', label: 'Community', href: '/community/' },
       { id: 'github',    label: 'GitHub',    href: 'https://github.com/beava-dev/beava', external: true },
-      { id: 'discord',   label: 'Discord',   href: 'https://discord.gg/Jnx89PN9',        external: true },
+      { id: 'discord',   label: 'Discord',   href: 'https://discord.gg/J5trwbCYpS',        external: true },
     ];
     return ReactDOM.createPortal(
       <>
@@ -448,7 +448,7 @@ const SiteHeader = ({ active = null, search = false, maxWidth = 1200 }) => {
           <Link id="sdk" label="SDK reference" href="/sdk/python/"/>
           <Link id="community" label="Community" href="/community/"/>
           <Link id="github" label="GitHub" href="https://github.com/beava-dev/beava" external/>
-          <Link id="discord" label="Discord" href="https://discord.gg/Jnx89PN9" external/>
+          <Link id="discord" label="Discord" href="https://discord.gg/J5trwbCYpS" external/>
         </nav>
 
         <Hamburger/>

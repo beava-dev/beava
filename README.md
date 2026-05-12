@@ -9,7 +9,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-7ca84a" alt="license Apache-2.0"/></a>
   <a href="https://beava.dev"><img src="https://img.shields.io/badge/site-beava.dev-3a6a8a" alt="site beava.dev"/></a>
   <a href="https://beava.dev/docs"><img src="https://img.shields.io/badge/docs-beava.dev%2Fdocs-3a6a8a" alt="docs"/></a>
-  <a href="https://discord.gg/Jnx89PN9"><img src="https://img.shields.io/badge/chat-discord-7ca84a" alt="discord"/></a>
+  <a href="https://discord.gg/J5trwbCYpS"><img src="https://img.shields.io/badge/chat-discord-7ca84a" alt="discord"/></a>
   <a href="https://github.com/beava-dev/beava/releases/latest"><img src="https://img.shields.io/github/v/release/beava-dev/beava?include_prereleases&label=release&color=d97757" alt="release"/></a>
 </p>
 
@@ -180,7 +180,7 @@ No TLS in v0 — terminate at nginx, Envoy, or Cloudflare if you need it. No aut
 The open-source project is the real system — something you can clone, run, test, operate, and trust as your use case grows. A managed beava service can remove operational burden later, but the open-source binary is the real product. TiDB-style commitment to open source. Apache-2.0, no open-core lock-in.
 
 - **Discussions:** [github.com/beava-dev/beava/discussions](https://github.com/beava-dev/beava/discussions)
-- **Discord:** [discord.gg/Jnx89PN9](https://discord.gg/Jnx89PN9)
+- **Discord:** [discord.gg/J5trwbCYpS](https://discord.gg/J5trwbCYpS)
 - **Security:** private disclosure to `hoang@beava.dev` (see [SECURITY.md](SECURITY.md))
 
 [Apache 2.0](LICENSE) · [CHANGELOG](CHANGELOG.md) · [SECURITY](SECURITY.md) · [CONTRIBUTING](CONTRIBUTING.md) · [GOVERNANCE](GOVERNANCE.md) · [MAINTAINERS](MAINTAINERS.md) · [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md)

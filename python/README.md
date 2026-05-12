@@ -129,4 +129,4 @@ Top-level error types: `bv.RegistrationError` (raised on register failures with 
 
 - [beava.dev](https://beava.dev) — site, guide, docs
 - [Root README](https://github.com/beava-dev/beava#readme) — server install, wire surface, server CLI
-- [Discord](https://discord.gg/Jnx89PN9) — questions and feedback
+- [Discord](https://discord.gg/J5trwbCYpS) — questions and feedback
