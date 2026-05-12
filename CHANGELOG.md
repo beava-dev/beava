@@ -7,7 +7,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-## [0.0.0] - <YYYY-MM-DD>
+## [0.0.0] - 2026-05-12
 
 Initial public release. Beava is a single-binary real-time feature server for fraud,
 ad-tech, and behavioral analytics — declare a feature, push events, query it, in
