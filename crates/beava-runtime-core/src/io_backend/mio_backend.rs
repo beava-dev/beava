@@ -37,7 +37,7 @@ struct MioClientEntry {
 
 /// Cross-thread waker backed by a `mio::Waker`.
 struct MioWakerHandle {
-    inner: Arc<Waker>,
+    inner: Waker,
 }
 
 impl WakerHandle for MioWakerHandle {
@@ -56,14 +56,16 @@ impl WakerHandle for MioWakerHandle {
 pub struct MioBackend {
     poll: Poll,
     events: Events,
-    waker: Arc<Waker>,
+    waker: Arc<MioWakerHandle>,
     clients: HashMap<u64, MioClientEntry>,
 }
 
 impl IoBackend for MioBackend {
     fn new() -> std::io::Result<Self> {
         let poll = Poll::new()?;
-        let waker = Arc::new(Waker::new(poll.registry(), Token(WAKER_TOKEN))?);
+        let waker = Arc::new(MioWakerHandle {
+            inner: Waker::new(poll.registry(), Token(WAKER_TOKEN))?,
+        });
         let events = Events::with_capacity(256);
         Ok(Self {
             poll,
@@ -164,9 +166,7 @@ impl IoBackend for MioBackend {
     }
 
     fn waker_handle(&self) -> Arc<dyn WakerHandle> {
-        Arc::new(MioWakerHandle {
-            inner: Arc::clone(&self.waker),
-        })
+        self.waker.clone()
     }
 
     fn set_interest_writable(&mut self, slot_idx: u64, writable: bool) {
