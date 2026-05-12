@@ -35,7 +35,7 @@ pip install beava
 brew install beava-dev/beava/beava
 
 # docker — zero deps on the host
-docker run -p 8080:8080 -p 8081:8081 beavadev/beava:0.0.1
+docker run -p 8080:8080 -p 8081:8081 beavadev/beava:latest
 ```
 
 Then start the server:

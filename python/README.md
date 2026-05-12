@@ -12,7 +12,7 @@ pip install beava
 brew install beava-dev/beava/beava
 
 # docker — zero deps on the host
-docker run -p 8080:8080 -p 8081:8081 beavadev/beava:0.0.1
+docker run -p 8080:8080 -p 8081:8081 beavadev/beava:latest
 ```
 
 The wheel ships the SDK **and** the Rust `beava` server binary (polars-style); after install, the `beava` shell command is on `PATH` and the SDK can run against it directly — including embed mode (`bv.App()` with no URL). Pin a specific version with `pip install beava==0.0.0`.

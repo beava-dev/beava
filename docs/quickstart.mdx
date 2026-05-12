@@ -41,7 +41,7 @@ Port `8080` is the HTTP data plane (push, get, batch_get, register, ping). Port 
 docker run -d --name beava \
   -p 8080:8080 -p 8081:8081 \
   -v beava-data:/data \
-  beavadev/beava:0.0.1
+  beavadev/beava:latest
 
 # the SDK still installs from PyPI; pass an explicit URL to bv.App(url=...)
 pip install beava
