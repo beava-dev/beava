@@ -7,6 +7,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.0.3] - 2026-05-12
+
+Syncs the Rust workspace version with the Python package version so
+`beava --version` reports the same string as `pip show beava`. Otherwise
+source-identical to v0.0.2.
+
 ## [0.0.2] - 2026-05-12
 
 Homebrew install path. Wires per-platform tarballs into the release pipeline
