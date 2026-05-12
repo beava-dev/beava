@@ -190,7 +190,7 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "beava-bench"
-version = "0.0.0"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -220,7 +220,7 @@ dependencies = [
 
 [[package]]
 name = "beava-core"
-version = "0.0.0"
+version = "0.0.3"
 dependencies = [
  "ahash",
  "bincode",
@@ -244,7 +244,7 @@ dependencies = [
 
 [[package]]
 name = "beava-persistence"
-version = "0.0.0"
+version = "0.0.3"
 dependencies = [
  "beava-core",
  "compact_str",
@@ -261,7 +261,7 @@ dependencies = [
 
 [[package]]
 name = "beava-runtime-core"
-version = "0.0.0"
+version = "0.0.3"
 dependencies = [
  "beava-core",
  "bytes",
@@ -287,7 +287,7 @@ dependencies = [
 
 [[package]]
 name = "beava-server"
-version = "0.0.0"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "axum",
