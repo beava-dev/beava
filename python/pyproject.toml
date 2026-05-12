@@ -93,7 +93,7 @@ exclude = [
 # tests/conformance/) hold legacy / deep-dive tests that pre-date the
 # Phase 13.5.1 SDK rewrite and have known drift; run explicitly via e.g.
 # `pytest python/tests/internal/` if you want to dig in. Cleanup of these
-# is tracked as v0.0.x backlog in `.planning/ideas/v0.1-deferrals.md`.
+# is v0.0.x backlog.
 testpaths = ["tests/v0"]
 addopts = "-ra --strict-markers"
 markers = [
