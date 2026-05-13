@@ -389,19 +389,13 @@
     };
 
     // ─────────────────────────────────────────────────────────────────────
-    // Hero — centered, single column, mascot in top-right corner
+    // Hero — centered, single column. (The corner mascot moved down to the
+    // PipelineShowcase section so the hero leads with copy + decision feed.)
     // ─────────────────────────────────────────────────────────────────────
 
     const Hero = () => (
       <section style={{ padding: '36px 24px 56px', position: 'relative', overflow: 'hidden' }}>
         <div style={{ maxWidth: 1200, margin: '0 auto', position: 'relative' }}>
-          {/* Corner mascot — top-right, slow-loop gif. Hidden under 1100px. */}
-          <img src="/assets/mascot-floating-slow.gif" alt="" className="beava-hero-mascot" style={{
-            position: 'absolute', top: -8, right: 0,
-            width: 140, height: 140, transform: 'rotate(8deg)',
-            filter: 'drop-shadow(0 10px 22px rgba(26,23,20,0.12))',
-            pointerEvents: 'none', userSelect: 'none', zIndex: 1,
-          }}/>
 
           <div style={{ textAlign: 'center', maxWidth: 820, margin: '0 auto 32px', position: 'relative', zIndex: 2 }}>
             <a href="https://github.com/beava-dev/beava" target="_blank" rel="noopener" style={{
@@ -494,9 +488,6 @@
           @keyframes beava-row-in {
             from { opacity: 0; transform: translateY(-6px); }
             to   { opacity: 1; transform: translateY(0); }
-          }
-          @media (max-width: 1100px) {
-            .beava-hero-mascot { display: none !important; }
           }
           @media (max-width: 760px) {
             section { padding-left: 18px !important; padding-right: 18px !important; }
@@ -645,8 +636,16 @@
           padding: '88px 24px 96px', background: 'var(--beava-cream-deep)',
           borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)',
         }}>
-          <div style={{ maxWidth: 1040, margin: '0 auto' }}>
-            <div style={{ marginBottom: 28 }}>
+          <div style={{ maxWidth: 1040, margin: '0 auto', position: 'relative' }}>
+            {/* Corner mascot — sits to the right of the "~13 lines" headline.
+                Hidden under 900px so it doesn't crowd the title on narrow screens. */}
+            <img src="/assets/mascot-floating-slow.gif" alt="" className="beava-corner-mascot" style={{
+              position: 'absolute', top: -12, right: -4,
+              width: 124, height: 124, transform: 'rotate(-6deg)',
+              filter: 'drop-shadow(0 10px 22px rgba(26,23,20,0.12))',
+              pointerEvents: 'none', userSelect: 'none', zIndex: 1,
+            }}/>
+            <div style={{ marginBottom: 28, position: 'relative', zIndex: 2 }}>
               <Eyebrow>One pipeline per decision</Eyebrow>
               <h2 style={{
                 fontFamily: 'var(--font-serif)', fontWeight: 600,
@@ -810,6 +809,9 @@
           <style>{`
             @media (max-width: 860px) {
               .beava-anno { display: none !important; }
+            }
+            @media (max-width: 900px) {
+              .beava-corner-mascot { display: none !important; }
             }
             @media (max-width: 760px) {
               #pipeline { padding: 56px 18px 64px !important; }
