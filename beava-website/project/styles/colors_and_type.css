@@ -9,8 +9,16 @@
    A hand-tuned monospace powers code blocks.
    See SKILL.md note: these are Google Fonts substitutions
    until custom faces are licensed.
+
+   The Google Fonts CSS used to be `@import`-ed here, but that
+   serialized the font fetch behind this stylesheet's
+   download+parse (an extra round-trip → visible FOUT on first
+   paint). The fonts are now `<link rel="stylesheet">`-ed
+   directly from each HTML <head> so they download in parallel
+   with this file, with `preconnect` hints to start the
+   fonts.googleapis.com + fonts.gstatic.com TLS handshakes
+   immediately. Keep that pattern when adding new HTML pages.
    ------------------------------------------------------------ */
-@import url('https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,500;1,700&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Gaegu:wght@400;700&display=swap');
 
 :root {
   /* ============================================================
