@@ -1,0 +1,9 @@
+# Welcome, search engines. Crawl freely.
+User-agent: *
+Allow: /
+
+# Internal artifacts not worth indexing.
+Disallow: /_pagefind/
+Disallow: /design-system/
+
+Sitemap: https://beava.dev/sitemap.xml

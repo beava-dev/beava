@@ -5,9 +5,63 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>beava — react to what just happened</title>
   <meta name="description" content="beava turns live events into fresh features for fraud, recommendations, and guardrails — no Kafka, no Flink, no feature store. One binary, HTTP in, HTTP out.">
+  <link rel="canonical" href="https://beava.dev/">
+  <meta property="og:site_name" content="beava">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://beava.dev/">
+  <meta property="og:title" content="beava — react to what just happened">
+  <meta property="og:description" content="beava turns live events into fresh features for fraud, recommendations, and guardrails — no Kafka, no Flink, no feature store. One binary, HTTP in, HTTP out.">
+  <meta property="og:image" content="https://beava.dev/assets/readme-banner.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="beava — react to what just happened">
+  <meta name="twitter:description" content="beava turns live events into fresh features for fraud, recommendations, and guardrails — no Kafka, no Flink, no feature store. One binary, HTTP in, HTTP out.">
+  <meta name="twitter:image" content="https://beava.dev/assets/readme-banner.png">
   <link rel="stylesheet" href="styles/colors_and_type.css">
   <link rel="stylesheet" href="styles/site.css">
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="shortcut icon" href="/assets/favicon.ico">
+  <!-- Schema.org structured data — feeds Google's Knowledge Graph and rich-result cards. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": "https://beava.dev/#org",
+        "name": "beava",
+        "url": "https://beava.dev",
+        "logo": "https://beava.dev/assets/logo-mark.png",
+        "sameAs": [
+          "https://github.com/beava-dev/beava",
+          "https://discord.gg/J5trwbCYpS"
+        ]
+      },
+      {
+        "@type": "SoftwareSourceCode",
+        "name": "beava",
+        "description": "Push events over HTTP or TCP. Read live per-user counters and aggregates that always reflect the latest event. For fraud, recommendations, LLM guardrails, and in-product analytics. No Kafka.",
+        "url": "https://beava.dev",
+        "codeRepository": "https://github.com/beava-dev/beava",
+        "programmingLanguage": ["Rust", "Python"],
+        "runtimePlatform": ["Linux", "macOS", "Windows"],
+        "license": "https://www.apache.org/licenses/LICENSE-2.0",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Linux, macOS, Windows",
+        "author": { "@id": "https://beava.dev/#org" }
+      },
+      {
+        "@type": "WebSite",
+        "url": "https://beava.dev",
+        "name": "beava",
+        "publisher": { "@id": "https://beava.dev/#org" },
+        "potentialAction": {
+          "@type": "SearchAction",
+          "target": "https://beava.dev/docs/?q={search_term_string}",
+          "query-input": "required name=search_term_string"
+        }
+      }
+    ]
+  }
+  </script>
 </head>
 <body class="beava">
   <div id="root"></div>

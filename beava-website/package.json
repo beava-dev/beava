@@ -7,6 +7,7 @@
   "scripts": {
     "build:search": "node scripts/build-search.mjs",
     "build:llms":   "node scripts/build-llms-txt.mjs",
+    "build:seo":    "node scripts/build-seo.mjs",
     "check:links":  "node scripts/check-links.mjs"
   },
   "devDependencies": {
