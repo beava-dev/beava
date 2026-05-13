@@ -135,7 +135,12 @@
 
     const seedRows = () => {
       const initial = ['login_failed', 'product_clicked', 'llm_request'];
-      return initial.map((name, i) => mintRow(name, i, Date.now() - (initial.length - i) * 1800));
+      // Seed rows are settled history — render without the fresh-row wash so
+      // the panel opens calm and only later arrivals get the orange highlight.
+      return initial.map((name, i) => ({
+        ...mintRow(name, i, Date.now() - (initial.length - i) * 1800),
+        isNew: false,
+      }));
     };
 
     const ageLabel = (ts, now) => {
