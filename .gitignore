@@ -166,9 +166,6 @@ secrets/
 /sdk/go/
 /sdk/typescript/
 
-# Examples deferred from public OSS for now
-/examples/
-
 # Legacy v1 Python SDK (`tally`) and its deprecation-contract tests.
 # `python/beava/` is the v2 SDK and ships standalone; tally is dead weight.
 /python/tally/
