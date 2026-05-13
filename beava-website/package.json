@@ -3,12 +3,13 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "beava.dev — hand-rolled static HTML + Pagefind search.",
+  "description": "beava.dev \u2014 hand-rolled static HTML + Pagefind search.",
   "scripts": {
     "build:search": "node scripts/build-search.mjs",
-    "build:llms":   "node scripts/build-llms-txt.mjs",
-    "build:seo":    "node scripts/build-seo.mjs",
-    "check:links":  "node scripts/check-links.mjs"
+    "build:llms": "node scripts/build-llms-txt.mjs",
+    "build:seo": "node scripts/build-seo.mjs",
+    "check:links": "node scripts/check-links.mjs",
+    "submit:indexnow": "node scripts/indexnow-submit.mjs"
   },
   "devDependencies": {
     "pagefind": "^1.1.1"
