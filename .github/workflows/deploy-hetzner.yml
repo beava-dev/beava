@@ -154,7 +154,7 @@ jobs:
                  -w "SiteMetrics row HTTP %{http_code}\n" && \
              curl -sf --max-time 5 http://127.0.0.1:8082/api/feed \
                  -o /tmp/feed.json -w "feed HTTP %{http_code}\n" && \
-             python3 -c "import json,sys; d=json.load(open(\"/tmp/feed.json\")); assert len(d[\"rows\"]) >= 1, \"no rows\"; print(f\"feed has rows: {len(d[\\\"rows\\\"])}, latency_ms={d[\\\"latency_ms\\\"]}\")"'
+             python3 -c "import json,sys; d=json.load(open(\"/tmp/feed.json\")); assert len(d[\"rows\"]) >= 1, \"no rows\"; print(\"feed has rows:\", len(d[\"rows\"]), \"latency_ms=\", d[\"latency_ms\"])"'
 
       - name: Job summary
         if: always()
