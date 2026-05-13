@@ -254,6 +254,23 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             return
         return super().do_GET()
 
+    def send_error(self, code, message=None, explain=None):
+        # Cloudflare Pages serves /404.html on any unmatched URL. Mirror that
+        # locally so devs see the real 404 page, not Python's default plaintext.
+        if code == 404:
+            page = SITE_DIR / "404.html"
+            if page.is_file():
+                body = page.read_bytes()
+                self.send_response(404)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                if self.command != "HEAD":
+                    self.wfile.write(body)
+                return
+        super().send_error(code, message, explain)
+
 
 class _ThreadedHTTP(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
