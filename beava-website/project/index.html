@@ -433,6 +433,58 @@
     // PipelineShowcase section so the hero leads with copy + decision feed.)
     // ─────────────────────────────────────────────────────────────────────
 
+    // Copyable install pill — sits between the CTA row and the trust-specs
+    // strip. One-tap copy via navigator.clipboard; the whole pill is the
+    // click target so it reads as a single affordance, with the "Copy" label
+    // flipping to "Copied" for 1.4s to confirm.
+    const InstallSnippet = () => {
+      const [copied, setCopied] = React.useState(false);
+      const COMMAND = 'pip install beava';
+      const onCopy = () => {
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(COMMAND);
+          }
+        } catch (_) { /* no-op — confirmation still flashes */ }
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1400);
+      };
+      return (
+        <button
+          type="button"
+          onClick={onCopy}
+          aria-label="Copy install command"
+          style={{
+            marginTop: 22,
+            display: 'inline-flex', alignItems: 'center', gap: 12,
+            padding: '9px 14px 9px 16px',
+            background: 'var(--beava-paper)',
+            border: '1px solid var(--border)',
+            borderRadius: 10,
+            fontFamily: 'var(--font-mono)', fontSize: 14,
+            color: 'var(--fg1)',
+            cursor: 'pointer',
+            transition: 'border-color 120ms ease, background 120ms ease',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+        >
+          <span aria-hidden="true" style={{ color: 'var(--fg3)', userSelect: 'none' }}>$</span>
+          <span style={{ color: 'var(--fg1)' }}>{COMMAND}</span>
+          <span aria-hidden="true" style={{
+            marginLeft: 6, paddingLeft: 12,
+            borderLeft: '1px solid var(--border)',
+            color: copied ? 'var(--beava-success)' : 'var(--accent)',
+            fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 600,
+            letterSpacing: '0.02em', textTransform: 'uppercase',
+            transition: 'color 120ms ease',
+          }}>
+            {copied ? 'Copied' : 'Copy'}
+          </span>
+        </button>
+      );
+    };
+
     const Hero = () => (
       <section style={{ padding: '36px 24px 56px', position: 'relative', overflow: 'hidden' }}>
         <div style={{ maxWidth: 1200, margin: '0 auto', position: 'relative' }}>
@@ -492,8 +544,12 @@
               </a>
             </div>
 
+            <div style={{ marginTop: 4 }}>
+              <InstallSnippet/>
+            </div>
+
             <div style={{
-              marginTop: 14,
+              marginTop: 18,
               fontFamily: 'var(--font-sans)', fontSize: 12.5, color: 'var(--fg3)',
               lineHeight: 1.5,
             }}>
