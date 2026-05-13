@@ -19,7 +19,7 @@
 
 beava turns live events into fresh features for fraud, recommendations, LLM guardrails, and in-product analytics. No Kafka, no Flink, no feature store. One Rust binary.
 
-Push events directly over HTTP. Sub-millisecond ack on push, sub-millisecond reads, 100k+ QPS on one box.
+Push events over HTTP or TCP. The very next read reflects them. No batch lag, no broker, no stream worker in between.
 
 ```python
 # fraud.py — a fraud signal in ~15 lines.
@@ -46,7 +46,7 @@ app.get("UserSignals", "alice")
 # => {"failed_logins_10m": 2, "attempts_1h": 2}
 ```
 
-That's the whole loop. **No event queue.** `app.push` POSTs straight to beava — no Kafka, no Kinesis, no SQS, no schema registry. Sub-millisecond ack per push. Three primitives: `@bv.event`, `@bv.table`, `app.get`.
+That's the whole loop. **No event queue.** `app.push` POSTs straight to beava — no Kafka, no Kinesis, no SQS, no schema registry. The next `app.get` for that user reflects the push. Three primitives: `@bv.event`, `@bv.table`, `app.get`.
 
 ## Pick a use case
 
@@ -95,7 +95,11 @@ Full walkthrough: [beava.dev/docs](https://beava.dev/docs).
 
 Replaces Postgres triggers + Redis counters + the cron job that heals drift. Same pipeline from laptop to production.
 
-**Performance:** 684,812 sustained events/sec on a single Apple-M4 core[^1] — simple-fraud pipeline, TCP transport, msgpack wire, parallel=16, 60s sustained run. Run multiple beava instances for higher throughput (Redis-cluster style; no in-process sharding).
+**Freshness:** push and read are inline. The read after a push reflects that push. No batch tick, no stream worker, no waiting for the next window flush.
+
+**Latency:** on TCP, p50 ≈ 0.15ms push / 0.15ms read; p99 ≈ 0.31ms / 0.21ms (1000-sample loopback on an M-class laptop). HTTP/JSON is ~3-5× slower at p99; use TCP for the hot path, HTTP for debugging.
+
+**Throughput:** 684,812 sustained events/sec on a single Apple-M4 core[^1] — simple-fraud pipeline, TCP transport, msgpack wire, parallel=16, 60s sustained run. Run multiple beava instances for higher throughput (Redis-cluster style; no in-process sharding).
 
 **Memory:** ~7 KB per entity for a rich 30-feature pack → ~700 GB for 100M entities. Size your box; in-memory only, no SSD overflow.
 
