@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>404 — beava can't find that page</title>
+  <meta name="robots" content="noindex">
+  <link rel="stylesheet" href="/styles/colors_and_type.css">
+  <link rel="stylesheet" href="/styles/site.css">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="shortcut icon" href="/assets/favicon.ico">
+  <style>
+    html, body { margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--fg1); font-family: var(--font-sans); }
+    #root { min-height: 100vh; display: flex; flex-direction: column; }
+    #root > main { flex: 1; }
+  </style>
+</head>
+<body class="beava">
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="/js/Shared.jsx"></script>
+  <script type="text/babel" src="/js/_shared/SiteHeader.jsx"></script>
+  <script type="text/babel" src="/js/_shared/SiteFooter.jsx"></script>
+
+  <script type="text/babel">
+    // 404 page. Cloudflare Pages auto-serves this when no other route matches.
+    // Mascot rides in for the middle "0" of 4·0·4; only place in the system
+    // where spring easing is allowed (per design-system README).
+
+    const Numeral = ({ children }) => (
+      <span aria-hidden style={{
+        fontFamily: 'var(--font-serif)',
+        fontWeight: 600, fontStyle: 'italic',
+        fontSize: 'clamp(180px, 24vw, 280px)',
+        lineHeight: 0.9, letterSpacing: '-0.04em',
+        color: 'var(--beava-brown-ink)',
+        userSelect: 'none',
+      }}>{children}</span>
+    );
+
+    const Hero404 = () => {
+      // Show the path the visitor tried so the page feels real. Cloudflare
+      // Pages serves /404.html with the original URL preserved, so
+      // window.location.pathname is the bad route.
+      const [attempted, setAttempted] = React.useState('/docs/rolling-counters/redis-compat');
+      React.useEffect(() => {
+        try {
+          const p = window.location.pathname;
+          if (p && p !== '/' && !p.endsWith('404.html')) setAttempted(p);
+        } catch (e) {}
+      }, []);
+
+      const [hovered, setHovered] = React.useState(false);
+
+      const popular = [
+        { kicker: 'START HERE',  title: 'Quickstart',          meta: 'docker · brew · 3 commands', href: '/docs/get-started/quickstart/' },
+        { kicker: 'DOCS',        title: 'Introduction',        meta: 'what beava is, in one page', href: '/docs/' },
+        { kicker: 'FIELD GUIDE', title: 'The real-time guide', meta: 'chapter index',              href: '/guide/' },
+      ];
+
+      return (
+        <main style={{
+          position: 'relative',
+          minHeight: 'calc(100vh - 60px)',
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'flex-start',
+          padding: '64px 24px 96px',
+          overflow: 'hidden',
+        }}>
+          <style>{`
+            @keyframes beava-404-bob {
+              0%   { transform: translateY(0) rotate(-1deg); }
+              50%  { transform: translateY(-10px) rotate(1deg); }
+              100% { transform: translateY(0) rotate(-1deg); }
+            }
+            @keyframes beava-404-bob-big {
+              0%, 100% { transform: translateY(0) rotate(-2deg); }
+              40%      { transform: translateY(-22px) rotate(3deg); }
+              60%      { transform: translateY(-14px) rotate(-2deg); }
+            }
+            @keyframes beava-404-fade-in {
+              from { opacity: 0; transform: translateY(8px); }
+              to   { opacity: 1; transform: translateY(0); }
+            }
+            @media (prefers-reduced-motion: reduce) {
+              .b404-mascot, .b404-section { animation: none !important; }
+            }
+          `}</style>
+
+          {/* radial paper-wash behind the numerals */}
+          <div aria-hidden style={{
+            position: 'absolute', top: 40, left: '50%', transform: 'translateX(-50%)',
+            width: 900, height: 520, pointerEvents: 'none',
+            background: 'radial-gradient(closest-side, var(--beava-orange-wash), transparent 70%)',
+            opacity: 0.55,
+          }}/>
+
+          <div className="b404-section" style={{
+            animation: 'beava-404-fade-in 360ms var(--ease-out) both',
+            fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 600,
+            textTransform: 'uppercase', letterSpacing: '0.16em',
+            color: 'var(--accent)',
+            position: 'relative', zIndex: 2,
+            marginBottom: 28,
+          }}>
+            Error 404 · page not found
+          </div>
+
+          <div style={{
+            position: 'relative', zIndex: 2,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            gap: 'clamp(4px, 1vw, 16px)',
+            animation: 'beava-404-fade-in 480ms 60ms var(--ease-out) both',
+          }}>
+            <Numeral>4</Numeral>
+
+            <button
+              type="button"
+              aria-label="Wake the beaver"
+              onMouseEnter={() => setHovered(true)}
+              onMouseLeave={() => setHovered(false)}
+              onFocus={() => setHovered(true)}
+              onBlur={() => setHovered(false)}
+              style={{
+                position: 'relative',
+                width: 'clamp(180px, 22vw, 260px)',
+                height: 'clamp(180px, 22vw, 260px)',
+                margin: '0 clamp(-12px, -1vw, -6px)',
+                background: 'var(--beava-paper)',
+                border: '1px solid var(--border)',
+                borderRadius: 999,
+                boxShadow: '0 2px 0 rgba(26,23,20,0.06), 0 14px 30px rgba(26,23,20,0.10), inset 0 1px 0 rgba(255,255,255,0.7)',
+                padding: 0, cursor: 'pointer',
+                display: 'grid', placeItems: 'center',
+                transition: 'box-shadow 200ms var(--ease-out)',
+              }}>
+              <span aria-hidden style={{
+                position: 'absolute', inset: 14,
+                border: '1px dashed var(--border-strong)',
+                borderRadius: 999, opacity: 0.55,
+              }}/>
+              <img
+                className="b404-mascot"
+                src="/assets/mascot-floating-slow.gif"
+                alt="beava mascot, napping in the spot where the page used to be"
+                style={{
+                  width: '78%', height: 'auto',
+                  animation: hovered
+                    ? 'beava-404-bob-big 700ms var(--ease-spring)'
+                    : 'beava-404-bob 4.5s ease-in-out infinite',
+                  transformOrigin: 'center bottom',
+                  pointerEvents: 'none', userSelect: 'none',
+                }}
+              />
+              <span aria-hidden style={{
+                position: 'absolute',
+                bottom: -22, right: -110,
+                transform: 'rotate(-6deg)',
+                fontFamily: 'var(--font-accent)',
+                fontWeight: 700, fontSize: 24,
+                color: 'var(--accent)',
+                whiteSpace: 'nowrap', pointerEvents: 'none',
+              }}>
+                ← off-duty
+              </span>
+            </button>
+
+            <Numeral>4</Numeral>
+          </div>
+
+          <h1 className="b404-section" style={{
+            animation: 'beava-404-fade-in 480ms 140ms var(--ease-out) both',
+            fontFamily: 'var(--font-serif)', fontWeight: 600,
+            fontSize: 'clamp(34px, 4.4vw, 54px)',
+            lineHeight: 1.12, letterSpacing: '-0.02em',
+            textAlign: 'center', color: 'var(--fg1)',
+            margin: '56px 0 14px', maxWidth: 720,
+            textWrap: 'pretty',
+            position: 'relative', zIndex: 2,
+          }}>
+            This page <em style={{ color: 'var(--accent)', fontStyle: 'italic' }}>slipped down the dam</em>.
+          </h1>
+
+          <p className="b404-section" style={{
+            animation: 'beava-404-fade-in 480ms 200ms var(--ease-out) both',
+            fontFamily: 'var(--font-sans)', fontSize: 17, lineHeight: 1.55,
+            color: 'var(--fg3)', textAlign: 'center',
+            margin: '0 0 28px', maxWidth: 560,
+            textWrap: 'pretty',
+            position: 'relative', zIndex: 2,
+          }}>
+            The URL doesn't match anything we serve. It may have moved, been renamed,
+            or never existed. Try one of the spots below, or head back to safety.
+          </p>
+
+          <div className="b404-section" style={{
+            animation: 'beava-404-fade-in 480ms 260ms var(--ease-out) both',
+            display: 'inline-flex', alignItems: 'center', gap: 10,
+            padding: '8px 14px',
+            background: '#fff',
+            border: '1px solid var(--border)',
+            borderRadius: 999,
+            boxShadow: 'var(--shadow-xs)',
+            margin: '0 0 36px', maxWidth: '100%',
+            position: 'relative', zIndex: 2,
+          }}>
+            <span style={{
+              fontFamily: 'var(--font-sans)', fontSize: 11, fontWeight: 700,
+              textTransform: 'uppercase', letterSpacing: '0.12em',
+              color: 'var(--fg3)',
+            }}>You tried</span>
+            <span aria-hidden style={{ color: 'var(--border-strong)' }}>·</span>
+            <code style={{
+              fontFamily: 'var(--font-mono)', fontSize: 13.5,
+              color: 'var(--fg1)',
+              background: 'transparent', border: 0, padding: 0,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              maxWidth: 380,
+            }}>beava.dev{attempted}</code>
+          </div>
+
+          <div className="b404-section" style={{
+            animation: 'beava-404-fade-in 480ms 320ms var(--ease-out) both',
+            display: 'flex', flexWrap: 'wrap', gap: 12,
+            justifyContent: 'center',
+            position: 'relative', zIndex: 2,
+            marginBottom: 80,
+          }}>
+            <Button variant="primary" size="md" href="/" icon={<Icon name="arrow" size={14}/>}>
+              Back to beava.dev
+            </Button>
+            <Button variant="secondary" size="md" href="/docs/">
+              Read the docs
+            </Button>
+            <a href="https://github.com/beava-dev/beava/issues/new?title=Broken+link" target="_blank" rel="noopener" style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              height: 42, padding: '0 14px',
+              background: 'transparent', color: 'var(--fg2)',
+              fontFamily: 'var(--font-sans)', fontSize: 14, fontWeight: 500,
+              borderRadius: 10, textDecoration: 'none',
+            }}>
+              Report a broken link <span aria-hidden style={{ color: 'var(--fg3)' }}>↗</span>
+            </a>
+          </div>
+
+          <section className="b404-section" style={{
+            animation: 'beava-404-fade-in 480ms 380ms var(--ease-out) both',
+            width: '100%', maxWidth: 1040,
+            position: 'relative', zIndex: 2,
+          }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              marginBottom: 16, paddingLeft: 4,
+            }}>
+              <span style={{
+                fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 700,
+                textTransform: 'uppercase', letterSpacing: '0.12em',
+                color: 'var(--fg3)',
+              }}>Where most readers go next</span>
+              <span aria-hidden style={{ flex: 1, height: 1, background: 'var(--border)' }}/>
+            </div>
+            <div className="b404-grid" style={{
+              display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16,
+            }}>
+              {popular.map(p => (
+                <a key={p.title} href={p.href} style={{
+                  display: 'flex', flexDirection: 'column', gap: 6,
+                  padding: '18px 20px',
+                  background: 'var(--beava-paper)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 14,
+                  textDecoration: 'none',
+                  transition: 'border-color 200ms var(--ease-out), transform 200ms var(--ease-out), box-shadow 200ms var(--ease-out)',
+                }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.borderColor = 'var(--accent)';
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                    e.currentTarget.style.boxShadow = 'var(--shadow-md)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.borderColor = 'var(--border)';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{
+                      fontFamily: 'var(--font-sans)', fontSize: 11, fontWeight: 700,
+                      textTransform: 'uppercase', letterSpacing: '0.12em',
+                      color: 'var(--accent)',
+                    }}>{p.kicker}</span>
+                    <span aria-hidden style={{
+                      fontFamily: 'var(--font-sans)', fontSize: 18,
+                      color: 'var(--accent)',
+                    }}>→</span>
+                  </div>
+                  <div style={{
+                    fontFamily: 'var(--font-serif)', fontWeight: 600, fontStyle: 'italic',
+                    fontSize: 24, lineHeight: 1.15, letterSpacing: '-0.01em',
+                    color: 'var(--fg1)', marginTop: 4,
+                  }}>{p.title}</div>
+                  <div style={{
+                    fontFamily: 'var(--font-mono)', fontSize: 12,
+                    color: 'var(--fg3)', marginTop: 2,
+                  }}>{p.meta}</div>
+                </a>
+              ))}
+            </div>
+            <style>{`
+              @media (max-width: 720px) {
+                .b404-grid { grid-template-columns: 1fr !important; }
+              }
+            `}</style>
+          </section>
+        </main>
+      );
+    };
+
+    const App = () => (
+      <>
+        <SiteHeader maxWidth={1200}/>
+        <Hero404/>
+        <SiteFooter maxWidth={1200}/>
+      </>
+    );
+    ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+  </script>
+</body>
+</html>
