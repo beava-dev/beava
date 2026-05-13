@@ -4,23 +4,33 @@ What this does
 --------------
 1. Connects to the beava-website-beava container at http://beava:8080.
 2. Owns the FULL registry for the beava.dev instance and registers it
-   on startup with force=true:
-     - PageView    -> SiteMetrics       (real visitor page-view counter)
-     - AgentStep   -> AgentGuardrails   (repeated_action_30s)
-     - ModelCall   -> OrgBudget         (token_burn_rate_1m)
-     - UserIntent  -> UserAffinity      (intent_now)
+   on startup with force=true. Three verticals, two reflex signals each:
+
+     AI agents
+       AgentStep    -> AgentReflexes        (key=agent_id;   steps_30s)
+       ToolCall     -> SessionReflexes      (key=session_id; risky_tools_10m)
+
+     Marketplaces
+       AddToCart    -> SkuMomentum          (key=sku;        carts_5m)
+       ProductView  -> ShopperReflexes      (key=user_id;    avg_view_price_30m)
+
+     B2B SaaS
+       ApiError     -> UserActivation       (key=user_id;    errors_10m,
+                                                             top_topic_10m)
+       LimitHit     -> OrgExpansionSignals  (key=org_id;     limit_hits_24h)
+
+     Plus PageView -> SiteMetrics for the site's own visitor analytics.
 
    Wholesale ownership matters: beava /register with force=true REPLACES
-   the registry. If two services both register with force=true but
-   different sets, the last one wins and the other's pipelines vanish.
-   Keeping all four definitions here means the generator owns the
-   schema; the deploy workflow no longer needs a separate register step.
+   the registry. Keeping all seven event+table pairs here means the
+   generator owns the schema.
 
-3. Pushes a synthetic event every PUSH_EVERY_S seconds for the three
-   demo pipelines, queries the resulting feature, composes a
-   (event, entity, feature, decision) row, and keeps the most recent
-   FEED_LEN rows in an in-memory ring buffer. PageView is fed by real
-   visitors via /api/push/PageView; we don't synthesize page-views here.
+3. Pushes a synthetic event every PUSH_EVERY_S seconds, cycling through
+   the six demo scenarios in balanced 1:1:1:1:1:1 order. Each push reads
+   back the resulting feature row and composes an
+   (event, entity, feature, decision) tuple for the ring buffer.
+   PageView is fed by real visitors via /api/push/PageView; not
+   synthesized here.
 
 4. Serves `GET /feed` on FEED_PORT with the ring buffer + a measured
    round-trip latency for the last push+get. Caddy proxies
@@ -51,10 +61,7 @@ FEED_LEN = int(os.environ.get("FEED_LEN", "3"))
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# Pipelines — three "live product reflex" categories: agent safety,
-# model-cost routing, and user-intent personalization. Plus PageView for
-# the site's own visitor analytics. Keep all four here; the generator's
-# register call is the registry's single source of truth.
+# Pipelines
 # ─────────────────────────────────────────────────────────────────────────
 
 
@@ -64,7 +71,7 @@ FEED_LEN = int(os.environ.get("FEED_LEN", "3"))
 class PageView:
     session_id: str
     path: str
-    dwell_ms: int  # set when the visitor leaves the page
+    dwell_ms: int
 
 
 @bv.table  # no key= -> one row, site-wide (ADR-003)
@@ -76,10 +83,9 @@ def SiteMetrics(e: PageView):
     )
 
 
-# Agent safety reflex — an AgentStep is one tool call / one action the
-# agent took. AgentGuardrails surfaces "how busy this agent has been in
-# the last 30s" as `repeated_action_30s`; the app pauses the agent when
-# the count crosses the threshold.
+# ── AI agents ────────────────────────────────────────────────────────────
+
+
 @bv.event
 class AgentStep:
     agent_id: str
@@ -87,43 +93,83 @@ class AgentStep:
 
 
 @bv.table(key="agent_id")
-def AgentGuardrails(e: AgentStep):
+def AgentReflexes(e: AgentStep):
     return e.group_by("agent_id").agg(
-        repeated_action_30s=bv.count(window="30s"),
+        steps_30s=bv.count(window="30s"),
     )
 
 
-# Model-cost reflex — every model API call is a ModelCall with a token
-# count. OrgBudget surfaces `token_burn_rate_1m` (sum of tokens per
-# minute per org); when it crosses 100k/min, the app routes to a
-# cheaper model.
 @bv.event
-class ModelCall:
-    org_id: str
-    tokens: int
-    model: str
+class ToolCall:
+    session_id: str
+    tool: str
+    is_risky: bool
 
 
-@bv.table(key="org_id")
-def OrgBudget(e: ModelCall):
-    return e.group_by("org_id").agg(
-        token_burn_rate_1m=bv.sum("tokens", window="1m"),
+@bv.table(key="session_id")
+def SessionReflexes(e: ToolCall):
+    return e.group_by("session_id").agg(
+        risky_tools_10m=bv.count(window="10m", where=bv.col("is_risky")),
     )
 
 
-# Personalization reflex — UserIntent is an inferred-or-declared intent
-# for the current session. UserAffinity exposes `intent_now` (last seen
-# intent) so the app can render the right next screen.
+# ── Marketplaces ─────────────────────────────────────────────────────────
+
+
 @bv.event
-class UserIntent:
+class AddToCart:
     user_id: str
-    intent: str
+    sku: str
+
+
+@bv.table(key="sku")
+def SkuMomentum(e: AddToCart):
+    return e.group_by("sku").agg(
+        carts_5m=bv.count(window="5m"),
+    )
+
+
+@bv.event
+class ProductView:
+    user_id: str
+    sku: str
+    price_usd: float
 
 
 @bv.table(key="user_id")
-def UserAffinity(e: UserIntent):
+def ShopperReflexes(e: ProductView):
     return e.group_by("user_id").agg(
-        intent_now=bv.last("intent"),
+        avg_view_price_30m=bv.mean("price_usd", window="30m"),
+    )
+
+
+# ── B2B SaaS ─────────────────────────────────────────────────────────────
+
+
+@bv.event
+class ApiError:
+    user_id: str
+    topic: str
+
+
+@bv.table(key="user_id")
+def UserActivation(e: ApiError):
+    return e.group_by("user_id").agg(
+        errors_10m=bv.count(window="10m"),
+        top_topic_10m=bv.top_k("topic", k=1, window="10m"),
+    )
+
+
+@bv.event
+class LimitHit:
+    org_id: str
+    feature: str
+
+
+@bv.table(key="org_id")
+def OrgExpansionSignals(e: LimitHit):
+    return e.group_by("org_id").agg(
+        limit_hits_24h=bv.count(window="24h"),
     )
 
 
@@ -132,77 +178,124 @@ def UserAffinity(e: UserIntent):
 # ─────────────────────────────────────────────────────────────────────────
 
 
-# Tight agent pool — 2 ids so each agent reliably accumulates enough
-# repeated_action_30s under the 1.4s push cadence even with balanced
-# 1:1:1 scenario rotation. Smaller pool than the org/user pools below
-# because agent_loop is the only scenario whose decision threshold
-# depends on accumulation; cost and personalization don't need
-# concentration.
-_AGENT_POOL = ("agent_42", "agent_77")
+# Tight pools — small sets so each entity reliably accumulates enough
+# events under the 1.4s push cadence to cross the dramatic thresholds.
+_AGENT_POOL = ("agent_42", "agent_77", "agent_91")
+_SESSION_POOL = ("session_12", "session_44", "session_81")
+_SKU_POOL = ("sku_882", "sku_113", "sku_547", "sku_209")
 _ORG_POOL = ("org_acme", "org_globex", "org_umbra", "org_soylent")
 _AGENT_ACTIONS = ("http_get", "shell_exec", "code_run", "search", "file_read")
-_INTENTS = ("compare plans", "browse docs", "see api reference", "ask sales")
+_TOOLS_RISKY = ("shell_exec", "external_send", "file_write")
+_TOOLS_SAFE = ("http_get", "search", "code_read")
+_ERROR_TOPICS = ("auth", "rate_limit", "schema", "permissions")
+_LIMIT_FEATURES = ("seats", "api_calls", "storage_gb")
 
 
 def _random_user() -> str:
-    return f"user_{1000 + random.randint(0, 899)}"
+    return f"user_{1000 + random.randint(0, 1499)}"
 
 
-# Balanced 1:1:1 rotation so the 3-row feed surfaces all three reflex
-# categories instead of stacking agent rows. With FEED_LEN=3, equal
-# weights mean visitors typically see one agent / one cost / one
-# personalization row at any moment.
-SCENARIOS = [
-    "agent_loop",
-    "model_cost",
-    "user_intent",
-]
+# Balanced 1:1:1:1:1:1 rotation across all six signals so the 3-row feed
+# typically surfaces three different verticals instead of stacking one.
+SCENARIOS = (
+    "agent_steps",
+    "tool_risk",
+    "cart_momentum",
+    "view_price",
+    "user_errors",
+    "limit_hits",
+)
 
 
 def _make_event(scenario: str) -> tuple[str, dict, str]:
-    if scenario == "agent_loop":
+    if scenario == "agent_steps":
         aid = random.choice(_AGENT_POOL)
         return "AgentStep", {"agent_id": aid, "action": random.choice(_AGENT_ACTIONS)}, aid
-    if scenario == "model_cost":
-        oid = random.choice(_ORG_POOL)
-        # Per-call tokens chosen so token_burn_rate_1m (sum over 1m) tends
-        # to clear the 100k threshold for the routing decision.
-        return "ModelCall", {
-            "org_id": oid,
-            "tokens": random.randint(18_000, 35_000),
-            "model": random.choice(["gpt-5", "claude-opus-4-7", "sonnet-4-6"]),
-        }, oid
-    if scenario == "user_intent":
+    if scenario == "tool_risk":
+        sid = random.choice(_SESSION_POOL)
+        is_risky = random.random() < 0.65  # bias risky so the count clears the approval gate
+        tool = random.choice(_TOOLS_RISKY if is_risky else _TOOLS_SAFE)
+        return "ToolCall", {"session_id": sid, "tool": tool, "is_risky": is_risky}, sid
+    if scenario == "cart_momentum":
+        sku = random.choice(_SKU_POOL)
+        return "AddToCart", {"user_id": _random_user(), "sku": sku}, sku
+    if scenario == "view_price":
         uid = _random_user()
-        return "UserIntent", {"user_id": uid, "intent": random.choice(_INTENTS)}, uid
+        # Bias toward premium ($180–$280) so avg_view_price_30m sits in the
+        # "premium picks" decision band.
+        price = round(random.uniform(180.0, 280.0), 2)
+        return (
+            "ProductView",
+            {"user_id": uid, "sku": random.choice(_SKU_POOL), "price_usd": price},
+            uid,
+        )
+    if scenario == "user_errors":
+        uid = _random_user()
+        return "ApiError", {"user_id": uid, "topic": random.choice(_ERROR_TOPICS)}, uid
+    if scenario == "limit_hits":
+        oid = random.choice(_ORG_POOL)
+        return "LimitHit", {"org_id": oid, "feature": random.choice(_LIMIT_FEATURES)}, oid
     raise KeyError(scenario)
 
 
 def _decide(scenario: str, feature_value) -> str:
-    if scenario == "agent_loop":
+    if scenario == "agent_steps":
         return "pause runaway agent" if (feature_value or 0) >= 5 else "continue monitoring"
-    if scenario == "model_cost":
-        kilo = (feature_value or 0) / 1000.0
-        return "switch to cheaper model" if kilo >= 100 else "route to default model"
-    if scenario == "user_intent":
-        if feature_value == "compare plans":
-            return "show pricing assistant"
-        if feature_value == "ask sales":
-            return "escalate to human"
-        return "personalize next screen"
+    if scenario == "tool_risk":
+        return "require human approval" if (feature_value or 0) >= 2 else "allow"
+    if scenario == "cart_momentum":
+        return "boost trending item" if (feature_value or 0) >= 50 else "keep default ranking"
+    if scenario == "view_price":
+        return "sort by premium picks" if (feature_value or 0) >= 200 else "keep value picks"
+    if scenario == "user_errors":
+        return "launch setup rescue" if (feature_value or 0) >= 3 else "let user retry"
+    if scenario == "limit_hits":
+        return "show team upgrade path" if (feature_value or 0) >= 10 else "send usage tip"
     return ""
 
 
-def _format_value(scenario: str, value):
-    if scenario == "model_cost" and value is not None:
-        # Sum is in raw tokens; surface a per-minute rate (same value,
-        # since the window is exactly 1m) with a /min suffix.
-        return f"{int(value / 1000)}k/min"
-    if scenario == "user_intent" and value is not None:
-        # Quoted string so the row reads naturally:
-        # `user_1094.intent_now = "compare plans"`
-        return f'"{value}"'
-    return value
+# Maps scenario -> (table_name, feature_key).
+_SCENARIO_TARGETS = {
+    "agent_steps":   ("AgentReflexes",        "steps_30s"),
+    "tool_risk":     ("SessionReflexes",      "risky_tools_10m"),
+    "cart_momentum": ("SkuMomentum",          "carts_5m"),
+    "view_price":    ("ShopperReflexes",      "avg_view_price_30m"),
+    "user_errors":   ("UserActivation",       "errors_10m"),
+    "limit_hits":    ("OrgExpansionSignals",  "limit_hits_24h"),
+}
+
+
+def _format_value(scenario: str, row: dict | None, feature_value):
+    """Compose the value string the homepage feed displays.
+
+    Most scenarios just show the raw feature value. Two exceptions:
+    - view_price: prepend a "$" so the row reads avg_view_price_30m = $240.
+    - user_errors: append the top_topic_10m so the row reads
+      errors_10m = 6, topic = "auth".
+    """
+    if feature_value is None:
+        return feature_value
+    if scenario == "view_price":
+        return f"${int(feature_value)}"
+    if scenario == "user_errors" and isinstance(row, dict):
+        topic = _extract_top_topic(row.get("top_topic_10m"))
+        if topic:
+            return f'{int(feature_value)}, topic = "{topic}"'
+    return feature_value
+
+
+def _extract_top_topic(top_k_value) -> str | None:
+    """top_k returns a sequence of (value, count) tuples or dicts depending
+    on wire format. Pull the first value string defensively."""
+    if not top_k_value:
+        return None
+    if isinstance(top_k_value, list) and top_k_value:
+        head = top_k_value[0]
+        if isinstance(head, dict):
+            return head.get("value") or head.get("v")
+        if isinstance(head, (list, tuple)) and head:
+            return head[0]
+    return None
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -213,14 +306,6 @@ def _format_value(scenario: str, value):
 _feed: deque = deque(maxlen=FEED_LEN)
 _feed_lock = threading.Lock()
 _latency_ms: float = 0.0
-
-
-# Maps scenario -> (table_name, feature_key) used by /get + display.
-_SCENARIO_TARGETS = {
-    "agent_loop":  ("AgentGuardrails", "repeated_action_30s"),
-    "model_cost":  ("OrgBudget",       "token_burn_rate_1m"),
-    "user_intent": ("UserAffinity",    "intent_now"),
-}
 
 
 def _push_one(app: bv.App, scenario: str) -> None:
@@ -238,7 +323,7 @@ def _push_one(app: bv.App, scenario: str) -> None:
         "ts": int(time.time() * 1000),
         "event": event_name,  # the @bv.event class name; matches the homepage code block
         "entity": entity,
-        "feature": {"key": feature_key, "value": _format_value(scenario, value)},
+        "feature": {"key": feature_key, "value": _format_value(scenario, row, value)},
         "decision": decision,
     }
     with _feed_lock:
@@ -246,8 +331,11 @@ def _push_one(app: bv.App, scenario: str) -> None:
 
 
 def warm_start(app: bv.App) -> None:
-    """Seed the feed before the HTTP server starts serving so /feed is never empty."""
-    for s in ("agent_loop", "model_cost", "user_intent"):
+    """Seed the feed before the HTTP server starts serving so /feed is never empty.
+
+    Pick one row per vertical so the first paint shows the spread.
+    """
+    for s in ("agent_steps", "cart_momentum", "user_errors"):
         _push_one(app, s)
 
 
@@ -304,12 +392,15 @@ def main() -> None:
         try:
             app.register(
                 PageView, SiteMetrics,
-                AgentStep, AgentGuardrails,
-                ModelCall, OrgBudget,
-                UserIntent, UserAffinity,
+                AgentStep, AgentReflexes,
+                ToolCall, SessionReflexes,
+                AddToCart, SkuMomentum,
+                ProductView, ShopperReflexes,
+                ApiError, UserActivation,
+                LimitHit, OrgExpansionSignals,
                 force=True,
             )
-            print("[generator] pipelines registered (4: SiteMetrics + 3 reflex demos)", file=sys.stderr)
+            print("[generator] pipelines registered (1 site + 3 verticals × 2 signals)", file=sys.stderr)
             break
         except Exception as exc:
             sys.stderr.write(f"[generator] register attempt {attempt + 1} failed: {exc!r}\n")

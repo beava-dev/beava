@@ -90,46 +90,72 @@
     // DecisionFeed — synthetic event stream that demos event → feature → decision
     // ─────────────────────────────────────────────────────────────────────
 
-    // Three reflex categories — agent safety, model cost, user
-    // personalization. Each row reads as a live intervention, not a
-    // counter readout: pause, switch, show. The live /api/feed served by
-    // deploy/generator/generator.py registers the matching pipelines so
-    // the same shapes appear whether the row was synthetic or real.
+    // Three verticals × two signals each = six reflex rows. Each row
+    // reads as a live intervention, not a counter readout: pause, boost,
+    // launch. The live /api/feed served by deploy/generator/generator.py
+    // registers the matching pipelines so the same shapes appear whether
+    // the row was synthetic or real.
     const FEED_TEMPLATES = {
-      // Agent safety reflex — AgentStep → AgentGuardrails
-      agent_loop: {
+      // AI agents ─────────────────────────────────────────────────────────
+      // AgentStep → AgentReflexes(steps_30s)
+      agent_steps: {
         event: 'AgentStep',
         entity: () => `agent_${[42, 77, 91][Math.floor(Math.random() * 3)]}`,
-        feature: (n) => ({ key: 'repeated_action_30s', value: n }),
-        valueOf: () => 5 + Math.floor(Math.random() * 5),  // 5–9, always above the pause threshold
+        feature: (n) => ({ key: 'steps_30s', value: n }),
+        valueOf: () => 5 + Math.floor(Math.random() * 5),  // 5–9, above pause threshold
         decision: (v) => v >= 5 ? 'pause runaway agent' : 'continue monitoring',
       },
-      // Model cost reflex — ModelCall → OrgBudget
-      model_cost: {
-        event: 'ModelCall',
-        entity: () => `org_${['acme','globex','umbra','soylent'][Math.floor(Math.random() * 4)]}`,
-        feature: (n) => ({ key: 'token_burn_rate_1m', value: `${n}k/min` }),
-        valueOf: () => 100 + Math.floor(Math.random() * 60),  // 100–160 (k tokens / minute)
-        decision: (v) => v >= 100 ? 'switch to cheaper model' : 'route to default model',
+      // ToolCall → SessionReflexes(risky_tools_10m)
+      tool_risk: {
+        event: 'ToolCall',
+        entity: () => `session_${[12, 44, 81][Math.floor(Math.random() * 3)]}`,
+        feature: (n) => ({ key: 'risky_tools_10m', value: n }),
+        valueOf: () => 2 + Math.floor(Math.random() * 2),  // 2–3, above approval threshold
+        decision: (v) => v >= 2 ? 'require human approval' : 'allow',
       },
-      // Personalization reflex — UserIntent → UserAffinity
-      user_intent: {
-        event: 'UserIntent',
-        entity: () => `user_${1000 + Math.floor(Math.random() * 900)}`,
+
+      // Marketplaces ──────────────────────────────────────────────────────
+      // AddToCart → SkuMomentum(carts_5m)
+      cart_momentum: {
+        event: 'AddToCart',
+        entity: () => `sku_${[882, 113, 547, 209][Math.floor(Math.random() * 4)]}`,
+        feature: (n) => ({ key: 'carts_5m', value: n }),
+        valueOf: () => 80 + Math.floor(Math.random() * 30),  // 80–109 carts in 5m
+        decision: (v) => v >= 50 ? 'boost trending item' : 'keep default ranking',
+      },
+      // ProductView → ShopperReflexes(avg_view_price_30m)
+      view_price: {
+        event: 'ProductView',
+        entity: () => `user_${1000 + Math.floor(Math.random() * 1500)}`,
+        feature: (n) => ({ key: 'avg_view_price_30m', value: `$${n}` }),
+        valueOf: () => 200 + Math.floor(Math.random() * 80),  // $200–$279
+        decision: (v) => v >= 200 ? 'sort by premium picks' : 'keep value picks',
+      },
+
+      // B2B SaaS ──────────────────────────────────────────────────────────
+      // ApiError → UserActivation(errors_10m, top_topic_10m)
+      user_errors: {
+        event: 'ApiError',
+        entity: () => `user_${1000 + Math.floor(Math.random() * 1500)}`,
         feature: () => {
-          const intents = ['compare plans', 'browse docs', 'see api reference', 'ask sales'];
-          const intent = intents[Math.floor(Math.random() * intents.length)];
-          return { key: 'intent_now', value: `"${intent}"` };
+          const n = 4 + Math.floor(Math.random() * 4);  // 4–7
+          const topic = ['auth', 'rate_limit', 'schema', 'permissions'][Math.floor(Math.random() * 4)];
+          return { key: 'errors_10m', value: `${n}, topic = "${topic}"`, _topic: topic };
         },
-        // No valueOf — mintRow falls back to feat.value (the quoted intent string)
-        // when computing the decision, which is what we want here.
-        decision: (v) => v === '"compare plans"' ? 'show pricing assistant'
-                        : v === '"ask sales"'     ? 'escalate to human'
-                        : 'personalize next screen',
+        decision: (v) => 'launch setup rescue',
+      },
+      // LimitHit → OrgExpansionSignals(limit_hits_24h)
+      limit_hits: {
+        event: 'LimitHit',
+        entity: () => `org_${['acme','globex','umbra','soylent'][Math.floor(Math.random() * 4)]}`,
+        feature: (n) => ({ key: 'limit_hits_24h', value: n }),
+        valueOf: () => 8 + Math.floor(Math.random() * 8),  // 8–15
+        decision: (v) => v >= 10 ? 'show team upgrade path' : 'send usage tip',
       },
     };
 
-    const ORDER = ['agent_loop', 'model_cost', 'user_intent'];
+    // Cycle through all six so the rotating feed surfaces every vertical.
+    const ORDER = ['agent_steps', 'tool_risk', 'cart_momentum', 'view_price', 'user_errors', 'limit_hits'];
 
     const mintRow = (name, idx, ts) => {
       const t = FEED_TEMPLATES[name];
@@ -145,7 +171,8 @@
     };
 
     const seedRows = () => {
-      const initial = ['agent_loop', 'model_cost', 'user_intent'];
+      // Seed one row per vertical so the first paint shows the spread.
+      const initial = ['agent_steps', 'cart_momentum', 'user_errors'];
       // Seed rows are settled history — render without the fresh-row wash so
       // the panel opens calm and only later arrivals get the orange highlight.
       return initial.map((name, i) => ({
@@ -432,7 +459,7 @@
               color: 'var(--fg1)', margin: '0 auto 20px',
               maxWidth: '100%', textWrap: 'balance',
             }}>
-              Give your AI product <em style={{ color: 'var(--accent)', fontStyle: 'italic' }}>live reflexes.</em>
+              Give your product <em style={{ color: 'var(--accent)', fontStyle: 'italic' }}>live reflexes.</em>
             </h1>
 
             <p style={{
@@ -442,8 +469,8 @@
               maxWidth: 720, textWrap: 'pretty',
             }}>
               beava turns live events into fresh decision features, so your app can
-              pause runaway agents, route models, throttle spend, and personalize the next
-              screen — no Kafka, no Flink, no feature store.
+              pause runaway agents, reorder marketplaces, and rescue stuck users —
+              no Kafka, no Flink, no feature store.
             </p>
 
             <div style={{ display: 'inline-flex', gap: 18, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
@@ -547,16 +574,16 @@
 
     const PIPELINE_TABS = [
       {
-        id: 'agent',
-        label: 'Agent safety',
-        kicker: '01 · agent safety',
-        title: 'Pause the agent before it burns through the API budget',
-        blurb: 'Per-agent action counters over a 30-second window. Push every tool call; read the count before the next one runs.',
-        file: 'agent_safety.py',
-        lines: 13,
+        id: 'agent-runtime',
+        label: 'Agent runtime',
+        kicker: '01 · agent runtime control',
+        title: 'Pause runaway agents. Require approval for risky tools.',
+        blurb: 'Two reflex signals per agent: how busy the agent is right now, and how risky the tools it just touched were.',
+        file: 'agent_runtime.py',
+        lines: 16,
         features: [
-          { color: 'rgba(184,92,32,0.10)',  dot: 'var(--accent)',             label: 'repeated_action_30s', maps: 'Actions · last 30s' },
-          { color: 'rgba(217,122,62,0.12)', dot: 'var(--beava-orange-soft)',  label: 'dominant_action_1m',  maps: 'Most-called action · last 1m' },
+          { color: 'rgba(184,92,32,0.10)',  dot: 'var(--accent)',             label: 'steps_30s',        maps: 'Steps · last 30s' },
+          { color: 'rgba(217,122,62,0.12)', dot: 'var(--beava-orange-soft)',  label: 'risky_tools_10m',  maps: 'Risky tool calls · last 10m' },
         ],
         render: (S) => (
           <>
@@ -564,80 +591,103 @@
             <span style={S.fn}>@bv.event</span>{'\n'}
             <span style={S.kw}>class</span> <span style={S.ty}>AgentStep</span>:{'\n'}
             {'    '}agent_id: <span style={S.ty}>str</span>{'\n'}
-            {'    '}action: <span style={S.ty}>str</span>      <span style={S.cmt}># "shell_exec" · "http_get" · "code_run"</span>{'\n\n'}
+            {'    '}action: <span style={S.ty}>str</span>{'\n\n'}
+            <span style={S.fn}>@bv.event</span>{'\n'}
+            <span style={S.kw}>class</span> <span style={S.ty}>ToolCall</span>:{'\n'}
+            {'    '}session_id: <span style={S.ty}>str</span>{'\n'}
+            {'    '}tool: <span style={S.ty}>str</span>{'\n'}
+            {'    '}is_risky: <span style={S.ty}>bool</span>  <span style={S.cmt}># shell_exec, external_send, file_write</span>{'\n\n'}
             <span style={S.fn}>@bv.table</span>(key=<span style={S.str}>"agent_id"</span>){'\n'}
-            <span style={S.kw}>def</span> <span style={S.fn}>AgentGuardrails</span>(e: <span style={S.ty}>AgentStep</span>):{'\n'}
+            <span style={S.kw}>def</span> <span style={S.fn}>AgentReflexes</span>(e: <span style={S.ty}>AgentStep</span>):{'\n'}
             {'    '}<span style={S.kw}>return</span> e.<span style={S.fn}>group_by</span>(<span style={S.str}>"agent_id"</span>).<span style={S.fn}>agg</span>({'\n'}
-            {'        '}<span style={S.hl('rgba(184,92,32,0.10)')}>repeated_action_30s</span> = bv.<span style={S.fn}>count</span>(window=<span style={S.str}>"30s"</span>),<Anno>← spot the tight loop</Anno>{'\n'}
-            {'        '}<span style={S.hl('rgba(217,122,62,0.12)')}>dominant_action_1m</span>  = bv.<span style={S.fn}>top_k</span>(<span style={S.str}>"action"</span>, k=<span style={S.num}>1</span>, window=<span style={S.str}>"1m"</span>),<Anno>← what is it stuck on?</Anno>{'\n'}
+            {'        '}<span style={S.hl('rgba(184,92,32,0.10)')}>steps_30s</span> = bv.<span style={S.fn}>count</span>(window=<span style={S.str}>"30s"</span>),<Anno>← spot the tight loop</Anno>{'\n'}
             {'    '}){'\n\n'}
-            bv.<span style={S.fn}>App</span>(<span style={S.str}>"0.0.0.0:6400"</span>).<span style={S.fn}>register</span>(<span style={S.ty}>AgentStep</span>, <span style={S.fn}>AgentGuardrails</span>).<span style={S.fn}>serve</span>()<Anno>← one HTTP port, one binary</Anno>{'\n'}
+            <span style={S.fn}>@bv.table</span>(key=<span style={S.str}>"session_id"</span>){'\n'}
+            <span style={S.kw}>def</span> <span style={S.fn}>SessionReflexes</span>(e: <span style={S.ty}>ToolCall</span>):{'\n'}
+            {'    '}<span style={S.kw}>return</span> e.<span style={S.fn}>group_by</span>(<span style={S.str}>"session_id"</span>).<span style={S.fn}>agg</span>({'\n'}
+            {'        '}<span style={S.hl('rgba(217,122,62,0.12)')}>risky_tools_10m</span> = bv.<span style={S.fn}>count</span>(window=<span style={S.str}>"10m"</span>, where=bv.<span style={S.fn}>col</span>(<span style={S.str}>"is_risky"</span>)),<Anno>← gate the next call</Anno>{'\n'}
+            {'    '}){'\n'}
           </>
         ),
       },
       {
-        id: 'cost',
-        label: 'Model cost',
-        kicker: '02 · model cost',
-        title: 'Switch models the moment an org spikes past its token budget',
-        blurb: 'Rolling token sums per organization. Read the burn rate on the way into the next expensive call.',
-        file: 'model_routing.py',
-        lines: 14,
+        id: 'marketplace',
+        label: 'Marketplace',
+        kicker: '02 · marketplace reranking',
+        title: 'Boost trending items. Sort by live price intent.',
+        blurb: 'Two reflex signals for live ranking: per-SKU buying momentum, and per-shopper price intent in the last half-hour.',
+        file: 'marketplace.py',
+        lines: 18,
         features: [
-          { color: 'rgba(184,92,32,0.10)',  dot: 'var(--accent)',             label: 'token_burn_rate_1m', maps: 'Tokens · last 1m' },
-          { color: 'rgba(58,106,138,0.10)', dot: 'var(--beava-info)',         label: 'calls_1m',           maps: 'Calls · last 1m' },
+          { color: 'rgba(184,92,32,0.10)',  dot: 'var(--accent)',             label: 'carts_5m',            maps: 'Add-to-cart · last 5m' },
+          { color: 'rgba(217,122,62,0.12)', dot: 'var(--beava-orange-soft)',  label: 'avg_view_price_30m',  maps: 'Avg viewed price · last 30m' },
         ],
         render: (S) => (
           <>
             <span style={S.kw}>import</span> beava <span style={S.kw}>as</span> bv{'\n\n'}
             <span style={S.fn}>@bv.event</span>{'\n'}
-            <span style={S.kw}>class</span> <span style={S.ty}>ModelCall</span>:{'\n'}
-            {'    '}org_id: <span style={S.ty}>str</span>{'\n'}
-            {'    '}tokens: <span style={S.ty}>int</span>     <span style={S.cmt}># bill this one to the org</span>{'\n'}
-            {'    '}model: <span style={S.ty}>str</span>      <span style={S.cmt}># e.g. "gpt-5", "claude-opus-4-7"</span>{'\n\n'}
-            <span style={S.fn}>@bv.table</span>(key=<span style={S.str}>"org_id"</span>){'\n'}
-            <span style={S.kw}>def</span> <span style={S.fn}>OrgBudget</span>(e: <span style={S.ty}>ModelCall</span>):{'\n'}
-            {'    '}<span style={S.kw}>return</span> e.<span style={S.fn}>group_by</span>(<span style={S.str}>"org_id"</span>).<span style={S.fn}>agg</span>({'\n'}
-            {'        '}<span style={S.hl('rgba(184,92,32,0.10)')}>token_burn_rate_1m</span> = bv.<span style={S.fn}>sum</span>(<span style={S.str}>"tokens"</span>, window=<span style={S.str}>"1m"</span>),<Anno>← rolling per-minute spend</Anno>{'\n'}
-            {'        '}<span style={S.hl('rgba(58,106,138,0.10)')}>calls_1m</span>           = bv.<span style={S.fn}>count</span>(window=<span style={S.str}>"1m"</span>),<Anno>← runaway-agent canary</Anno>{'\n'}
-            {'    '}){'\n\n'}
-            bv.<span style={S.fn}>App</span>(<span style={S.str}>"0.0.0.0:6400"</span>).<span style={S.fn}>register</span>(<span style={S.ty}>ModelCall</span>, <span style={S.fn}>OrgBudget</span>).<span style={S.fn}>serve</span>()<Anno>← one HTTP port, one binary</Anno>{'\n'}
-          </>
-        ),
-      },
-      {
-        id: 'personalization',
-        label: 'Personalization',
-        kicker: '03 · personalization',
-        title: 'Render the right next screen the second the user picks an intent',
-        blurb: 'Last-seen intent per user, plus the dominant theme over the longer session. Read both at request time.',
-        file: 'personalize.py',
-        lines: 13,
-        features: [
-          { color: 'rgba(184,92,32,0.10)',  dot: 'var(--accent)',             label: 'intent_now',     maps: 'Last intent · live' },
-          { color: 'rgba(217,122,62,0.12)', dot: 'var(--beava-orange-soft)',  label: 'top_topic_10m',  maps: 'Top intent · last 10m' },
-        ],
-        render: (S) => (
-          <>
-            <span style={S.kw}>import</span> beava <span style={S.kw}>as</span> bv{'\n\n'}
-            <span style={S.fn}>@bv.event</span>{'\n'}
-            <span style={S.kw}>class</span> <span style={S.ty}>UserIntent</span>:{'\n'}
+            <span style={S.kw}>class</span> <span style={S.ty}>AddToCart</span>:{'\n'}
             {'    '}user_id: <span style={S.ty}>str</span>{'\n'}
-            {'    '}intent: <span style={S.ty}>str</span>   <span style={S.cmt}># "compare plans" · "browse docs"</span>{'\n\n'}
-            <span style={S.fn}>@bv.table</span>(key=<span style={S.str}>"user_id"</span>){'\n'}
-            <span style={S.kw}>def</span> <span style={S.fn}>UserAffinity</span>(e: <span style={S.ty}>UserIntent</span>):{'\n'}
-            {'    '}<span style={S.kw}>return</span> e.<span style={S.fn}>group_by</span>(<span style={S.str}>"user_id"</span>).<span style={S.fn}>agg</span>({'\n'}
-            {'        '}<span style={S.hl('rgba(184,92,32,0.10)')}>intent_now</span>    = bv.<span style={S.fn}>last</span>(<span style={S.str}>"intent"</span>),<Anno>← the freshest signal</Anno>{'\n'}
-            {'        '}<span style={S.hl('rgba(217,122,62,0.12)')}>top_topic_10m</span> = bv.<span style={S.fn}>top_k</span>(<span style={S.str}>"intent"</span>, k=<span style={S.num}>1</span>, window=<span style={S.str}>"10m"</span>),<Anno>← the session theme</Anno>{'\n'}
+            {'    '}sku: <span style={S.ty}>str</span>{'\n\n'}
+            <span style={S.fn}>@bv.event</span>{'\n'}
+            <span style={S.kw}>class</span> <span style={S.ty}>ProductView</span>:{'\n'}
+            {'    '}user_id: <span style={S.ty}>str</span>{'\n'}
+            {'    '}sku: <span style={S.ty}>str</span>{'\n'}
+            {'    '}price_usd: <span style={S.ty}>float</span>{'\n\n'}
+            <span style={S.fn}>@bv.table</span>(key=<span style={S.str}>"sku"</span>){'\n'}
+            <span style={S.kw}>def</span> <span style={S.fn}>SkuMomentum</span>(e: <span style={S.ty}>AddToCart</span>):{'\n'}
+            {'    '}<span style={S.kw}>return</span> e.<span style={S.fn}>group_by</span>(<span style={S.str}>"sku"</span>).<span style={S.fn}>agg</span>({'\n'}
+            {'        '}<span style={S.hl('rgba(184,92,32,0.10)')}>carts_5m</span> = bv.<span style={S.fn}>count</span>(window=<span style={S.str}>"5m"</span>),<Anno>← what is trending right now</Anno>{'\n'}
             {'    '}){'\n\n'}
-            bv.<span style={S.fn}>App</span>(<span style={S.str}>"0.0.0.0:6400"</span>).<span style={S.fn}>register</span>(<span style={S.ty}>UserIntent</span>, <span style={S.fn}>UserAffinity</span>).<span style={S.fn}>serve</span>()<Anno>← one HTTP port, one binary</Anno>{'\n'}
+            <span style={S.fn}>@bv.table</span>(key=<span style={S.str}>"user_id"</span>){'\n'}
+            <span style={S.kw}>def</span> <span style={S.fn}>ShopperReflexes</span>(e: <span style={S.ty}>ProductView</span>):{'\n'}
+            {'    '}<span style={S.kw}>return</span> e.<span style={S.fn}>group_by</span>(<span style={S.str}>"user_id"</span>).<span style={S.fn}>agg</span>({'\n'}
+            {'        '}<span style={S.hl('rgba(217,122,62,0.12)')}>avg_view_price_30m</span> = bv.<span style={S.fn}>mean</span>(<span style={S.str}>"price_usd"</span>, window=<span style={S.str}>"30m"</span>),<Anno>← their live price intent</Anno>{'\n'}
+            {'    '}){'\n'}
+          </>
+        ),
+      },
+      {
+        id: 'saas-growth',
+        label: 'SaaS growth',
+        kicker: '03 · saas growth rescue',
+        title: 'Launch setup rescue. Show upgrade paths while users are active.',
+        blurb: 'Two reflex signals: per-user error velocity (with the topic the user is stuck on) and per-org plan-limit hits.',
+        file: 'saas_growth.py',
+        lines: 18,
+        features: [
+          { color: 'rgba(184,92,32,0.10)',  dot: 'var(--accent)',             label: 'errors_10m',     maps: 'API errors · last 10m' },
+          { color: 'rgba(58,106,138,0.10)', dot: 'var(--beava-info)',         label: 'limit_hits_24h', maps: 'Limit hits · last 24h' },
+        ],
+        render: (S) => (
+          <>
+            <span style={S.kw}>import</span> beava <span style={S.kw}>as</span> bv{'\n\n'}
+            <span style={S.fn}>@bv.event</span>{'\n'}
+            <span style={S.kw}>class</span> <span style={S.ty}>ApiError</span>:{'\n'}
+            {'    '}user_id: <span style={S.ty}>str</span>{'\n'}
+            {'    '}topic: <span style={S.ty}>str</span>   <span style={S.cmt}># "auth" · "rate_limit" · "schema"</span>{'\n\n'}
+            <span style={S.fn}>@bv.event</span>{'\n'}
+            <span style={S.kw}>class</span> <span style={S.ty}>LimitHit</span>:{'\n'}
+            {'    '}org_id: <span style={S.ty}>str</span>{'\n'}
+            {'    '}feature: <span style={S.ty}>str</span>{'\n\n'}
+            <span style={S.fn}>@bv.table</span>(key=<span style={S.str}>"user_id"</span>){'\n'}
+            <span style={S.kw}>def</span> <span style={S.fn}>UserActivation</span>(e: <span style={S.ty}>ApiError</span>):{'\n'}
+            {'    '}<span style={S.kw}>return</span> e.<span style={S.fn}>group_by</span>(<span style={S.str}>"user_id"</span>).<span style={S.fn}>agg</span>({'\n'}
+            {'        '}<span style={S.hl('rgba(184,92,32,0.10)')}>errors_10m</span>    = bv.<span style={S.fn}>count</span>(window=<span style={S.str}>"10m"</span>),<Anno>← are they stuck?</Anno>{'\n'}
+            {'        '}top_topic_10m = bv.<span style={S.fn}>top_k</span>(<span style={S.str}>"topic"</span>, k=<span style={S.num}>1</span>, window=<span style={S.str}>"10m"</span>),<Anno>← what are they stuck on?</Anno>{'\n'}
+            {'    '}){'\n\n'}
+            <span style={S.fn}>@bv.table</span>(key=<span style={S.str}>"org_id"</span>){'\n'}
+            <span style={S.kw}>def</span> <span style={S.fn}>OrgExpansionSignals</span>(e: <span style={S.ty}>LimitHit</span>):{'\n'}
+            {'    '}<span style={S.kw}>return</span> e.<span style={S.fn}>group_by</span>(<span style={S.str}>"org_id"</span>).<span style={S.fn}>agg</span>({'\n'}
+            {'        '}<span style={S.hl('rgba(58,106,138,0.10)')}>limit_hits_24h</span> = bv.<span style={S.fn}>count</span>(window=<span style={S.str}>"24h"</span>),<Anno>← time to talk upgrade</Anno>{'\n'}
+            {'    '}){'\n'}
           </>
         ),
       },
     ];
 
     const PipelineShowcase = () => {
-      const [tabId, setTabId] = React.useState('agent');
+      const [tabId, setTabId] = React.useState('agent-runtime');
       const tab = PIPELINE_TABS.find(t => t.id === tabId);
       return (
         <section id="pipeline" style={{
@@ -645,8 +695,8 @@
           borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)',
         }}>
           <div style={{ maxWidth: 1040, margin: '0 auto', position: 'relative' }}>
-            {/* Corner mascot — sits to the right of the "~13 lines" headline.
-                Hidden under 900px so it doesn't crowd the title on narrow screens. */}
+            {/* Corner mascot — sits to the right of the "three reflex pipelines"
+                headline. Hidden under 900px so it doesn't crowd the title. */}
             <img src="/assets/mascot-floating-slow.gif" alt="" className="beava-corner-mascot" style={{
               position: 'absolute', top: -12, right: -4,
               width: 124, height: 124, transform: 'rotate(-6deg)',
@@ -654,21 +704,22 @@
               pointerEvents: 'none', userSelect: 'none', zIndex: 1,
             }}/>
             <div style={{ marginBottom: 28, position: 'relative', zIndex: 2 }}>
-              <Eyebrow>One pipeline per decision</Eyebrow>
+              <Eyebrow>Three reflex pipelines</Eyebrow>
               <h2 style={{
                 fontFamily: 'var(--font-serif)', fontWeight: 600,
                 fontSize: 44, lineHeight: 1.1, letterSpacing: '-0.02em',
                 color: 'var(--fg1)', margin: '10px 0 14px',
                 maxWidth: 740, textWrap: 'balance',
               }}>
-                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>~13 lines</span> — pick a decision, see the pipeline.
+                Three reflex pipelines. <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>Six signals</span> your product can act on instantly.
               </h2>
               <p style={{
                 fontFamily: 'var(--font-sans)', fontSize: 17, lineHeight: 1.55,
                 color: 'var(--fg2)', margin: 0, maxWidth: 660, textWrap: 'pretty',
               }}>
-                Three shapes of the live feed above — fraud, recommendations, guardrails —
-                each as the smallest realistic pipeline. Same primitives, same single binary.
+                Three verticals where live reflexes change the product — AI agents,
+                marketplaces, B2B SaaS — each as the smallest realistic pipeline. Same
+                primitives, same single binary.
               </p>
             </div>
 
