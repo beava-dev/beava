@@ -87,7 +87,7 @@
 
             <p className="bv-lede">beava is a single binary with a 1 GB disk requirement and no external dependencies. You can deploy it the same way you would Redis. The fastest path is a one-click button on a managed host.</p>
 
-            <p>beava listens on two ports: <code>:8080</code> for the data plane (<code>/push</code>, <code>/get</code>, <code>/register</code>) and <code>:8090</code> for the admin sidecar (<code>/health</code>, <code>/ready</code>, <code>/metrics</code>, <code>/registry</code>). Persistent state — the WAL and snapshots — lives under <code>/data</code>. Mount a disk there.</p>
+            <p>beava listens on two ports: <code>:8080</code> for the data plane (<code>/push</code>, <code>/get</code>, <code>/register</code>, plus <code>/health</code> and <code>/ready</code> for liveness probes) and <code>:8090</code> for the admin sidecar (<code>/metrics</code>, <code>/registry</code>; <code>/health</code> and <code>/ready</code> are mirrored here too). Persistent state — the WAL and snapshots — lives under <code>/data</code>. Mount a disk there.</p>
 
             <h2 id="render">Deploy on Render</h2>
 
@@ -111,20 +111,17 @@
 
             <h2 id="railway">Deploy on Railway</h2>
 
-            <div className="bv-deploy-note">
-              <strong>Heads up.</strong> A published Railway template is in the works — until it lands, the fastest path on Railway is a 30-second dashboard setup. Both routes use the same prebuilt image; only the click count differs.
+            <p>One click. The published Beava template provisions the same <code>beavadev/beava:latest</code> image with port <code>8080</code> exposed publicly and a 1 GB volume mounted at <code>/data</code>.</p>
+
+            <div className="bv-deploy-buttons">
+              <a href="https://railway.com/deploy/beava?referralCode=xkfMVJ&amp;utm_medium=integration&amp;utm_source=template&amp;utm_campaign=generic" target="_blank" rel="noopener">
+                <img src="https://railway.com/button.svg" alt="Deploy on Railway"/>
+              </a>
             </div>
 
-            <p><strong>Manual dashboard setup</strong> (works today):</p>
-            <ol>
-              <li>Open <a href="https://railway.com/new" target="_blank" rel="noopener">railway.com/new</a> → <em>Empty Project</em>.</li>
-              <li>Click <em>+ Create</em> → <em>Docker Image</em>. Paste <code>beavadev/beava:latest</code>.</li>
-              <li>In the service settings, set the public port to <code>8080</code>.</li>
-              <li>Right-click the service → <em>Attach Volume</em> → mount path <code>/data</code>, size <code>1 GB</code>.</li>
-              <li>Click <em>Deploy</em>. First boot takes ~30 seconds.</li>
-            </ol>
+            <p>Healthcheck path is <code>/health</code> (served on the data plane port, returns <code>200</code> once the listener is up). The admin sidecar on <code>:8090</code> stays internal to the service.</p>
 
-            <p>Railway will generate a public URL on the data-plane port. The admin port stays internal; if you want <code>/health</code> reachable, add a second port mapping for <code>8090</code> or use the Railway CLI to <code>railway run curl localhost:8090/health</code> from inside the service.</p>
+            <p><strong>Without the template:</strong> open <a href="https://railway.com/new" target="_blank" rel="noopener">railway.com/new</a> → <em>Empty Project</em> → <em>+ Create</em> → <em>Docker Image</em> → paste <code>beavadev/beava:latest</code>. Expose port <code>8080</code>, right-click the service → <em>Attach Volume</em> → mount path <code>/data</code>, size <code>1 GB</code>. Same result as the button, more clicks.</p>
 
             <h2 id="docker">Run the Docker image directly</h2>
 
@@ -182,11 +179,11 @@ BEAVA_TCP_HOST=0.0.0.0`}
 
             <h2 id="verify">Verify the deploy</h2>
 
-            <p>Once the service is up, hit the admin port to confirm beava is healthy:</p>
+            <p>Once the service is up, hit the public URL to confirm beava is healthy:</p>
 
             <Code lang="bash">{`curl https://your-app.example.com/health`}</Code>
 
-            <p>Expected response: <code>200 OK</code> with body <code>"ok"</code>. Note that on Render and Railway the admin port stays internal by default, so this works from inside the service but not from the public URL — see the platform sections above for how to expose it.</p>
+            <p>Expected response: <code>200 OK</code>. The data plane serves <code>/health</code> alongside <code>/push</code> and <code>/get</code>, so it works through the public URL on both Render and Railway with no extra port exposure.</p>
 
             <p>Then push a synthetic event from your laptop and read it back:</p>
 
