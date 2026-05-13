@@ -256,7 +256,7 @@ Redis is a key-value store you can *build* rolling counters on top of (with Lua 
 
 You've got beava running and a counter ticking. Two reasonable next stops:
 
-→ **All operators** (/sdk/python/operators/) — 53 purpose-built aggregation primitives — counters, sketches, velocities, decay, recency, geo. Same agg(...) shape, different math.
+→ **All operators** (/sdk/python/operators/) — 55 purpose-built aggregation primitives — counters, sketches, velocities, decay, recency, geo. Same agg(...) shape, different math.
 
 → **Concepts** (/docs/) — Events vs tables, embed mode, lifetime aggregation, processing-time semantics, global aggregation. The five ideas you need to be productive.
 

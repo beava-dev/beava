@@ -4,17 +4,17 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Quickstart · beava docs</title>
-  <meta name="description" content="Build your first real-time feature pipeline with beava. Define an event, maintain windowed aggregates, query the latest state by key.">
+  <meta name="description" content="Build your first live product reflex in five minutes. Push a ModelCall event, recompute a decision feature, read it back immediately — the same loop you use to pause agents, route models, throttle spend, or personalize a session.">
   <link rel="canonical" href="https://beava.dev/docs/get-started/quickstart/">
   <meta property="og:site_name" content="beava">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://beava.dev/docs/get-started/quickstart/">
   <meta property="og:title" content="Quickstart">
-  <meta property="og:description" content="Build your first real-time feature pipeline with beava. Define an event, maintain windowed aggregates, query the latest state by key.">
+  <meta property="og:description" content="Build your first live product reflex in five minutes. Push a ModelCall event, recompute a decision feature, read it back immediately — the same loop you use to pause agents, route models, throttle spend, or personalize a session.">
   <meta property="og:image" content="https://beava.dev/assets/readme-banner.png">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Quickstart">
-  <meta name="twitter:description" content="Build your first real-time feature pipeline with beava. Define an event, maintain windowed aggregates, query the latest state by key.">
+  <meta name="twitter:description" content="Build your first live product reflex in five minutes. Push a ModelCall event, recompute a decision feature, read it back immediately — the same loop you use to pause agents, route models, throttle spend, or personalize a session.">
   <meta name="twitter:image" content="https://beava.dev/assets/readme-banner.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -44,7 +44,7 @@
   <script type="text/babel">
     const TOC = [
       { id: 'install', label: 'Install beava' },
-      { id: 'stream', label: 'Define a stream' },
+      { id: 'stream', label: 'Define an event' },
       { id: 'table', label: 'Define a table' },
       { id: 'register', label: 'Register the pipeline' },
       { id: 'push', label: 'Push an event' },
@@ -69,56 +69,52 @@
 
             <h1>Quickstart</h1>
 
-            <p className="bv-lede">Build your first real-time feature pipeline. This guide walks the basic beava workflow: define an event, define a feature table, register the pipeline, push events, query fresh state.</p>
+            <p className="bv-lede">Build your first live product reflex in five minutes.</p>
 
-            <p>The goal is to show the core mental model quickly.</p>
-            <p><strong>Define events. Maintain tables. Query fresh state.</strong></p>
+            <p>In this quickstart, you will push a live event, recompute a decision feature, and read it back immediately — the same loop you use to pause agents, route models, throttle spend, or personalize a session.</p>
+            <p><strong>event in → feature recomputed → decision served.</strong></p>
 
             <h2 id="install">Install beava</h2>
             <Code lang="bash">{`pip install beava`}</Code>
-            <p>The installer detects your platform and pulls the matching wheel from the latest GitHub Release. The wheel ships the SDK <em>and</em> the Rust <code>beava</code> server binary together. Pin a version with <code>BEAVA_VERSION=v0.0.0 curl ... | sh</code>. PyPI publish lands at v0.0.x — <code>pip install beava</code> will work then; the import name is <code>beava</code> either way.</p>
+            <p>The wheel ships the SDK <em>and</em> the Rust <code>beava</code> server binary together (~14 MB Python wheel, ~4 MB server binary inside — polars / ruff / uv pattern). The <code>beava</code> command lands on PATH.</p>
             <p>Start a local beava server:</p>
             <Code lang="bash">{`beava`}</Code>
-            <p>beava is designed to start small. For local development, a single beava process should be enough to define pipelines, push events, and query features.</p>
+            <p>beava is designed to start small. For local development, a single beava process is enough to define pipelines, push events, and query features.</p>
             <p><strong>Start small. Understand the system. Grow with the use case.</strong></p>
 
-            <h2 id="stream">Define a stream</h2>
-            <p>A stream describes the shape of events your application sends to beava.</p>
+            <h2 id="stream">Define an event</h2>
+            <p>An event describes the shape of one fact your application emits. We&rsquo;ll model a model API call — every time your app hits an LLM provider, it pushes one of these.</p>
             <Code lang="python">
 {`import beava as bv
 
 @bv.event
-class UserEvent:
-    user_id: str
-    item_id: str
-    event_type: str
-    category: str
-    ts: float`}
+class ModelCall:
+    org_id: str
+    model: str
+    tokens: int
+    cost_cents: float`}
             </Code>
-            <p>This stream could represent clicks, views, purchases, impressions, or any other event your application produces.</p>
 
             <h2 id="table">Define a table</h2>
-            <p>A table describes the state beava should maintain from those events.</p>
+            <p>A table describes the keyed, windowed state beava should maintain from those events. Keyed by <code>org_id</code> so each tenant has its own row.</p>
             <Code lang="python">
-{`@bv.table(key="user_id")
-def UserActivityFeatures(ev: UserEvent):
-    return ev.group_by("user_id").agg(
-        views_1h=bv.count(window="1h", where=bv.col("event_type") == "view"),
-        clicks_1h=bv.count(window="1h", where=bv.col("event_type") == "click"),
-        purchases_24h=bv.count(window="24h", where=bv.col("event_type") == "purchase"),
-        distinct_categories_24h=bv.n_unique("category", window="24h"),
+{`@bv.table(key="org_id")
+def OrgSpend(e: ModelCall):
+    return e.group_by("org_id").agg(
+        calls_1m  = bv.count(window="1m"),
+        tokens_1h = bv.sum("tokens", window="1h"),
+        spend_1h  = bv.sum("cost_cents", window="1h"),
     )`}
             </Code>
-            <p>This table turns raw user events into fresh user-level features.</p>
-            <p><strong>beava turns events into fresh, queryable state.</strong></p>
+            <p>Three live decision features per org: a per-minute call gauge, an hourly token sum, and an hourly spend total. When <code>spend_1h</code> is high, route to a cheaper model. When <code>calls_1m</code> spikes, throttle the org.</p>
 
             <h2 id="register">Register the pipeline</h2>
-            <p>Register your stream and table with beava:</p>
+            <p>Register the event and table with beava:</p>
             <Code lang="python">
-{`app = bv.App(url="http://127.0.0.1:8080")
-app.register(UserEvent, UserActivityFeatures)`}
+{`app = bv.App("http://127.0.0.1:8080")
+app.register(ModelCall, OrgSpend)`}
             </Code>
-            <p>Once registered, beava knows how to accept <code>UserEvent</code> records and update <code>UserActivityFeatures</code>.</p>
+            <p>Once registered, beava knows how to accept <code>ModelCall</code> records and update <code>OrgSpend</code>.</p>
 
             <h2 id="push">Push an event</h2>
             <p>Push an event over HTTP:</p>
@@ -126,37 +122,35 @@ app.register(UserEvent, UserActivityFeatures)`}
 {`curl -X POST http://127.0.0.1:8080/push \\
   -H "Content-Type: application/json" \\
   -d '{
-    "event": "UserEvent",
+    "event": "ModelCall",
     "data": {
-      "user_id": "u123",
-      "item_id": "i456",
-      "event_type": "click",
-      "category": "sports",
-      "ts": 1777855797.778
+      "org_id": "org_acme",
+      "model": "gpt-5",
+      "tokens": 4200,
+      "cost_cents": 12.6
     }
   }'`}
             </Code>
-            <p>As the event arrives, beava updates the matching feature tables inline.</p>
+            <p>As the event arrives, beava updates the matching feature row inline.</p>
 
             <h2 id="query">Query features</h2>
-            <p>Query the latest features for a user:</p>
-            <Code lang="bash">{`curl http://127.0.0.1:8080/get/UserActivityFeatures/u123`}</Code>
+            <p>Query the latest decision features for the org:</p>
+            <Code lang="bash">{`curl http://127.0.0.1:8080/get/OrgSpend/org_acme`}</Code>
             <p>Example response:</p>
             <Code lang="json">
 {`{
-  "user_id": "u123",
-  "views_1h": 3,
-  "clicks_1h": 1,
-  "purchases_24h": 0,
-  "distinct_categories_24h": 2
+  "org_id": "org_acme",
+  "calls_1m": 1,
+  "tokens_1h": 4200,
+  "spend_1h": 12.6
 }`}
             </Code>
-            <p>The application can now use this state inside a recommendation, ranking, fraud, personalization, or agent decision path.</p>
+            <p>Your model router reads these three numbers before the next LLM call: if <code>spend_1h</code> crosses your tier limit, route to a cheaper model; if <code>calls_1m</code> spikes, throttle the tenant.</p>
 
             <h2 id="recap">What you just built</h2>
-            <p>You defined an event, maintained windowed aggregates, and queried the latest state by key.</p>
-            <p>You did not need to deploy an event bus, a separate stream processor, a separate serving database, and custom glue code just to try the idea.</p>
-            <p><strong>Real-time features should feel like application code.</strong></p>
+            <p>You defined an event, maintained windowed aggregates, and queried fresh decision state by key — the full reflex loop for one of the three categories on the homepage.</p>
+            <p>You did not deploy an event bus, a separate stream processor, a serving database, or any glue between them.</p>
+            <p><strong>Live product reflexes should feel like application code.</strong></p>
 
             <h2 id="next">Where to go next</h2>
             <ul>

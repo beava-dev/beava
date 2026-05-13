@@ -4,17 +4,17 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Introduction · beava docs</title>
-  <meta name="description" content="beava is a single-binary feature server for the decisions that have to use the latest event: fraud signals, recommendations, LLM guardrails, and in-product analytics. Push events over HTTP, query fresh features inline.">
+  <meta name="description" content="Real-time decision features for AI products. Turn live events into product reflexes — pause agents, route models, throttle spend, and personalize instantly from one binary. No Kafka, no Flink, no feature store.">
   <link rel="canonical" href="https://beava.dev/docs/">
   <meta property="og:site_name" content="beava">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://beava.dev/docs/">
   <meta property="og:title" content="Introduction">
-  <meta property="og:description" content="beava is a single-binary feature server for the decisions that have to use the latest event: fraud signals, recommendations, LLM guardrails, and in-product analytics. Push events over HTTP, query fresh features inline.">
+  <meta property="og:description" content="Real-time decision features for AI products. Turn live events into product reflexes — pause agents, route models, throttle spend, and personalize instantly from one binary. No Kafka, no Flink, no feature store.">
   <meta property="og:image" content="https://beava.dev/assets/readme-banner.png">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Introduction">
-  <meta name="twitter:description" content="beava is a single-binary feature server for the decisions that have to use the latest event: fraud signals, recommendations, LLM guardrails, and in-product analytics. Push events over HTTP, query fresh features inline.">
+  <meta name="twitter:description" content="Real-time decision features for AI products. Turn live events into product reflexes — pause agents, route models, throttle spend, and personalize instantly from one binary. No Kafka, no Flink, no feature store.">
   <meta name="twitter:image" content="https://beava.dev/assets/readme-banner.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -43,7 +43,7 @@
 
   <script type="text/babel">
     const TOC = [
-      { id: 'react', label: 'React to live events' },
+      { id: 'reflex', label: 'Live product reflexes' },
       { id: 'why', label: 'Why beava' },
       { id: 'how', label: 'How beava works' },
       { id: 'build', label: 'What you can build' },
@@ -68,14 +68,14 @@
 
             <h1>beava</h1>
 
-            <h2 id="react">React to live events</h2>
-            <p className="bv-lede">beava is a single-binary feature server for the decisions that have to use the latest event: fraud signals, recommendations, LLM guardrails.</p>
-            <p>You declare features in Python, push events over HTTP, and read fresh values by entity key in sub-millisecond latency. One process. No Kafka, no Flink, no feature store.</p>
+            <h2 id="reflex">Live product reflexes</h2>
+            <p className="bv-lede">beava is a single-binary real-time feature server for product reflexes.</p>
+            <p>Push events over HTTP or TCP, declare aggregations in Python, and query fresh per-entity decision features on the next request. One process. No Kafka, no Flink, no feature store.</p>
             <p>Three primitives carry the whole API: <code>@bv.event</code> for the shape of what you push, <code>@bv.table</code> for the keyed feature row those events maintain, and <code>app.get</code> for the read at decision time.</p>
-            <p><strong>beava turns live events into fresh features.</strong></p>
+            <p><strong>event in → feature recomputed → decision served.</strong></p>
 
             <h2 id="why">Why beava</h2>
-            <p>Modern applications make fast decisions from recent data. A fraud rule decides whether to block a charge in milliseconds. A recommendation model leans on the last 30 minutes of clicks. An agent checks a token budget before it routes to an expensive model.</p>
+            <p>Modern AI products make fast decisions from recent activity. An agent has to be paused the moment it falls into a tool loop. A model call has to be routed cheaper the moment an org spikes past its budget. A pricing screen has to appear the second the visitor says "compare plans."</p>
             <p>The conventional stack delivers all of that with several systems: an event bus, a stream processor, a serving store, and the glue between them. Powerful, but heavy to operate and far from the code most developers want to write.</p>
             <p><strong>Stream processing should not require a platform team.</strong></p>
             <p>beava collapses the stack into one binary. You write the Python that defines the features and the HTTP client that reads them. That is the whole loop.</p>
@@ -92,17 +92,17 @@
             <p><strong>Low-latency freshness is what changes the architecture.</strong> When a new event becomes queryable in milliseconds, fresh state goes directly into your decision path without a second store in front of it.</p>
 
             <h2 id="build">What you can build</h2>
-            <p>The three shapes the homepage demonstrates are the canonical starting points:</p>
+            <p>The three reflex shapes the homepage demonstrates are the canonical starting points:</p>
             <ul>
-              <li><strong>Fraud signals.</strong> Failed-login counters per user, payment-velocity windows, CVC-fail counters per card.</li>
-              <li><strong>Recommendation features.</strong> Recent-click counts per user, top-k categories over a rolling hour.</li>
-              <li><strong>LLM guardrails.</strong> Token budgets per org, short-burst request gauges that catch a runaway agent.</li>
+              <li><strong>Agent safety reflexes.</strong> Per-agent step counters and failure rates so the app can pause a runaway agent, disable a risky tool, or require human approval before the next action.</li>
+              <li><strong>Model-cost routing.</strong> Token burn rate per org and provider-error rates so the app can switch to a cheaper model, throttle a noisy tenant, or fail over to a fallback provider.</li>
+              <li><strong>Live personalization.</strong> Last-seen intent and rolling topic affinity per user so the app can show pricing, escalate to a human, or surface the right next screen the instant the user pivots.</li>
             </ul>
             <p>The same primitives extend to:</p>
             <ul>
+              <li><strong>Abuse and risk</strong> — failed-login counters, payment-velocity windows, CVC-fail signals</li>
               <li><strong>Real-time bidding and ad-tech</strong></li>
-              <li><strong>Agentic state</strong>, the per-tool, per-org context an agent reads at decision time</li>
-              <li><strong>Product analytics that become product logic</strong></li>
+              <li><strong>Product analytics</strong> that become customer-facing dashboards in the next request</li>
               <li><strong>ML feature iteration</strong> without a data-engineering ticket</li>
             </ul>
 
@@ -125,7 +125,7 @@
             <h2 id="join">Join the project</h2>
             <p>beava is early, and we want to build it with people who feel this problem directly.</p>
             <p>Try it locally, read the public roadmap, join the weekly dev call, or catch up through summaries from previous calls.</p>
-            <p>Help us make <strong>real-time features feel like application code</strong>.</p>
+            <p>Help us make <strong>live product reflexes feel like application code</strong>.</p>
 
             <Pager
               prev={null}

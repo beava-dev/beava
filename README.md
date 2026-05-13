@@ -20,47 +20,52 @@
 
 ---
 
-**Make your AI product react to what just happened.**
+**Give your AI product live reflexes.**
 
-beava turns live events into fresh features for fraud, recommendations, LLM guardrails, and in-product analytics. No Kafka, no Flink, no feature store. One Rust binary.
+beava turns live events into fresh decision features, so your app can pause runaway agents, route models, throttle spend, and personalize instantly. No Kafka, no Flink, no feature store. One Rust binary.
 
 Push events over HTTP or TCP. The very next read reflects them. No batch lag, no broker, no stream worker in between.
 
 ```python
-# fraud.py — a fraud signal in ~15 lines.
+# agent_reflex.py — pause a runaway agent in ~15 lines.
 import beava as bv
 
 @bv.event
-class LoginAttempt:
-    user_id: str
-    success: bool
+class AgentStep:
+    agent_id: str
+    session_id: str
+    action: str
+    ok: bool
 
-@bv.table(key="user_id")
-def UserSignals(e: LoginAttempt):
-    return e.group_by("user_id").agg(
-        failed_logins_10m = bv.count(window="10m", where=~bv.col("success")),
-        attempts_1h       = bv.count(window="1h"),
+@bv.table(key="agent_id")
+def AgentReflexes(e: AgentStep):
+    return e.group_by("agent_id").agg(
+        steps_30s   = bv.count(window="30s"),
+        failures_5m = bv.count(window="5m", where=~bv.col("ok")),
     )
 
-app = bv.App("http://localhost:8080").register(LoginAttempt, UserSignals)
+app = bv.App("http://localhost:8080").register(AgentStep, AgentReflexes)
 
-app.push("LoginAttempt", {"user_id": "alice", "success": False})
-app.push("LoginAttempt", {"user_id": "alice", "success": False})
+app.push("AgentStep", {
+    "agent_id": "agent_91", "session_id": "s1",
+    "action": "search", "ok": False,
+})
 
-app.get("UserSignals", "alice")
-# => {"failed_logins_10m": 2, "attempts_1h": 2}
+app.get("AgentReflexes", "agent_91")
+# => {"steps_30s": 1, "failures_5m": 1}
 ```
 
-That's the whole loop. **No event queue.** `app.push` POSTs straight to beava — no Kafka, no Kinesis, no SQS, no schema registry. The next `app.get` for that user reflects the push. Three primitives: `@bv.event`, `@bv.table`, `app.get`.
+That's the whole reflex loop. **event in → feature recomputed → decision served.** `app.push` POSTs straight to beava — no Kafka, no Flink, no feature store in between. The next `app.get` reflects the push. If `steps_30s` spikes, pause the agent. If `failures_5m` climbs, require approval. If spend accelerates, route to a cheaper model.
 
 ## Pick a use case
 
-| Use case | Pipeline | What you query |
+| Use case | Pipeline | What your app does |
 |---|---|---|
-| **Fraud** | `LoginAttempt → UserSignals`, keyed by `user_id` | `failed_logins_10m` to block the 5th try |
-| **Recommendations** | `ProductClick → UserAffinity`, keyed by `user_id` | `recent_clicks_30m` + `top_categories_1h` to refresh the feed |
-| **LLM guardrails** | `LLMRequest → OrgBudget`, keyed by `org_id` | `tokens_used_24h` to throttle the expensive model |
-| **In-product analytics** | `PageView → UserStats`, keyed by `user_id` | `views_24h` + `unique_pages_1h` + `last_seen` to power the dashboard your customers see |
+| **Agent safety** | `AgentStep → AgentReflexes`, keyed by `agent_id` | Pause loops, disable tools, require approval |
+| **Model routing** | `ModelCall → OrgSpend`, keyed by `org_id` | Switch models, throttle spend, route around failures |
+| **Live personalization** | `UserIntent → UserReflexes`, keyed by `user_id` | Adapt the next screen, assistant, or offer |
+| **Product analytics** | `PageView → UserStats`, keyed by `user_id` | Power live customer-facing usage dashboards |
+| **Abuse and risk** | `LoginAttempt → UserRisk`, keyed by `user_id` | Increase risk score or block suspicious sessions |
 
 Each pipeline is one file, ~15 lines. Worked examples on the homepage: [beava.dev/#pipeline](https://beava.dev/#pipeline).
 
@@ -70,7 +75,8 @@ Pick whichever install path matches your box. All three deliver the same `beava`
 
 ```bash
 # pip    — installs SDK + bundled Rust server binary from PyPI
-#          (~4 MB binary, polars / ruff / uv pattern). `beava` lands on PATH.
+#          (~14 MB Python wheel, ~4 MB server binary inside —
+#          polars / ruff / uv pattern). `beava` lands on PATH.
 #          Pin a version with `pip install beava==0.0.0`.
 pip install beava
 
