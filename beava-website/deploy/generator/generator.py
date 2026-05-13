@@ -132,9 +132,13 @@ def UserAffinity(e: UserIntent):
 # ─────────────────────────────────────────────────────────────────────────
 
 
-# Tight agent pool — small set so each agent reliably exceeds the
-# repeated_action_30s threshold under the 1.4s push cadence.
-_AGENT_POOL = ("agent_42", "agent_77", "agent_91")
+# Tight agent pool — 2 ids so each agent reliably accumulates enough
+# repeated_action_30s under the 1.4s push cadence even with balanced
+# 1:1:1 scenario rotation. Smaller pool than the org/user pools below
+# because agent_loop is the only scenario whose decision threshold
+# depends on accumulation; cost and personalization don't need
+# concentration.
+_AGENT_POOL = ("agent_42", "agent_77")
 _ORG_POOL = ("org_acme", "org_globex", "org_umbra", "org_soylent")
 _AGENT_ACTIONS = ("http_get", "shell_exec", "code_run", "search", "file_read")
 _INTENTS = ("compare plans", "browse docs", "see api reference", "ask sales")
@@ -144,11 +148,11 @@ def _random_user() -> str:
     return f"user_{1000 + random.randint(0, 899)}"
 
 
-# One scenario per pipeline. Bias toward agent-safety because that's the
-# most striking visual story for a new visitor.
+# Balanced 1:1:1 rotation so the 3-row feed surfaces all three reflex
+# categories instead of stacking agent rows. With FEED_LEN=3, equal
+# weights mean visitors typically see one agent / one cost / one
+# personalization row at any moment.
 SCENARIOS = [
-    "agent_loop",
-    "agent_loop",
     "agent_loop",
     "model_cost",
     "user_intent",

@@ -510,12 +510,12 @@
     );
 
     // ─────────────────────────────────────────────────────────────────────
-    // PipelineShowcase — 3 tabs, one pipeline per decision category
+    // PipelineShowcase — 3 tabs, one pipeline per reflex category
     //
-    // The hero claims beava powers three decision shapes (fraud, recs,
-    // guardrails). Each tab is the smallest realistic pipeline that backs
-    // ONE of those decisions, end-to-end: event class → table aggregations
-    // → register + serve.
+    // Each tab is the smallest realistic pipeline that backs ONE of the
+    // three live-reflex stories surfaced in the feed above: agent safety,
+    // model-cost routing, and user-intent personalization. End-to-end:
+    // event class → table aggregations → register + serve.
     // ─────────────────────────────────────────────────────────────────────
 
     const S_TOKEN = {
@@ -547,98 +547,97 @@
 
     const PIPELINE_TABS = [
       {
-        id: 'fraud',
-        label: 'Fraud',
-        kicker: '01 · fraud',
-        title: 'Block the 4th failed login before the 5th',
-        blurb: 'Per-user counters across short windows. Push login attempts; query the same row at decision time.',
-        file: 'fraud.py',
-        lines: 15,
+        id: 'agent',
+        label: 'Agent safety',
+        kicker: '01 · agent safety',
+        title: 'Pause the agent before it burns through the API budget',
+        blurb: 'Per-agent action counters over a 30-second window. Push every tool call; read the count before the next one runs.',
+        file: 'agent_safety.py',
+        lines: 13,
         features: [
-          { color: 'rgba(184,92,32,0.10)',  dot: 'var(--accent)',             label: 'failed_logins_10m', maps: 'Failed logins · last 10m' },
-          { color: 'rgba(58,106,138,0.10)', dot: 'var(--beava-info)',         label: 'attempts_1h',        maps: 'Total attempts · last 1h' },
+          { color: 'rgba(184,92,32,0.10)',  dot: 'var(--accent)',             label: 'repeated_action_30s', maps: 'Actions · last 30s' },
+          { color: 'rgba(217,122,62,0.12)', dot: 'var(--beava-orange-soft)',  label: 'dominant_action_1m',  maps: 'Most-called action · last 1m' },
         ],
         render: (S) => (
           <>
             <span style={S.kw}>import</span> beava <span style={S.kw}>as</span> bv{'\n\n'}
             <span style={S.fn}>@bv.event</span>{'\n'}
-            <span style={S.kw}>class</span> <span style={S.ty}>LoginAttempt</span>:{'\n'}
-            {'    '}user_id: <span style={S.ty}>str</span>{'\n'}
-            {'    '}success: <span style={S.ty}>bool</span>   <span style={S.cmt}># False = wrong password this time</span>{'\n\n'}
-            <span style={S.fn}>@bv.table</span>(key=<span style={S.str}>"user_id"</span>){'\n'}
-            <span style={S.kw}>def</span> <span style={S.fn}>UserSignals</span>(e: <span style={S.ty}>LoginAttempt</span>):{'\n'}
-            {'    '}<span style={S.kw}>return</span> e.<span style={S.fn}>group_by</span>(<span style={S.str}>"user_id"</span>).<span style={S.fn}>agg</span>({'\n'}
-            {'        '}<span style={S.hl('rgba(184,92,32,0.10)')}>failed_logins_10m</span> = bv.<span style={S.fn}>count</span>(window=<span style={S.str}>"10m"</span>, where=~bv.<span style={S.fn}>col</span>(<span style={S.str}>"success"</span>)),<Anno>← only the misses</Anno>{'\n'}
-            {'        '}<span style={S.hl('rgba(58,106,138,0.10)')}>attempts_1h</span>       = bv.<span style={S.fn}>count</span>(window=<span style={S.str}>"1h"</span>),<Anno>← every try — the denominator</Anno>{'\n'}
+            <span style={S.kw}>class</span> <span style={S.ty}>AgentStep</span>:{'\n'}
+            {'    '}agent_id: <span style={S.ty}>str</span>{'\n'}
+            {'    '}action: <span style={S.ty}>str</span>      <span style={S.cmt}># "shell_exec" · "http_get" · "code_run"</span>{'\n\n'}
+            <span style={S.fn}>@bv.table</span>(key=<span style={S.str}>"agent_id"</span>){'\n'}
+            <span style={S.kw}>def</span> <span style={S.fn}>AgentGuardrails</span>(e: <span style={S.ty}>AgentStep</span>):{'\n'}
+            {'    '}<span style={S.kw}>return</span> e.<span style={S.fn}>group_by</span>(<span style={S.str}>"agent_id"</span>).<span style={S.fn}>agg</span>({'\n'}
+            {'        '}<span style={S.hl('rgba(184,92,32,0.10)')}>repeated_action_30s</span> = bv.<span style={S.fn}>count</span>(window=<span style={S.str}>"30s"</span>),<Anno>← spot the tight loop</Anno>{'\n'}
+            {'        '}<span style={S.hl('rgba(217,122,62,0.12)')}>dominant_action_1m</span>  = bv.<span style={S.fn}>top_k</span>(<span style={S.str}>"action"</span>, k=<span style={S.num}>1</span>, window=<span style={S.str}>"1m"</span>),<Anno>← what is it stuck on?</Anno>{'\n'}
             {'    '}){'\n\n'}
-            bv.<span style={S.fn}>App</span>(<span style={S.str}>"0.0.0.0:6400"</span>).<span style={S.fn}>register</span>(<span style={S.ty}>LoginAttempt</span>, <span style={S.fn}>UserSignals</span>).<span style={S.fn}>serve</span>()<Anno>← one HTTP port, one binary</Anno>{'\n'}
+            bv.<span style={S.fn}>App</span>(<span style={S.str}>"0.0.0.0:6400"</span>).<span style={S.fn}>register</span>(<span style={S.ty}>AgentStep</span>, <span style={S.fn}>AgentGuardrails</span>).<span style={S.fn}>serve</span>()<Anno>← one HTTP port, one binary</Anno>{'\n'}
           </>
         ),
       },
       {
-        id: 'recommendations',
-        label: 'Recommendations',
-        kicker: '02 · recommendations',
-        title: 'Refresh the home feed off the last 30 minutes of clicks',
-        blurb: 'Recent activity per user, plus a rolling top-k of categories. Read both at request time.',
-        file: 'recs.py',
-        lines: 16,
+        id: 'cost',
+        label: 'Model cost',
+        kicker: '02 · model cost',
+        title: 'Switch models the moment an org spikes past its token budget',
+        blurb: 'Rolling token sums per organization. Read the burn rate on the way into the next expensive call.',
+        file: 'model_routing.py',
+        lines: 14,
         features: [
-          { color: 'rgba(184,92,32,0.10)',  dot: 'var(--accent)',             label: 'recent_clicks_30m', maps: 'Clicks · last 30m' },
-          { color: 'rgba(217,122,62,0.12)', dot: 'var(--beava-orange-soft)',  label: 'top_categories_1h', maps: 'Top 3 categories · 1h' },
+          { color: 'rgba(184,92,32,0.10)',  dot: 'var(--accent)',             label: 'token_burn_rate_1m', maps: 'Tokens · last 1m' },
+          { color: 'rgba(58,106,138,0.10)', dot: 'var(--beava-info)',         label: 'calls_1m',           maps: 'Calls · last 1m' },
         ],
         render: (S) => (
           <>
             <span style={S.kw}>import</span> beava <span style={S.kw}>as</span> bv{'\n\n'}
             <span style={S.fn}>@bv.event</span>{'\n'}
-            <span style={S.kw}>class</span> <span style={S.ty}>ProductClick</span>:{'\n'}
-            {'    '}user_id: <span style={S.ty}>str</span>{'\n'}
-            {'    '}product_id: <span style={S.ty}>str</span>{'\n'}
-            {'    '}category: <span style={S.ty}>str</span>   <span style={S.cmt}># "shoes" · "books" · your taxonomy</span>{'\n\n'}
-            <span style={S.fn}>@bv.table</span>(key=<span style={S.str}>"user_id"</span>){'\n'}
-            <span style={S.kw}>def</span> <span style={S.fn}>UserAffinity</span>(e: <span style={S.ty}>ProductClick</span>):{'\n'}
-            {'    '}<span style={S.kw}>return</span> e.<span style={S.fn}>group_by</span>(<span style={S.str}>"user_id"</span>).<span style={S.fn}>agg</span>({'\n'}
-            {'        '}<span style={S.hl('rgba(184,92,32,0.10)')}>recent_clicks_30m</span>  = bv.<span style={S.fn}>count</span>(window=<span style={S.str}>"30m"</span>),<Anno>← are they shopping right now?</Anno>{'\n'}
-            {'        '}<span style={S.hl('rgba(217,122,62,0.12)')}>top_categories_1h</span> = bv.<span style={S.fn}>top_k</span>(<span style={S.str}>"category"</span>, k=<span style={S.num}>3</span>, window=<span style={S.str}>"1h"</span>),<Anno>← their top 3 vibes this hour</Anno>{'\n'}
-            {'    '}){'\n\n'}
-            bv.<span style={S.fn}>App</span>(<span style={S.str}>"0.0.0.0:6400"</span>).<span style={S.fn}>register</span>(<span style={S.ty}>ProductClick</span>, <span style={S.fn}>UserAffinity</span>).<span style={S.fn}>serve</span>()<Anno>← one HTTP port, one binary</Anno>{'\n'}
-          </>
-        ),
-      },
-      {
-        id: 'guardrails',
-        label: 'Guardrails',
-        kicker: '03 · guardrails',
-        title: 'Throttle the org that just blew through its token budget',
-        blurb: 'Rolling token sums per organization. Read the budget on the way into the expensive model.',
-        file: 'guardrails.py',
-        lines: 16,
-        features: [
-          { color: 'rgba(184,92,32,0.10)',  dot: 'var(--accent)',             label: 'tokens_used_24h', maps: 'Tokens used · last 24h' },
-          { color: 'rgba(58,106,138,0.10)', dot: 'var(--beava-info)',         label: 'requests_1m',      maps: 'Requests · last 1m' },
-        ],
-        render: (S) => (
-          <>
-            <span style={S.kw}>import</span> beava <span style={S.kw}>as</span> bv{'\n\n'}
-            <span style={S.fn}>@bv.event</span>{'\n'}
-            <span style={S.kw}>class</span> <span style={S.ty}>LLMRequest</span>:{'\n'}
+            <span style={S.kw}>class</span> <span style={S.ty}>ModelCall</span>:{'\n'}
             {'    '}org_id: <span style={S.ty}>str</span>{'\n'}
             {'    '}tokens: <span style={S.ty}>int</span>     <span style={S.cmt}># bill this one to the org</span>{'\n'}
-            {'    '}model: <span style={S.ty}>str</span>      <span style={S.cmt}># e.g. "gpt-5", "haiku-4-5"</span>{'\n\n'}
+            {'    '}model: <span style={S.ty}>str</span>      <span style={S.cmt}># e.g. "gpt-5", "claude-opus-4-7"</span>{'\n\n'}
             <span style={S.fn}>@bv.table</span>(key=<span style={S.str}>"org_id"</span>){'\n'}
-            <span style={S.kw}>def</span> <span style={S.fn}>OrgBudget</span>(e: <span style={S.ty}>LLMRequest</span>):{'\n'}
+            <span style={S.kw}>def</span> <span style={S.fn}>OrgBudget</span>(e: <span style={S.ty}>ModelCall</span>):{'\n'}
             {'    '}<span style={S.kw}>return</span> e.<span style={S.fn}>group_by</span>(<span style={S.str}>"org_id"</span>).<span style={S.fn}>agg</span>({'\n'}
-            {'        '}<span style={S.hl('rgba(184,92,32,0.10)')}>tokens_used_24h</span> = bv.<span style={S.fn}>sum</span>(<span style={S.str}>"tokens"</span>, window=<span style={S.str}>"24h"</span>),<Anno>← rolling daily spend</Anno>{'\n'}
-            {'        '}<span style={S.hl('rgba(58,106,138,0.10)')}>requests_1m</span>     = bv.<span style={S.fn}>count</span>(window=<span style={S.str}>"1m"</span>),<Anno>← catches a runaway agent</Anno>{'\n'}
+            {'        '}<span style={S.hl('rgba(184,92,32,0.10)')}>token_burn_rate_1m</span> = bv.<span style={S.fn}>sum</span>(<span style={S.str}>"tokens"</span>, window=<span style={S.str}>"1m"</span>),<Anno>← rolling per-minute spend</Anno>{'\n'}
+            {'        '}<span style={S.hl('rgba(58,106,138,0.10)')}>calls_1m</span>           = bv.<span style={S.fn}>count</span>(window=<span style={S.str}>"1m"</span>),<Anno>← runaway-agent canary</Anno>{'\n'}
             {'    '}){'\n\n'}
-            bv.<span style={S.fn}>App</span>(<span style={S.str}>"0.0.0.0:6400"</span>).<span style={S.fn}>register</span>(<span style={S.ty}>LLMRequest</span>, <span style={S.fn}>OrgBudget</span>).<span style={S.fn}>serve</span>()<Anno>← one HTTP port, one binary</Anno>{'\n'}
+            bv.<span style={S.fn}>App</span>(<span style={S.str}>"0.0.0.0:6400"</span>).<span style={S.fn}>register</span>(<span style={S.ty}>ModelCall</span>, <span style={S.fn}>OrgBudget</span>).<span style={S.fn}>serve</span>()<Anno>← one HTTP port, one binary</Anno>{'\n'}
+          </>
+        ),
+      },
+      {
+        id: 'personalization',
+        label: 'Personalization',
+        kicker: '03 · personalization',
+        title: 'Render the right next screen the second the user picks an intent',
+        blurb: 'Last-seen intent per user, plus the dominant theme over the longer session. Read both at request time.',
+        file: 'personalize.py',
+        lines: 13,
+        features: [
+          { color: 'rgba(184,92,32,0.10)',  dot: 'var(--accent)',             label: 'intent_now',     maps: 'Last intent · live' },
+          { color: 'rgba(217,122,62,0.12)', dot: 'var(--beava-orange-soft)',  label: 'top_topic_10m',  maps: 'Top intent · last 10m' },
+        ],
+        render: (S) => (
+          <>
+            <span style={S.kw}>import</span> beava <span style={S.kw}>as</span> bv{'\n\n'}
+            <span style={S.fn}>@bv.event</span>{'\n'}
+            <span style={S.kw}>class</span> <span style={S.ty}>UserIntent</span>:{'\n'}
+            {'    '}user_id: <span style={S.ty}>str</span>{'\n'}
+            {'    '}intent: <span style={S.ty}>str</span>   <span style={S.cmt}># "compare plans" · "browse docs"</span>{'\n\n'}
+            <span style={S.fn}>@bv.table</span>(key=<span style={S.str}>"user_id"</span>){'\n'}
+            <span style={S.kw}>def</span> <span style={S.fn}>UserAffinity</span>(e: <span style={S.ty}>UserIntent</span>):{'\n'}
+            {'    '}<span style={S.kw}>return</span> e.<span style={S.fn}>group_by</span>(<span style={S.str}>"user_id"</span>).<span style={S.fn}>agg</span>({'\n'}
+            {'        '}<span style={S.hl('rgba(184,92,32,0.10)')}>intent_now</span>    = bv.<span style={S.fn}>last</span>(<span style={S.str}>"intent"</span>),<Anno>← the freshest signal</Anno>{'\n'}
+            {'        '}<span style={S.hl('rgba(217,122,62,0.12)')}>top_topic_10m</span> = bv.<span style={S.fn}>top_k</span>(<span style={S.str}>"intent"</span>, k=<span style={S.num}>1</span>, window=<span style={S.str}>"10m"</span>),<Anno>← the session theme</Anno>{'\n'}
+            {'    '}){'\n\n'}
+            bv.<span style={S.fn}>App</span>(<span style={S.str}>"0.0.0.0:6400"</span>).<span style={S.fn}>register</span>(<span style={S.ty}>UserIntent</span>, <span style={S.fn}>UserAffinity</span>).<span style={S.fn}>serve</span>()<Anno>← one HTTP port, one binary</Anno>{'\n'}
           </>
         ),
       },
     ];
 
     const PipelineShowcase = () => {
-      const [tabId, setTabId] = React.useState('fraud');
+      const [tabId, setTabId] = React.useState('agent');
       const tab = PIPELINE_TABS.find(t => t.id === tabId);
       return (
         <section id="pipeline" style={{
