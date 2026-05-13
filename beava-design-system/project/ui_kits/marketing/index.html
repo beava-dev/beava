@@ -24,17 +24,21 @@
   <script type="text/babel" src="../_shared/SiteFooter.jsx"></script>
   <script type="text/babel" src="Hero.jsx"></script>
   <script type="text/babel" src="Pillars.jsx"></script>
+  <script type="text/babel" src="Pipelines.jsx"></script>
   <script type="text/babel" src="PipelineShowcase.jsx"></script>
   <script type="text/babel" src="Recipes.jsx"></script>
   <script type="text/babel" src="FinalCTA.jsx"></script>
 
   <script type="text/babel">
-    // Homepage — Hero (sharper headline, single primary CTA, live feature queries).
+    // Homepage — Hero, Pillars, Pipelines (big vertical tabs · 8s auto-rotation
+    // · outcomes prominent · code SDK), PipelineShowcase, Recipes, FinalCTA.
+    // Pipelines added 2026-05-13 — mirrors what's live on beava.dev.
     const App = () => (
       <div data-screen-label="01 Home">
         <SiteHeader maxWidth={1200}/>
         <Hero/>
         <Pillars/>
+        <Pipelines/>
         <PipelineShowcase/>
         <Recipes/>
         <FinalCTA/>

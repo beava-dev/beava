@@ -3,18 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>beava — react to what just happened</title>
-  <meta name="description" content="beava turns live events into fresh features for fraud, recommendations, and guardrails — no Kafka, no Flink, no feature store. One binary, HTTP in, HTTP out.">
+  <title>beava — live product reflexes without streaming infra</title>
+  <meta name="description" content="Turn live events into fresh decision features. Pause agents, reorder marketplaces, and rescue stuck users — no Kafka, no Flink, no feature store.">
   <link rel="canonical" href="https://beava.dev/">
   <meta property="og:site_name" content="beava">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://beava.dev/">
-  <meta property="og:title" content="beava — react to what just happened">
-  <meta property="og:description" content="beava turns live events into fresh features for fraud, recommendations, and guardrails — no Kafka, no Flink, no feature store. One binary, HTTP in, HTTP out.">
+  <meta property="og:title" content="beava — live product reflexes without streaming infra">
+  <meta property="og:description" content="Turn live events into fresh decision features. Pause agents, reorder marketplaces, and rescue stuck users — no Kafka, no Flink, no feature store.">
   <meta property="og:image" content="https://beava.dev/assets/readme-banner.png">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="beava — react to what just happened">
-  <meta name="twitter:description" content="beava turns live events into fresh features for fraud, recommendations, and guardrails — no Kafka, no Flink, no feature store. One binary, HTTP in, HTTP out.">
+  <meta name="twitter:title" content="beava — live product reflexes without streaming infra">
+  <meta name="twitter:description" content="Turn live events into fresh decision features. Pause agents, reorder marketplaces, and rescue stuck users — no Kafka, no Flink, no feature store.">
   <meta name="twitter:image" content="https://beava.dev/assets/readme-banner.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -41,7 +41,7 @@
       {
         "@type": "SoftwareSourceCode",
         "name": "beava",
-        "description": "Push events over HTTP or TCP. Read live per-user counters and aggregates that always reflect the latest event. For fraud, recommendations, LLM guardrails, and in-product analytics. No Kafka.",
+        "description": "Live product reflexes without streaming infra. Turn live events into fresh decision features. Pause agents, reorder marketplaces, and rescue stuck users — no Kafka, no Flink, no feature store.",
         "url": "https://beava.dev",
         "codeRepository": "https://github.com/beava-dev/beava",
         "programmingLanguage": ["Rust", "Python"],
@@ -101,9 +101,10 @@
       agent_steps: {
         event: 'AgentStep',
         entity: () => `agent_${[42, 77, 91][Math.floor(Math.random() * 3)]}`,
-        feature: (n) => ({ key: 'steps_30s', value: n }),
-        valueOf: () => 5 + Math.floor(Math.random() * 5),  // 5–9, above pause threshold
-        decision: (v) => v >= 5 ? 'pause runaway agent' : 'continue monitoring',
+        feature: (n) => ({ key: 'repeated_action_30s', value: n }),
+        valueOf: () => 6 + Math.floor(Math.random() * 4),  // 6–9, above pause threshold
+        decision: (v) => v >= 6 ? 'pause runaway agent' : 'continue monitoring',
+        dollars: (v) => v >= 6 ? '+ $84 saved' : '+ $6 saved',
       },
       // ToolCall → SessionReflexes(risky_tools_10m)
       tool_risk: {
@@ -112,6 +113,7 @@
         feature: (n) => ({ key: 'risky_tools_10m', value: n }),
         valueOf: () => 2 + Math.floor(Math.random() * 2),  // 2–3, above approval threshold
         decision: (v) => v >= 2 ? 'require human approval' : 'allow',
+        dollars: (v) => v >= 2 ? '+ $250 risk avoided' : '+ $18 saved',
       },
 
       // Marketplaces ──────────────────────────────────────────────────────
@@ -122,6 +124,7 @@
         feature: (n) => ({ key: 'carts_5m', value: n }),
         valueOf: () => 80 + Math.floor(Math.random() * 30),  // 80–109 carts in 5m
         decision: (v) => v >= 50 ? 'boost trending item' : 'keep default ranking',
+        dollars: () => `+ $${(0.8 + Math.random() * 1.6).toFixed(2)} GMV`,
       },
       // ProductView → ShopperReflexes(avg_view_price_30m)
       view_price: {
@@ -130,19 +133,19 @@
         feature: (n) => ({ key: 'avg_view_price_30m', value: `$${n}` }),
         valueOf: () => 200 + Math.floor(Math.random() * 80),  // $200–$279
         decision: (v) => v >= 200 ? 'sort by premium picks' : 'keep value picks',
+        dollars: () => `+ $${(2.4 + Math.random() * 2.6).toFixed(2)} GMV`,
       },
 
       // B2B SaaS ──────────────────────────────────────────────────────────
-      // ApiError → UserActivation(errors_10m, top_topic_10m)
+      // ApiError → UserActivation(error_velocity_5m). Rate_of_change of the
+      // per-event retry count gives a "user is stuck and getting worse" signal.
       user_errors: {
         event: 'ApiError',
         entity: () => `user_${1000 + Math.floor(Math.random() * 1500)}`,
-        feature: () => {
-          const n = 4 + Math.floor(Math.random() * 4);  // 4–7
-          const topic = ['auth', 'rate_limit', 'schema', 'permissions'][Math.floor(Math.random() * 4)];
-          return { key: 'errors_10m', value: `${n}, topic = "${topic}"`, _topic: topic };
-        },
-        decision: (v) => 'launch setup rescue',
+        feature: (n) => ({ key: 'error_velocity_5m', value: `+${n.toFixed(1)}` }),
+        valueOf: () => 0.6 + Math.random() * 2.2,  // 0.6–2.8 errors/sec slope
+        decision: () => 'launch setup rescue',
+        dollars: () => '+ $29 LTV',
       },
       // LimitHit → OrgExpansionSignals(limit_hits_24h)
       limit_hits: {
@@ -151,6 +154,7 @@
         feature: (n) => ({ key: 'limit_hits_24h', value: n }),
         valueOf: () => 8 + Math.floor(Math.random() * 8),  // 8–15
         decision: (v) => v >= 10 ? 'show team upgrade path' : 'send usage tip',
+        dollars: (v) => v >= 10 ? '+ $99 MRR' : '+ $9 saved',
       },
     };
 
@@ -163,9 +167,10 @@
       const rawVal = t.valueOf ? t.valueOf() : null;
       const feat = t.feature(rawVal);
       const decision = t.decision(rawVal ?? feat.value);
+      const dollars = t.dollars ? t.dollars(rawVal ?? feat.value) : null;
       return {
         id: `${ts}-${idx}-${Math.random().toString(36).slice(2,6)}`,
-        ts, event: t.event, entity, feature: feat, decision,
+        ts, event: t.event, entity, feature: feat, decision, dollars,
         isNew: true,
       };
     };
@@ -385,7 +390,7 @@
                   animation: 'beava-pulse 2s cubic-bezier(0.65,0,0.35,1) infinite',
                 }}/>
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: isLive ? 'var(--beava-success)' : 'var(--fg3)', fontWeight: 600 }}>
-                  {isLive ? 'live · connected' : 'demo · synthetic'}
+                  {isLive ? 'live · connected' : 'simulated events · real features'}
                 </span>
               </span>
             </div>
@@ -498,7 +503,27 @@
             </div>
           </div>
 
-          <div style={{ position: 'relative', maxWidth: 1040, margin: '0 auto' }}>
+          {/* Hand-drawn "live, right now" marker — sits 28px above the feed. */}
+          <div style={{ position: 'relative', maxWidth: 1040, margin: '0 auto', height: 0 }}>
+            <div aria-hidden style={{
+              position: 'absolute', left: '50%', top: -28,
+              transform: 'translateX(-50%)',
+              display: 'flex', alignItems: 'center', gap: 8,
+              fontFamily: 'var(--font-accent)', fontWeight: 700, fontSize: 22,
+              color: 'var(--accent)', whiteSpace: 'nowrap',
+              pointerEvents: 'none',
+            }}>
+              <span style={{ transform: 'rotate(-3deg)', display: 'inline-block' }}>
+                live, right now
+              </span>
+              <svg width="34" height="34" viewBox="0 0 34 34" fill="none" style={{ transform: 'rotate(8deg)' }}>
+                <path d="M5 4 Q 8 18, 20 22" stroke="var(--accent)" strokeWidth="2.4" strokeLinecap="round" fill="none"/>
+                <path d="M14 22 L 22 24 L 18 16" stroke="var(--accent)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+              </svg>
+            </div>
+          </div>
+
+          <div style={{ position: 'relative', maxWidth: 1040, margin: '56px auto 0' }}>
             <DecisionFeed/>
           </div>
 
@@ -507,7 +532,7 @@
             fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--fg3)',
             fontStyle: 'italic',
           }}>
-            Each row is a real event pushed to a single beava: feature recomputed, decision served.{' '}
+            Each row is an event pushed to beava: feature recomputed, decision served.{' '}
             <a href="#pipeline" style={{
               color: 'var(--accent)', textDecoration: 'none',
               borderBottom: '1px solid color-mix(in oklab, var(--accent) 35%, transparent)',
@@ -886,6 +911,457 @@
     };
 
     // ─────────────────────────────────────────────────────────────────────
+    // Pipelines — big vertical tabs (left) + code SDK + outcome strip (right)
+    //
+    // Auto-rotates every 8s. Clicking a tab resets the timer so the user's
+    // pick stays put for the full interval before rotation resumes. Each
+    // outcome row reads `entity.feature = value > threshold` (mono) then
+    // the action in serif orange + a hand-drawn dollar marker in green.
+    // ─────────────────────────────────────────────────────────────────────
+
+    const PIPE_ROTATE_MS = 8000;
+    const PIPE_LIVE_POLL_MS = 1500;
+
+    // useLiveSignals — polls /api/feed; caches latest {entity, value} per
+    // feature key so outcome cards display the same live state the top feed
+    // is rendering. Falls back gracefully to PIPELINES_DATA hardcoded values
+    // when /api/feed is down (cold load, dev).
+    const useLiveSignals = () => {
+      const [byKey, setByKey] = React.useState({});
+      React.useEffect(() => {
+        let cancelled = false;
+        const probe = async () => {
+          try {
+            const r = await fetch('/api/feed', { cache: 'no-store' });
+            if (!r.ok || cancelled) return;
+            const j = await r.json();
+            if (cancelled || !j || !Array.isArray(j.rows)) return;
+            setByKey((prev) => {
+              const next = { ...prev };
+              // Walk oldest → newest so newer rows for the same key win.
+              for (let i = j.rows.length - 1; i >= 0; i--) {
+                const row = j.rows[i];
+                const key = row && row.feature && row.feature.key;
+                if (!key) continue;
+                next[key] = { entity: row.entity, value: row.feature.value };
+              }
+              return next;
+            });
+          } catch (_) { /* ignore — feed offline */ }
+        };
+        probe();
+        const id = setInterval(probe, PIPE_LIVE_POLL_MS);
+        return () => { cancelled = true; clearInterval(id); };
+      }, []);
+      return byKey;
+    };
+
+    const PIPE_CS = {
+      kw:  { color: 'var(--code-keyword)' },
+      str: { color: 'var(--code-string)' },
+      cmt: { color: 'var(--code-comment)', fontStyle: 'italic' },
+      fn:  { color: 'var(--code-fn)' },
+      num: { color: 'var(--code-number)' },
+      ty:  { color: 'var(--code-type)' },
+    };
+    const PIPE_HL = {
+      orange: 'rgba(184,92,32,0.10)',
+      blue:   'rgba(58,106,138,0.10)',
+      amber:  'rgba(217,122,62,0.12)',
+    };
+    const PIPE_DOT = {
+      orange: 'var(--accent)',
+      blue:   'var(--beava-info)',
+      amber:  'var(--beava-orange-soft)',
+    };
+
+    // Code blocks per pipeline. Returned as render functions so the
+    // token styles + highlight chips stay inline.
+    const PipeAgentCode = () => (
+      <>
+        <span style={PIPE_CS.kw}>import</span> beava <span style={PIPE_CS.kw}>as</span> bv{'\n\n'}
+        <span style={PIPE_CS.fn}>@bv.event</span>{'\n'}
+        <span style={PIPE_CS.kw}>class</span> <span style={PIPE_CS.ty}>AgentStep</span>:{'\n'}
+        {'    '}agent_id: <span style={PIPE_CS.ty}>str</span>{'\n'}
+        {'    '}action: <span style={PIPE_CS.ty}>str</span>{'\n\n'}
+        <span style={PIPE_CS.fn}>@bv.event</span>{'\n'}
+        <span style={PIPE_CS.kw}>class</span> <span style={PIPE_CS.ty}>ToolCall</span>:{'\n'}
+        {'    '}session_id: <span style={PIPE_CS.ty}>str</span>{'\n'}
+        {'    '}tool: <span style={PIPE_CS.ty}>str</span>{'\n'}
+        {'    '}is_risky: <span style={PIPE_CS.ty}>bool</span>  <span style={PIPE_CS.cmt}># shell_exec, external_send, file_write</span>{'\n\n'}
+        <span style={PIPE_CS.fn}>@bv.table</span>(key=<span style={PIPE_CS.str}>"agent_id"</span>){'\n'}
+        <span style={PIPE_CS.kw}>def</span> <span style={PIPE_CS.fn}>AgentReflexes</span>(e: <span style={PIPE_CS.ty}>AgentStep</span>):{'\n'}
+        {'    '}<span style={PIPE_CS.kw}>return</span> e.<span style={PIPE_CS.fn}>group_by</span>(<span style={PIPE_CS.str}>"agent_id"</span>).<span style={PIPE_CS.fn}>agg</span>({'\n'}
+        {'        '}<span style={{ background: PIPE_HL.orange, borderRadius: 3, padding: '0 2px' }}>repeated_action_30s</span> = bv.<span style={PIPE_CS.fn}>count</span>(window=<span style={PIPE_CS.str}>"30s"</span>),{'\n'}
+        {'    '}){'\n\n'}
+        <span style={PIPE_CS.fn}>@bv.table</span>(key=<span style={PIPE_CS.str}>"session_id"</span>){'\n'}
+        <span style={PIPE_CS.kw}>def</span> <span style={PIPE_CS.fn}>SessionReflexes</span>(e: <span style={PIPE_CS.ty}>ToolCall</span>):{'\n'}
+        {'    '}<span style={PIPE_CS.kw}>return</span> e.<span style={PIPE_CS.fn}>group_by</span>(<span style={PIPE_CS.str}>"session_id"</span>).<span style={PIPE_CS.fn}>agg</span>({'\n'}
+        {'        '}<span style={{ background: PIPE_HL.blue, borderRadius: 3, padding: '0 2px' }}>risky_tools_10m</span> = bv.<span style={PIPE_CS.fn}>count</span>(window=<span style={PIPE_CS.str}>"10m"</span>, where=bv.<span style={PIPE_CS.fn}>col</span>(<span style={PIPE_CS.str}>"is_risky"</span>)),{'\n'}
+        {'    '}){'\n\n'}
+        bv.<span style={PIPE_CS.fn}>App</span>(<span style={PIPE_CS.str}>"0.0.0.0:6400"</span>).<span style={PIPE_CS.fn}>register</span>(<span style={PIPE_CS.ty}>AgentStep</span>, <span style={PIPE_CS.ty}>ToolCall</span>, <span style={PIPE_CS.fn}>AgentReflexes</span>, <span style={PIPE_CS.fn}>SessionReflexes</span>).<span style={PIPE_CS.fn}>serve</span>()
+      </>
+    );
+
+    const PipeMarketplaceCode = () => (
+      <>
+        <span style={PIPE_CS.kw}>import</span> beava <span style={PIPE_CS.kw}>as</span> bv{'\n\n'}
+        <span style={PIPE_CS.fn}>@bv.event</span>{'\n'}
+        <span style={PIPE_CS.kw}>class</span> <span style={PIPE_CS.ty}>AddToCart</span>:{'\n'}
+        {'    '}user_id: <span style={PIPE_CS.ty}>str</span>{'\n'}
+        {'    '}sku: <span style={PIPE_CS.ty}>str</span>{'\n\n'}
+        <span style={PIPE_CS.fn}>@bv.event</span>{'\n'}
+        <span style={PIPE_CS.kw}>class</span> <span style={PIPE_CS.ty}>ProductView</span>:{'\n'}
+        {'    '}user_id: <span style={PIPE_CS.ty}>str</span>{'\n'}
+        {'    '}sku: <span style={PIPE_CS.ty}>str</span>{'\n'}
+        {'    '}price_usd: <span style={PIPE_CS.ty}>float</span>{'\n\n'}
+        <span style={PIPE_CS.fn}>@bv.table</span>(key=<span style={PIPE_CS.str}>"sku"</span>){'\n'}
+        <span style={PIPE_CS.kw}>def</span> <span style={PIPE_CS.fn}>SkuMomentum</span>(e: <span style={PIPE_CS.ty}>AddToCart</span>):{'\n'}
+        {'    '}<span style={PIPE_CS.kw}>return</span> e.<span style={PIPE_CS.fn}>group_by</span>(<span style={PIPE_CS.str}>"sku"</span>).<span style={PIPE_CS.fn}>agg</span>({'\n'}
+        {'        '}<span style={{ background: PIPE_HL.orange, borderRadius: 3, padding: '0 2px' }}>carts_5m</span> = bv.<span style={PIPE_CS.fn}>count</span>(window=<span style={PIPE_CS.str}>"5m"</span>),{'\n'}
+        {'    '}){'\n\n'}
+        <span style={PIPE_CS.fn}>@bv.table</span>(key=<span style={PIPE_CS.str}>"user_id"</span>){'\n'}
+        <span style={PIPE_CS.kw}>def</span> <span style={PIPE_CS.fn}>ShopperReflexes</span>(e: <span style={PIPE_CS.ty}>ProductView</span>):{'\n'}
+        {'    '}<span style={PIPE_CS.kw}>return</span> e.<span style={PIPE_CS.fn}>group_by</span>(<span style={PIPE_CS.str}>"user_id"</span>).<span style={PIPE_CS.fn}>agg</span>({'\n'}
+        {'        '}<span style={{ background: PIPE_HL.blue, borderRadius: 3, padding: '0 2px' }}>avg_view_price_30m</span> = bv.<span style={PIPE_CS.fn}>mean</span>(<span style={PIPE_CS.str}>"price_usd"</span>, window=<span style={PIPE_CS.str}>"30m"</span>),{'\n'}
+        {'    '}){'\n\n'}
+        bv.<span style={PIPE_CS.fn}>App</span>(<span style={PIPE_CS.str}>"0.0.0.0:6400"</span>).<span style={PIPE_CS.fn}>register</span>(<span style={PIPE_CS.ty}>AddToCart</span>, <span style={PIPE_CS.ty}>ProductView</span>, <span style={PIPE_CS.fn}>SkuMomentum</span>, <span style={PIPE_CS.fn}>ShopperReflexes</span>).<span style={PIPE_CS.fn}>serve</span>()
+      </>
+    );
+
+    const PipeSaaSCode = () => (
+      <>
+        <span style={PIPE_CS.kw}>import</span> beava <span style={PIPE_CS.kw}>as</span> bv{'\n\n'}
+        <span style={PIPE_CS.fn}>@bv.event</span>{'\n'}
+        <span style={PIPE_CS.kw}>class</span> <span style={PIPE_CS.ty}>ApiError</span>:{'\n'}
+        {'    '}user_id: <span style={PIPE_CS.ty}>str</span>{'\n'}
+        {'    '}topic: <span style={PIPE_CS.ty}>str</span>{'\n'}
+        {'    '}retries: <span style={PIPE_CS.ty}>int</span>   <span style={PIPE_CS.cmt}># cumulative retry count for this user's session</span>{'\n\n'}
+        <span style={PIPE_CS.fn}>@bv.event</span>{'\n'}
+        <span style={PIPE_CS.kw}>class</span> <span style={PIPE_CS.ty}>LimitHit</span>:{'\n'}
+        {'    '}org_id: <span style={PIPE_CS.ty}>str</span>{'\n'}
+        {'    '}feature: <span style={PIPE_CS.ty}>str</span>{'\n\n'}
+        <span style={PIPE_CS.fn}>@bv.table</span>(key=<span style={PIPE_CS.str}>"user_id"</span>){'\n'}
+        <span style={PIPE_CS.kw}>def</span> <span style={PIPE_CS.fn}>UserActivation</span>(e: <span style={PIPE_CS.ty}>ApiError</span>):{'\n'}
+        {'    '}<span style={PIPE_CS.kw}>return</span> e.<span style={PIPE_CS.fn}>group_by</span>(<span style={PIPE_CS.str}>"user_id"</span>).<span style={PIPE_CS.fn}>agg</span>({'\n'}
+        {'        '}<span style={{ background: PIPE_HL.orange, borderRadius: 3, padding: '0 2px' }}>error_velocity_5m</span> = bv.<span style={PIPE_CS.fn}>rate_of_change</span>(<span style={PIPE_CS.str}>"retries"</span>, window=<span style={PIPE_CS.str}>"5m"</span>),{'\n'}
+        {'    '}){'\n\n'}
+        <span style={PIPE_CS.fn}>@bv.table</span>(key=<span style={PIPE_CS.str}>"org_id"</span>){'\n'}
+        <span style={PIPE_CS.kw}>def</span> <span style={PIPE_CS.fn}>OrgExpansionSignals</span>(e: <span style={PIPE_CS.ty}>LimitHit</span>):{'\n'}
+        {'    '}<span style={PIPE_CS.kw}>return</span> e.<span style={PIPE_CS.fn}>group_by</span>(<span style={PIPE_CS.str}>"org_id"</span>).<span style={PIPE_CS.fn}>agg</span>({'\n'}
+        {'        '}<span style={{ background: PIPE_HL.blue, borderRadius: 3, padding: '0 2px' }}>limit_hits_24h</span> = bv.<span style={PIPE_CS.fn}>count</span>(window=<span style={PIPE_CS.str}>"24h"</span>),{'\n'}
+        {'    '}){'\n\n'}
+        bv.<span style={PIPE_CS.fn}>App</span>(<span style={PIPE_CS.str}>"0.0.0.0:6400"</span>).<span style={PIPE_CS.fn}>register</span>(<span style={PIPE_CS.ty}>ApiError</span>, <span style={PIPE_CS.ty}>LimitHit</span>, <span style={PIPE_CS.fn}>UserActivation</span>, <span style={PIPE_CS.fn}>OrgExpansionSignals</span>).<span style={PIPE_CS.fn}>serve</span>()
+      </>
+    );
+
+    const PIPELINES_DATA = [
+      {
+        id: 'agent', num: '01',
+        kicker: 'Agent runtime control',
+        heading: 'Catch agent loops before the next tool call.',
+        sub: 'Detect repeated actions and risky tools while the agent is still running.',
+        filename: 'agent_safety.py', lines: '15 lines',
+        Code: PipeAgentCode,
+        signals: [
+          { tone: 'orange', entity: 'agent_91',   feature: 'repeated_action_30s', value: '8',  threshold: '> 6',  action: 'pause agent loop',     tail: 'before next tool call' },
+          { tone: 'blue',   entity: 'session_44', feature: 'risky_tools_10m',     value: '2',  threshold: '≥ 2',  action: 'require approval',     tail: 'protect external actions' },
+        ],
+      },
+      {
+        id: 'marketplace', num: '02',
+        kicker: 'Marketplace reranking',
+        heading: 'Reorder the marketplace while shoppers are still shopping.',
+        sub: 'Boost fast-moving SKUs and sort toward each shopper’s live price intent — without a nightly batch.',
+        filename: 'marketplace_ranking.py', lines: '18 lines',
+        Code: PipeMarketplaceCode,
+        signals: [
+          { tone: 'orange', entity: 'sku_882',   feature: 'carts_5m',           value: '91',   threshold: '> 50',   action: 'boost trending item',       tail: 'top of search feed' },
+          { tone: 'blue',   entity: 'user_2041', feature: 'avg_view_price_30m', value: '$240', threshold: '> $200', action: 'sort toward premium picks', tail: 'personalized rank' },
+        ],
+      },
+      {
+        id: 'saas', num: '03',
+        kicker: 'SaaS growth rescue',
+        heading: 'Rescue stuck users before the session ends.',
+        sub: 'Detect error loops, docs spirals, and expansion signals while the account is active.',
+        filename: 'growth_rescue.py', lines: '18 lines',
+        Code: PipeSaaSCode,
+        signals: [
+          { tone: 'orange', entity: 'user_1271', feature: 'error_velocity_5m', value: '+1.2', threshold: '> 0.5', action: 'launch setup rescue',    tail: 'in-app guidance' },
+          { tone: 'blue',   entity: 'org_acme',  feature: 'limit_hits_24h',    value: '12',   threshold: '> 10',  action: 'show team upgrade path', tail: 'contextual offer' },
+        ],
+      },
+    ];
+
+    const PipelineTab = ({ p, active, onClick, rotateMs }) => (
+      <button
+        type="button" onClick={onClick} aria-pressed={active}
+        style={{
+          textAlign: 'left', display: 'block', width: '100%', cursor: 'pointer',
+          padding: '26px 26px 24px', borderRadius: 16,
+          border: '1px solid ' + (active ? 'var(--accent)' : 'var(--border)'),
+          background: active ? '#fff' : 'var(--beava-paper)',
+          boxShadow: active
+            ? '0 1px 2px rgba(26,23,20,0.05), 0 8px 24px rgba(184,92,32,0.12)'
+            : '0 1px 2px rgba(26,23,20,0.03)',
+          position: 'relative', overflow: 'hidden',
+          transition: 'all 200ms cubic-bezier(0.22,1,0.36,1)',
+          outline: 'none', font: 'inherit', color: 'inherit',
+        }}
+        onMouseEnter={e => {
+          if (active) return;
+          e.currentTarget.style.background = '#fff';
+          e.currentTarget.style.borderColor = 'var(--border-strong)';
+        }}
+        onMouseLeave={e => {
+          if (active) return;
+          e.currentTarget.style.background = 'var(--beava-paper)';
+          e.currentTarget.style.borderColor = 'var(--border)';
+        }}
+      >
+        <span aria-hidden style={{
+          position: 'absolute', left: 0, top: 18, bottom: 18, width: 3, borderRadius: 3,
+          background: active ? 'var(--accent)' : 'transparent',
+          transition: 'background 200ms cubic-bezier(0.22,1,0.36,1)',
+        }}/>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 10 }}>
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600,
+            color: active ? 'var(--accent)' : 'var(--fg3)', letterSpacing: '0.04em',
+          }}>{p.num}</span>
+          <span style={{
+            fontFamily: 'var(--font-sans)', fontSize: 11, fontWeight: 600,
+            textTransform: 'uppercase', letterSpacing: '0.08em',
+            color: active ? 'var(--accent)' : 'var(--fg3)',
+          }}>{p.kicker}</span>
+        </div>
+        <h3 style={{
+          fontFamily: 'var(--font-serif)', fontWeight: 600,
+          fontSize: 26, lineHeight: 1.18, letterSpacing: '-0.015em',
+          color: 'var(--fg1)', margin: '0 0 10px', textWrap: 'balance',
+        }}>{p.heading}</h3>
+        <p style={{
+          fontFamily: 'var(--font-sans)', fontSize: 15, lineHeight: 1.55,
+          color: 'var(--fg2)', margin: 0, textWrap: 'pretty',
+        }}>{p.sub}</p>
+        {active && (
+          <span aria-hidden style={{
+            position: 'absolute', left: 0, bottom: 0, height: 2,
+            background: 'var(--accent)',
+            animation: `beava-tab-progress ${rotateMs}ms linear forwards`,
+          }}/>
+        )}
+      </button>
+    );
+
+    const OutcomeCard = ({ s, i, total, live }) => {
+      // Prefer live state for entity + value when /api/feed is up;
+      // fall back to the illustrative hardcoded values otherwise.
+      // Threshold + action + tail stay static — they describe the
+      // pipeline's intent, not the latest row.
+      const entity = live ? live.entity : s.entity;
+      const value  = live ? live.value  : s.value;
+      return (
+      <div style={{
+        position: 'relative', padding: '12px 16px 14px 18px',
+        borderRight: i < total - 1 ? '1px solid var(--border-inset)' : 'none',
+        background: '#fff',
+        display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0,
+      }}>
+        <span aria-hidden style={{
+          position: 'absolute', left: 0, top: 12, bottom: 12, width: 3,
+          borderRadius: 3, background: PIPE_DOT[s.tone],
+        }}/>
+        {/* Line 1 — signal read. Forced to one line; overflow ellipsifies. */}
+        <div style={{
+          fontFamily: 'var(--font-mono)', fontSize: 11, lineHeight: 1.4,
+          color: 'var(--fg3)',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          minWidth: 0,
+        }}>
+          <span>{entity}.</span>
+          <span style={{
+            background: PIPE_HL[s.tone], padding: '1px 5px', borderRadius: 4,
+            color: 'var(--fg1)', fontWeight: 600,
+          }}>{s.feature}</span>
+          <span> = </span>
+          <span style={{ color: 'var(--fg1)', fontWeight: 700 }}>{value}</span>
+          <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{' '}{s.threshold}</span>
+          {s.meta && <span>{'  ·  '}{s.meta}</span>}
+        </div>
+        {/* Line 2 — action + qualitative tail. Action in orange serif, tail in
+            small sans grey (e.g. "before next tool call") — replaces the prior
+            green dollar marker. Tail fills the right side of the cell so short
+            actions don't leave a gap. */}
+        <div style={{
+          display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'nowrap',
+          justifyContent: 'space-between',
+          minWidth: 0, overflow: 'hidden',
+        }}>
+          <span style={{
+            fontFamily: 'var(--font-serif)', fontWeight: 600,
+            fontSize: 17, lineHeight: 1.2, letterSpacing: '-0.015em',
+            color: 'var(--accent)',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            minWidth: 0,
+          }}>{s.action}</span>
+          {s.tail && (
+            <span style={{
+              fontFamily: 'var(--font-sans)', fontWeight: 500, fontSize: 12,
+              color: 'var(--fg3)', lineHeight: 1.2,
+              whiteSpace: 'nowrap', flexShrink: 0,
+            }}>· {s.tail}</span>
+          )}
+        </div>
+      </div>
+      );
+    };
+
+    const PipelineCodePanel = ({ p, live }) => {
+      const Code = p.Code;
+      return (
+        <div key={p.id} style={{
+          background: '#fff', border: '1px solid var(--border)', borderRadius: 16,
+          boxShadow: '0 1px 2px rgba(26,23,20,0.04), 0 8px 24px rgba(26,23,20,0.06)',
+          overflow: 'hidden',
+          display: 'flex', flexDirection: 'column', height: '100%',
+          animation: 'beava-fade-in 320ms cubic-bezier(0.22,1,0.36,1)',
+        }}>
+          <div style={{
+            padding: '12px 22px 10px',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: 12, flexWrap: 'wrap',
+            background: '#fff', borderBottom: '1px solid var(--border-inset)',
+          }}>
+            <span style={{
+              fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 10.5,
+              textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--fg3)',
+            }}>Event → feature → action</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${p.signals.length}, minmax(0, 1fr))` }}>
+            {p.signals.map((s, i) => (
+              <OutcomeCard key={i} s={s} i={i} total={p.signals.length} live={live && live[s.feature]}/>
+            ))}
+          </div>
+
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: 12, flexWrap: 'wrap', padding: '10px 16px',
+            borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)',
+            background: 'var(--beava-paper)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+              <span style={{ width: 9, height: 9, borderRadius: 999, background: '#e6dccb' }}/>
+              <span style={{ width: 9, height: 9, borderRadius: 999, background: '#e6dccb' }}/>
+              <span style={{ width: 9, height: 9, borderRadius: 999, background: '#e6dccb' }}/>
+              <span style={{
+                fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--fg2)',
+                marginLeft: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>{p.filename}</span>
+              <span style={{
+                fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg3)',
+                padding: '2px 8px', borderRadius: 999,
+                background: '#fff', border: '1px solid var(--border)', marginLeft: 4,
+                whiteSpace: 'nowrap',
+              }}>{p.lines}</span>
+            </div>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--beava-success)',
+              whiteSpace: 'nowrap', fontWeight: 600,
+            }}>
+              <span style={{ width: 6, height: 6, borderRadius: 999, background: 'var(--beava-success)' }}/>
+              registered · live &lt;1ms
+            </span>
+          </div>
+
+          <pre style={{
+            margin: 0, padding: '20px 24px',
+            fontFamily: 'var(--font-mono)', fontSize: 13.5, lineHeight: 1.65,
+            color: 'var(--fg1)', background: 'var(--beava-paper)',
+            border: 0, borderRadius: 0, boxShadow: 'none', overflowX: 'auto', flex: 1,
+          }}>
+            <Code/>
+          </pre>
+        </div>
+      );
+    };
+
+    const Pipelines = () => {
+      const [idx, setIdx] = React.useState(0);
+      const [resetTick, setResetTick] = React.useState(0);
+      const live = useLiveSignals();
+      React.useEffect(() => {
+        const id = setTimeout(
+          () => setIdx((i) => (i + 1) % PIPELINES_DATA.length),
+          PIPE_ROTATE_MS,
+        );
+        return () => clearTimeout(id);
+      }, [idx, resetTick]);
+      const active = PIPELINES_DATA[idx];
+      const pickTab = (i) => { setIdx(i); setResetTick(t => t + 1); };
+      return (
+        <section id="pipelines" style={{
+          padding: '96px 24px 104px', background: 'var(--bg-alt)',
+          borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)',
+        }}>
+          <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+            <div style={{ marginBottom: 48, maxWidth: 760 }}>
+              <Eyebrow>Three pipelines. Six live signals.</Eyebrow>
+              <h2 style={{
+                fontFamily: 'var(--font-serif)', fontWeight: 600,
+                fontSize: 'clamp(32px, 3.6vw, 46px)',
+                lineHeight: 1.1, letterSpacing: '-0.02em',
+                color: 'var(--fg1)', margin: '12px 0 14px', textWrap: 'balance',
+              }}>
+                React to live events{' '}
+                <em style={{ color: 'var(--accent)', fontStyle: 'italic' }}>in a few lines.</em>
+              </h2>
+              <p style={{
+                fontFamily: 'var(--font-sans)', fontSize: 17, lineHeight: 1.55,
+                color: 'var(--fg2)', margin: 0, maxWidth: 640, textWrap: 'pretty',
+              }}>
+                Define the event. Declare the feature table. Read the decision signal
+                before the next request — no Kafka, no Flink, no feature store.
+              </p>
+            </div>
+
+            <div className="beava-pipelines-grid" style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(340px, 0.95fr) minmax(0, 1.25fr)',
+              gap: 24, alignItems: 'stretch',
+            }}>
+              <div role="tablist" aria-label="Reflex pipelines" style={{
+                display: 'flex', flexDirection: 'column', gap: 14,
+              }}>
+                {PIPELINES_DATA.map((p, i) => (
+                  <PipelineTab
+                    key={p.id + '-' + idx + '-' + resetTick + '-' + i}
+                    p={p} active={i === idx} onClick={() => pickTab(i)}
+                    rotateMs={PIPE_ROTATE_MS}
+                  />
+                ))}
+              </div>
+              <div role="tabpanel"><PipelineCodePanel p={active} live={live}/></div>
+            </div>
+          </div>
+
+          <style>{`
+            @keyframes beava-tab-progress { from { width: 0%; } to { width: 100%; } }
+            @keyframes beava-fade-in {
+              from { opacity: 0; transform: translateY(2px); }
+              to   { opacity: 1; transform: translateY(0); }
+            }
+            @media (max-width: 920px) {
+              .beava-pipelines-grid { grid-template-columns: 1fr !important; }
+            }
+          `}</style>
+        </section>
+      );
+    };
+
+    // ─────────────────────────────────────────────────────────────────────
     // Pillars — what makes beava different
     // ─────────────────────────────────────────────────────────────────────
 
@@ -1017,8 +1493,8 @@
       <>
         <SiteHeader maxWidth={1400}/>
         <Hero/>
-        <PipelineShowcase/>
         <Pillars/>
+        <Pipelines/>
         <FinalCTA/>
         <SiteFooter maxWidth={1400}/>
       </>

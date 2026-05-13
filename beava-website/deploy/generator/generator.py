@@ -95,7 +95,7 @@ class AgentStep:
 @bv.table(key="agent_id")
 def AgentReflexes(e: AgentStep):
     return e.group_by("agent_id").agg(
-        steps_30s=bv.count(window="30s"),
+        repeated_action_30s=bv.count(window="30s"),
     )
 
 
@@ -150,13 +150,13 @@ def ShopperReflexes(e: ProductView):
 class ApiError:
     user_id: str
     topic: str
+    retries: int  # cumulative retry count for this user's session
 
 
 @bv.table(key="user_id")
 def UserActivation(e: ApiError):
     return e.group_by("user_id").agg(
-        errors_10m=bv.count(window="10m"),
-        top_topic_10m=bv.top_k("topic", k=1, window="10m"),
+        error_velocity_5m=bv.rate_of_change("retries", window="5m"),
     )
 
 
@@ -231,7 +231,14 @@ def _make_event(scenario: str) -> tuple[str, dict, str]:
         )
     if scenario == "user_errors":
         uid = _random_user()
-        return "ApiError", {"user_id": uid, "topic": random.choice(_ERROR_TOPICS)}, uid
+        # Push monotonically-increasing retry count so rate_of_change reads as
+        # a meaningful slope (≈ 0.6–2.8 /sec) under the 1.4s push cadence.
+        retries = random.randint(3, 15)
+        return (
+            "ApiError",
+            {"user_id": uid, "topic": random.choice(_ERROR_TOPICS), "retries": retries},
+            uid,
+        )
     if scenario == "limit_hits":
         oid = random.choice(_ORG_POOL)
         return "LimitHit", {"org_id": oid, "feature": random.choice(_LIMIT_FEATURES)}, oid
@@ -240,15 +247,16 @@ def _make_event(scenario: str) -> tuple[str, dict, str]:
 
 def _decide(scenario: str, feature_value) -> str:
     if scenario == "agent_steps":
-        return "pause runaway agent" if (feature_value or 0) >= 5 else "continue monitoring"
+        return "pause agent loop" if (feature_value or 0) >= 6 else "continue monitoring"
     if scenario == "tool_risk":
-        return "require human approval" if (feature_value or 0) >= 2 else "allow"
+        return "require approval" if (feature_value or 0) >= 2 else "allow"
     if scenario == "cart_momentum":
         return "boost trending item" if (feature_value or 0) >= 50 else "keep default ranking"
     if scenario == "view_price":
-        return "sort by premium picks" if (feature_value or 0) >= 200 else "keep value picks"
+        return "sort toward premium picks" if (feature_value or 0) >= 200 else "keep value picks"
     if scenario == "user_errors":
-        return "launch setup rescue" if (feature_value or 0) >= 3 else "let user retry"
+        # error_velocity_5m is a slope (≈ 0.6–2.8 /sec). > 0.5 triggers rescue.
+        return "launch setup rescue" if (feature_value or 0) >= 0.5 else "let user retry"
     if scenario == "limit_hits":
         return "show team upgrade path" if (feature_value or 0) >= 10 else "send usage tip"
     return ""
@@ -256,11 +264,11 @@ def _decide(scenario: str, feature_value) -> str:
 
 # Maps scenario -> (table_name, feature_key).
 _SCENARIO_TARGETS = {
-    "agent_steps":   ("AgentReflexes",        "steps_30s"),
+    "agent_steps":   ("AgentReflexes",        "repeated_action_30s"),
     "tool_risk":     ("SessionReflexes",      "risky_tools_10m"),
     "cart_momentum": ("SkuMomentum",          "carts_5m"),
     "view_price":    ("ShopperReflexes",      "avg_view_price_30m"),
-    "user_errors":   ("UserActivation",       "errors_10m"),
+    "user_errors":   ("UserActivation",       "error_velocity_5m"),
     "limit_hits":    ("OrgExpansionSignals",  "limit_hits_24h"),
 }
 
@@ -270,32 +278,19 @@ def _format_value(scenario: str, row: dict | None, feature_value):
 
     Most scenarios just show the raw feature value. Two exceptions:
     - view_price: prepend a "$" so the row reads avg_view_price_30m = $240.
-    - user_errors: append the top_topic_10m so the row reads
-      errors_10m = 6, topic = "auth".
+    - user_errors: render the rate_of_change slope as a signed number,
+      matching the synthetic feed's `+1.2` display.
     """
     if feature_value is None:
         return feature_value
     if scenario == "view_price":
         return f"${int(feature_value)}"
-    if scenario == "user_errors" and isinstance(row, dict):
-        topic = _extract_top_topic(row.get("top_topic_10m"))
-        if topic:
-            return f'{int(feature_value)}, topic = "{topic}"'
+    if scenario == "user_errors":
+        try:
+            return f"+{float(feature_value):.1f}"
+        except (TypeError, ValueError):
+            return feature_value
     return feature_value
-
-
-def _extract_top_topic(top_k_value) -> str | None:
-    """top_k returns a sequence of (value, count) tuples or dicts depending
-    on wire format. Pull the first value string defensively."""
-    if not top_k_value:
-        return None
-    if isinstance(top_k_value, list) and top_k_value:
-        head = top_k_value[0]
-        if isinstance(head, dict):
-            return head.get("value") or head.get("v")
-        if isinstance(head, (list, tuple)) and head:
-            return head[0]
-    return None
 
 
 # ─────────────────────────────────────────────────────────────────────────
