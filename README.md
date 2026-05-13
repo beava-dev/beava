@@ -17,7 +17,9 @@
 
 **Make your AI product react to what just happened.**
 
-beava turns live events into fresh features for fraud, recommendations, and LLM guardrails. No Kafka, no Flink, no feature store. One Rust binary, HTTP in, HTTP out, sub-millisecond reads.
+beava turns live events into fresh features for fraud, recommendations, LLM guardrails, and in-product analytics. No Kafka, no Flink, no feature store. One Rust binary.
+
+Push events directly over HTTP. Sub-millisecond ack on push, sub-millisecond reads, 100k+ QPS on one box.
 
 ```python
 # fraud.py — a fraud signal in ~15 lines.
@@ -44,15 +46,16 @@ app.get("UserSignals", "alice")
 # => {"failed_logins_10m": 2, "attempts_1h": 2}
 ```
 
-That's the whole loop. **No broker, no ETL, no schema registry, no separate stream / batch path.** Three primitives: `@bv.event`, `@bv.table`, `app.get`.
+That's the whole loop. **No event queue.** `app.push` POSTs straight to beava — no Kafka, no Kinesis, no SQS, no schema registry. Sub-millisecond ack per push. Three primitives: `@bv.event`, `@bv.table`, `app.get`.
 
-## Pick a decision
+## Pick a use case
 
-| Decision | Pipeline | What you query |
+| Use case | Pipeline | What you query |
 |---|---|---|
 | **Fraud** | `LoginAttempt → UserSignals`, keyed by `user_id` | `failed_logins_10m` to block the 5th try |
 | **Recommendations** | `ProductClick → UserAffinity`, keyed by `user_id` | `recent_clicks_30m` + `top_categories_1h` to refresh the feed |
 | **LLM guardrails** | `LLMRequest → OrgBudget`, keyed by `org_id` | `tokens_used_24h` to throttle the expensive model |
+| **In-product analytics** | `PageView → UserStats`, keyed by `user_id` | `views_24h` + `unique_pages_1h` + `last_seen` to power the dashboard your customers see |
 
 Each pipeline is one file, ~15 lines. Worked examples on the homepage: [beava.dev/#pipeline](https://beava.dev/#pipeline).
 
