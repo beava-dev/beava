@@ -20,110 +20,183 @@
 
 ---
 
-**Give your AI product live reflexes.**
+**Give your product live reflexes.**
 
-beava turns live events into fresh decision features, so your app can pause runaway agents, route models, throttle spend, and personalize instantly. No Kafka, no Flink, no feature store. One Rust binary.
+beava turns live events into fresh decision features, so your app can pause runaway agents, reorder marketplaces, and rescue stuck users — no Kafka, no Flink, no feature store.
 
 Push events over HTTP or TCP. The very next read reflects them. No batch lag, no broker, no stream worker in between.
 
 ```python
-# agent_reflex.py — pause a runaway agent in ~15 lines.
+# agent_safety.py — live reflexes for an agent session.
+
 import beava as bv
 
 @bv.event
 class AgentStep:
-    agent_id: str
     session_id: str
-    action: str
+    agent_id: str
+    action: str       # "search" | "browse" | "tool_call" | "model_call"
+    tool: str         # "browser" | "shell_exec" | "http_get" | "code_run"
     ok: bool
+    risky: bool
+    tokens: int
+    latency_ms: int
 
-@bv.table(key="agent_id")
-def AgentReflexes(e: AgentStep):
-    return e.group_by("agent_id").agg(
-        steps_30s   = bv.count(window="30s"),
-        failures_5m = bv.count(window="5m", where=~bv.col("ok")),
+@bv.table(key="session_id")
+def SessionReflexes(e: AgentStep):
+    return e.group_by("session_id").agg(
+        failure_rate_5m  = bv.ratio(window="5m", where=~bv.col("ok")),
+        top_tool_10m     = bv.top_k("tool", k=1, window="10m"),
+        unique_tools_10m = bv.n_unique("tool", window="10m"),
+        token_burn_1m    = bv.sum("tokens", window="1m"),
+        p95_latency_5m   = bv.quantile("latency_ms", q=0.95, window="5m"),
+        risky_streak     = bv.streak(where=bv.col("risky")),
+        last_action      = bv.last("action"),
     )
 
-app = bv.App("http://localhost:8080").register(AgentStep, AgentReflexes)
+app = bv.App("http://localhost:8080").register(AgentStep, SessionReflexes)
 
 app.push("AgentStep", {
-    "agent_id": "agent_91", "session_id": "s1",
-    "action": "search", "ok": False,
+    "session_id": "session_44",
+    "agent_id":   "agent_91",
+    "action":     "tool_call",
+    "tool":       "browser",
+    "ok":         False,
+    "risky":      True,
+    "tokens":     4200,
+    "latency_ms": 830,
 })
 
-app.get("AgentReflexes", "agent_91")
-# => {"steps_30s": 1, "failures_5m": 1}
+features = app.get("SessionReflexes", "session_44")
+
+if features["failure_rate_5m"] > 0.8:
+    lock_tool_access()
+if features["risky_streak"] >= 2:
+    require_human_approval()
+if features["token_burn_1m"] > 100_000:
+    switch_to_cheaper_model()
 ```
 
-That's the whole reflex loop. **event in → feature recomputed → decision served.** `app.push` POSTs straight to beava — no Kafka, no Flink, no feature store in between. The next `app.get` reflects the push. If `steps_30s` spikes, pause the agent. If `failures_5m` climbs, require approval. If spend accelerates, route to a cheaper model.
+That is the reflex loop: **event in → feature recomputed → decision served.** `app.push` writes the event straight to beava. The next `app.get` reflects it. Your product can act before the next request, next tool call, or next screen.
 
-## Pick a use case
+## Why beava
 
-| Use case | Pipeline | What your app does |
+Most products already have events. The hard part is turning those events into fresh decision state.
+
+Without beava, this usually becomes a pile of Redis counters, cron jobs, queue workers, Postgres triggers, stream processors, and drift-prone glue code.
+
+beava gives you one declarative feature layer:
+
+- define events in Python
+- declare per-entity feature tables
+- push live events
+- read fresh features by key
+- make the product act immediately
+
+No Kafka. No Flink. No feature store. One Rust binary.
+
+## Three pipelines. Six live signals.
+
+| Pipeline | Live signal | Product reflex |
 |---|---|---|
-| **Agent safety** | `AgentStep → AgentReflexes`, keyed by `agent_id` | Pause loops, disable tools, require approval |
-| **Model routing** | `ModelCall → OrgSpend`, keyed by `org_id` | Switch models, throttle spend, route around failures |
-| **Live personalization** | `UserIntent → UserReflexes`, keyed by `user_id` | Adapt the next screen, assistant, or offer |
-| **Product analytics** | `PageView → UserStats`, keyed by `user_id` | Power live customer-facing usage dashboards |
-| **Abuse and risk** | `LoginAttempt → UserRisk`, keyed by `user_id` | Increase risk score or block suspicious sessions |
+| **Agent runtime control** | `session_44.failure_rate_5m = 83%` | lock tool access |
+| **Agent runtime control** | `session_44.risky_streak = 2` | require human approval |
+| **Marketplace reranking** | `sku_882.cart_velocity_5m = 91` | boost trending item |
+| **Marketplace reranking** | `user_1382.avg_view_price_30m = $211` | sort toward premium picks |
+| **SaaS growth rescue** | `user_1271.top_error_topic_10m = "auth"` | launch setup rescue |
+| **SaaS growth rescue** | `org_acme.limit_hits_24h = 12` | show team upgrade path |
 
-Each pipeline is one file, ~15 lines. Worked examples on the homepage: [beava.dev/#pipeline](https://beava.dev/#pipeline).
+These are not dashboards. They are decision features your app can read while the user, agent, or shopper is still active.
+
+## What you can build
+
+**Agent runtime control.** Catch agent loops before the next tool call. Track repeated actions, risky tools, failure rates, token burn, latency spikes, and approval triggers per session or agent. Pause loops, lock risky tools, require human approval, switch to a cheaper model, route around a slow provider.
+
+**Marketplace reranking.** Reorder the marketplace while shoppers are still shopping. Track live price intent, cart velocity, product momentum, category spikes, and recommendation fatigue. Boost fast-moving SKUs, sort toward premium picks, show affordable alternatives, diversify stale recommendations, promote matching inventory.
+
+**SaaS growth rescue.** Rescue stuck users before the session ends. Track error loops, docs spirals, setup attempts, usage limits, invite momentum, and expansion signals. Launch setup rescue, open guided onboarding, escalate to support, show an upgrade path, route expansion-ready accounts to sales.
 
 ## 60-second quickstart
 
-Pick whichever install path matches your box. All three deliver the same `beava` binary.
+Pick the install path that matches your environment. All three deliver the same `beava` binary.
 
 ```bash
-# pip    — installs SDK + bundled Rust server binary from PyPI
-#          (~14 MB Python wheel, ~4 MB server binary inside —
-#          polars / ruff / uv pattern). `beava` lands on PATH.
-#          Pin a version with `pip install beava==0.0.0`.
+# pip — installs the Python SDK and bundled Rust server binary
 pip install beava
 
-# brew   — Homebrew formula (macOS + Linuxbrew)
+# brew — macOS and Linuxbrew
 brew install beava-dev/beava/beava
 
-# docker — zero deps on the host
+# docker — zero host dependencies
 docker run -p 8080:8080 -p 8081:8081 beavadev/beava:latest
 ```
 
-Then start the server:
+Start the server:
 
 ```bash
 beava --data-dir ./.beava/
 ```
 
-Or kick the tyres without writing anything to disk:
+Or run the in-process demo:
 
 ```bash
-beava quickstart    # 4-step in-process demo, ~10s, drops a beava_quickstart.py file
-beava --memory-only # ephemeral server, no WAL, no recovery
+beava quickstart
 ```
 
 Full walkthrough: [beava.dev/docs](https://beava.dev/docs).
 
-## Why beava
+## The primitives
 
-Replaces Postgres triggers + Redis counters + the cron job that heals drift. Same pipeline from laptop to production.
+beava has three core primitives:
 
-**Freshness:** push and read are inline. The read after a push reflects that push. No batch tick, no stream worker, no waiting for the next window flush.
+```python
+@bv.event
+class ProductEvent:
+    ...
 
-**Latency:** on TCP, p50 ≈ 0.15ms push / 0.15ms read; p99 ≈ 0.31ms / 0.21ms (1000-sample loopback on an M-class laptop). HTTP/JSON is ~3-5× slower at p99; use TCP for the hot path, HTTP for debugging.
+@bv.table(key="user_id")
+def UserReflexes(e: ProductEvent):
+    return e.group_by("user_id").agg(...)
 
-**Throughput:** 684,812 sustained events/sec on a single Apple-M4 core[^1] — simple-fraud pipeline, TCP transport, msgpack wire, parallel=16, 60s sustained run. Run multiple beava instances for higher throughput (Redis-cluster style; no in-process sharding).
+app.get("UserReflexes", "user_123")
+```
 
-**Memory:** ~7 KB per entity for a rich 30-feature pack → ~700 GB for 100M entities. Size your box; in-memory only, no SSD overflow.
+The Python SDK includes operators for counters, windows, ratios, top-k, recency, sketches, decay, velocity, buffers, and geo signals:
 
-**Durability:** WAL on every push + periodic snapshot. Boot recovers state in seconds. Refuse-on-network-FS so you don't accidentally fsync over NFS.
+```python
+bv.count(window="10m")
+bv.ratio(window="5m", where=...)
+bv.top_k("tool", k=3, window="10m")
+bv.n_unique("sku", window="30m")
+bv.mean("price", window="30m")
+bv.quantile("latency_ms", q=0.95, window="5m")
+bv.streak(where=...)
+bv.time_since(where=...)
+bv.decayed_sum("tokens", half_life="10m")
+```
 
-**When NOT to use beava:**
+## Performance and durability
 
-- You need cross-process sharding for hot-key load — run multiple beava instances instead (Redis-cluster pattern).
-- Your workload tolerates 5-30s of feature staleness. A batch feature store will be cheaper to operate.
-- You need strict event-time semantics with watermarks; v0 is processing-time only (event-time is on the roadmap).
-- You want a managed service today. v0 ships as a binary; managed beava comes later.
+beava is built for hot-path feature reads.
 
-[^1]: Reproduce: `cargo run -p beava-bench --release -- throughput --pipeline small --transport tcp --wire-format msgpack --parallel 16 --duration-secs 60 --pipeline-depth 1024`. Numbers vary by hardware; dedicated x86 server-class boxes typically clear 1M+ EPS sustained. See [crates/beava-bench/README.md](crates/beava-bench/README.md) for the harness.
+- Push and read are inline: the read after a push reflects that push.
+- HTTP/JSON is available for debugging and integration.
+- Framed TCP is available for the sub-millisecond hot path.
+- WAL on every push plus periodic snapshots.
+- Recovery rebuilds state from disk on boot.
+- In-memory state only; size your box for your entity count and feature pack.
+
+## When not to use beava
+
+beava is intentionally small and direct. It is not a replacement for every streaming system. Do not use beava if:
+
+- you need strict event-time semantics with watermarks
+- you need cross-process sharding inside a single logical cluster
+- your product can tolerate 5–30 seconds of feature staleness
+- you want a managed service today
+- you need long-term analytical storage or SQL exploration
+
+Use beava when the product needs to act now.
 
 ## Wire surface
 
@@ -131,89 +204,43 @@ beava binds three listeners:
 
 - **HTTP/JSON on `127.0.0.1:8080`** — curl-compatible debugging path.
 - **Framed TCP on `127.0.0.1:8081`** — sub-millisecond fast-path. JSON or msgpack content.
-- **Admin sidecar on `127.0.0.1:8090`** — observability endpoints for `/health`, `/ready`, `/metrics`, and `/registry`. Override with `BEAVA_ADMIN_ADDR`.
-
-### HTTP
+- **Admin sidecar on `127.0.0.1:8090`** — `/health`, `/ready`, `/metrics`, `/registry`.
 
 ```bash
 curl -X POST localhost:8080/register -d '{...schema...}'
-curl -X POST localhost:8080/push     -d '{"event":"LoginAttempt","data":{"user_id":"alice","success":false}}'
-curl -X POST localhost:8080/get      -d '{"table":"UserSignals","key":"alice"}'
-curl -X POST localhost:8080/batch_get -d '{"requests":[{"table":"UserSignals","key":"alice"}]}'
-curl -X POST localhost:8080/ping
+
+curl -X POST localhost:8080/push -d '{
+  "event": "AgentStep",
+  "data": {
+    "session_id": "session_44",
+    "agent_id":   "agent_91",
+    "action":     "tool_call",
+    "tool":       "browser",
+    "ok":         false,
+    "risky":      true,
+    "tokens":     4200,
+    "latency_ms": 830
+  }
+}'
+
+curl -X POST localhost:8080/get -d '{
+  "table": "SessionReflexes",
+  "key":   "session_44"
+}'
 ```
-
-### TCP frame
-
-```text
-[u32 length BE][u16 op BE][u8 content_type][payload: length - 3 bytes]
-```
-
-`length` counts the bytes after itself. Multi-byte integers are big-endian. **Strict FIFO per connection** (Redis RESP style) — frame order correlates requests to responses; no `request_id` field.
-
-| Opcode | Name | Body |
-|--------|------|------|
-| `0x0010` | `push` | `{event, data}` |
-| `0x0020` | `get` | `{table, key}` |
-| `0x0024` | `batch_get` | `{requests: [...]}` |
-| `0x0030` | `register` | full schema |
-| `0x0040` | `reset` | `{}` (test_mode-only) |
-| `0xFFFF` | `error_response` | `{error: {code, message}}` |
-
-| Content-type | Format |
-|--------------|--------|
-| `0x01` | JSON |
-| `0x02` | msgpack |
-
-Unknown opcodes return `error_response` with code `unknown_op` and the connection stays open.
-
-## Server CLI
-
-```text
-beava [OPTIONS] [SUBCOMMAND]
-
-  -c, --config <CONFIG>     YAML config file (full surface; optional)
-      --http-addr <ADDR>    default: 127.0.0.1:8080
-      --tcp-addr <ADDR>     default: 127.0.0.1:8081
-      --data-dir <PATH>     default: ./.beava/  (WAL → <DIR>/wal,
-                                                 snapshots → <DIR>/snapshots)
-      --memory-only         ephemeral; no WAL/snapshot
-      --test-mode           enable POST /reset and OP_RESET
-  -h, --help
-  -V, --version
-
-subcommands
-  quickstart [--no-file]    in-process 4-step first-touch demo
-
-env vars
-  BEAVA_LOG_LEVEL=debug|info|warn     default: info
-  BEAVA_TEST_MODE=1                   alias for --test-mode
-  BEAVA_ADMIN_ADDR                    admin sidecar address; default: 127.0.0.1:8090
-  BEAVA_WAL_DIR / BEAVA_SNAPSHOT_DIR  per-dir overrides (use --data-dir
-                                      for a single-root convenience flag)
-  BEAVA_LISTEN_ADDR                   alias for --http-addr
-  BEAVA_TCP_HOST / BEAVA_TCP_PORT     per-listener overrides
-                                      (use --tcp-addr for the canonical form)
-
-WAL fsync interval and snapshot interval ride along inside YAML config;
-promotion to first-class CLI flags (`--wal-flush-ms`, `--snapshot-interval-mins`)
-is a v0.0.x followup. Most operators don't tune these.
-```
-
-No TLS in v0 — terminate at nginx, Envoy, or Cloudflare if you need it. No auth in v0 — bind to a private network.
 
 ## Learn more
 
-- [beava.dev](https://beava.dev) — site, docs, guides, roadmap, dev calls
-- [examples/](examples/) — vertical demos in Python
-- [crates/beava-bench/README.md](crates/beava-bench/README.md) — benchmark harness, reproduce the numbers
+- [beava.dev](https://beava.dev) — site, docs, guides, and roadmap
+- [examples/](examples/) — vertical examples in Python
+- [crates/beava-bench/README.md](crates/beava-bench/README.md) — benchmark harness
 
-## Community & open-source commitment
+## Community and open source
 
-The open-source project is the real system — something you can clone, run, test, operate, and trust as your use case grows. A managed beava service can remove operational burden later, but the open-source binary is the real product. TiDB-style commitment to open source. Apache-2.0, no open-core lock-in.
+The open-source project is the real system: something you can clone, run, test, operate, and trust as your use case grows. A managed beava service may remove operational burden later, but the open-source binary is the core product. Apache-2.0. No open-core lock-in.
 
 - **Discussions:** [github.com/beava-dev/beava/discussions](https://github.com/beava-dev/beava/discussions)
 - **Discord:** [discord.gg/J5trwbCYpS](https://discord.gg/J5trwbCYpS)
-- **Security:** private disclosure to `hoang@beava.dev` (see [SECURITY.md](SECURITY.md))
+- **Security:** private disclosure to `hoang@beava.dev`
 
-[Apache 2.0](LICENSE) · [CHANGELOG](CHANGELOG.md) · [SECURITY](SECURITY.md) · [CONTRIBUTING](CONTRIBUTING.md) · [GOVERNANCE](GOVERNANCE.md) · [MAINTAINERS](MAINTAINERS.md) · [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md)
+[Apache 2.0](LICENSE) · [CHANGELOG](CHANGELOG.md) · [SECURITY](SECURITY.md) · [CONTRIBUTING](CONTRIBUTING.md) · [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md)
