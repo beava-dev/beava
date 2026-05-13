@@ -15,11 +15,46 @@
 
 ---
 
-A real-time feature server. Push events over HTTP or TCP, declare features in Python, query them at sub-millisecond latency.
+**Make your AI product react to what just happened.**
 
-beava is a single-binary feature server for fraud detection, ad-tech, and behavioral analytics. Push events in over HTTP or TCP; beava tracks per-entity features (counters, velocities, distances, rates, distributions) updated atomically on every event; your application queries them at sub-millisecond latency to power live scoring rules.
+beava turns live events into fresh features for fraud, recommendations, and LLM guardrails. No Kafka, no Flink, no feature store. One Rust binary, HTTP in, HTTP out, sub-millisecond reads.
 
-Think **Redis for stateful streaming features**, with 50+ purpose-built aggregation primitives instead of do-it-yourself Lua scripts.
+```python
+# fraud.py — a fraud signal in ~15 lines.
+import beava as bv
+
+@bv.event
+class LoginAttempt:
+    user_id: str
+    success: bool
+
+@bv.table(key="user_id")
+def UserSignals(e: LoginAttempt):
+    return e.group_by("user_id").agg(
+        failed_logins_10m = bv.count(window="10m", where=~bv.col("success")),
+        attempts_1h       = bv.count(window="1h"),
+    )
+
+app = bv.App("http://localhost:8080").register(LoginAttempt, UserSignals)
+
+app.push("LoginAttempt", {"user_id": "alice", "success": False})
+app.push("LoginAttempt", {"user_id": "alice", "success": False})
+
+app.get("UserSignals", "alice")
+# => {"failed_logins_10m": 2, "attempts_1h": 2}
+```
+
+That's the whole loop. **No broker, no ETL, no schema registry, no separate stream / batch path.** Three primitives: `@bv.event`, `@bv.table`, `app.get`.
+
+## Pick a decision
+
+| Decision | Pipeline | What you query |
+|---|---|---|
+| **Fraud** | `LoginAttempt → UserSignals`, keyed by `user_id` | `failed_logins_10m` to block the 5th try |
+| **Recommendations** | `ProductClick → UserAffinity`, keyed by `user_id` | `recent_clicks_30m` + `top_categories_1h` to refresh the feed |
+| **LLM guardrails** | `LLMRequest → OrgBudget`, keyed by `org_id` | `tokens_used_24h` to throttle the expensive model |
+
+Each pipeline is one file, ~15 lines. Worked examples on the homepage: [beava.dev/#pipeline](https://beava.dev/#pipeline).
 
 ## 60-second quickstart
 
@@ -27,7 +62,7 @@ Pick whichever install path matches your box. All three deliver the same `beava`
 
 ```bash
 # pip    — installs SDK + bundled Rust server binary from PyPI
-#          (~14 MB, polars / ruff / uv pattern). `beava` lands on PATH.
+#          (~4 MB binary, polars / ruff / uv pattern). `beava` lands on PATH.
 #          Pin a version with `pip install beava==0.0.0`.
 pip install beava
 
@@ -47,36 +82,9 @@ beava --data-dir ./.beava/
 Or kick the tyres without writing anything to disk:
 
 ```bash
-beava quickstart   # 4-step in-process demo, ~10s, drops a beava_quickstart.py file
-beava --memory-only   # ephemeral server, no WAL, no recovery
+beava quickstart    # 4-step in-process demo, ~10s, drops a beava_quickstart.py file
+beava --memory-only # ephemeral server, no WAL, no recovery
 ```
-
-```python
-import beava as bv
-
-@bv.event
-class Click:
-    user_id: str
-    page: str
-
-@bv.table(key="user_id")
-def UserActivity(e: Click):
-    return e.group_by("user_id").agg(
-        clicks_1h=bv.count(window="1h"),
-        unique_pages_1h=bv.n_unique("page", window="1h"),
-    )
-
-app = bv.App(url="http://localhost:8080")    # or bv.App() to spawn an embed-mode server
-app.register(Click, UserActivity)
-
-app.push("Click", {"user_id": "alice", "page": "/home"})
-app.push("Click", {"user_id": "alice", "page": "/products"})
-
-app.get("UserActivity", "alice")
-# => {"clicks_1h": 2, "unique_pages_1h": 2}
-```
-
-That's it. **No broker, no ETL, no schema registry, no separate stream / batch path.** One binary, one Python decorator, real-time features.
 
 Full walkthrough: [beava.dev/docs](https://beava.dev/docs).
 
@@ -86,9 +94,16 @@ Replaces Postgres triggers + Redis counters + the cron job that heals drift. Sam
 
 **Performance:** 684,812 sustained events/sec on a single Apple-M4 core[^1] — simple-fraud pipeline, TCP transport, msgpack wire, parallel=16, 60s sustained run. Run multiple beava instances for higher throughput (Redis-cluster style; no in-process sharding).
 
-**Memory:** ~7 KB per entity for a rich 30-feature pack → ~700 GB for 100M entities. Size your box; in-memory only — no SSD overflow.
+**Memory:** ~7 KB per entity for a rich 30-feature pack → ~700 GB for 100M entities. Size your box; in-memory only, no SSD overflow.
 
 **Durability:** WAL on every push + periodic snapshot. Boot recovers state in seconds. Refuse-on-network-FS so you don't accidentally fsync over NFS.
+
+**When NOT to use beava:**
+
+- You need cross-process sharding for hot-key load — run multiple beava instances instead (Redis-cluster pattern).
+- Your workload tolerates 5-30s of feature staleness. A batch feature store will be cheaper to operate.
+- You need strict event-time semantics with watermarks; v0 is processing-time only (event-time is on the roadmap).
+- You want a managed service today. v0 ships as a binary; managed beava comes later.
 
 [^1]: Reproduce: `cargo run -p beava-bench --release -- throughput --pipeline small --transport tcp --wire-format msgpack --parallel 16 --duration-secs 60 --pipeline-depth 1024`. Numbers vary by hardware; dedicated x86 server-class boxes typically clear 1M+ EPS sustained. See [crates/beava-bench/README.md](crates/beava-bench/README.md) for the harness.
 
@@ -96,17 +111,17 @@ Replaces Postgres triggers + Redis counters + the cron job that heals drift. Sam
 
 beava binds three listeners:
 
-- **HTTP/JSON on `127.0.0.1:8080`** - curl-compatible debugging path.
-- **Framed TCP on `127.0.0.1:8081`** - sub-millisecond fast-path. JSON or msgpack content.
-- **Admin sidecar on `127.0.0.1:8090`** - observability endpoints for `/health`, `/ready`, `/metrics`, and `/registry`. Override with `BEAVA_ADMIN_ADDR`.
+- **HTTP/JSON on `127.0.0.1:8080`** — curl-compatible debugging path.
+- **Framed TCP on `127.0.0.1:8081`** — sub-millisecond fast-path. JSON or msgpack content.
+- **Admin sidecar on `127.0.0.1:8090`** — observability endpoints for `/health`, `/ready`, `/metrics`, and `/registry`. Override with `BEAVA_ADMIN_ADDR`.
 
 ### HTTP
 
 ```bash
 curl -X POST localhost:8080/register -d '{...schema...}'
-curl -X POST localhost:8080/push     -d '{"event":"Click","data":{"user_id":"alice","page":"/home"}}'
-curl -X POST localhost:8080/get      -d '{"table":"UserActivity","key":"alice"}'
-curl -X POST localhost:8080/batch_get -d '{"requests":[{"table":"UserActivity","key":"alice"}]}'
+curl -X POST localhost:8080/push     -d '{"event":"LoginAttempt","data":{"user_id":"alice","success":false}}'
+curl -X POST localhost:8080/get      -d '{"table":"UserSignals","key":"alice"}'
+curl -X POST localhost:8080/batch_get -d '{"requests":[{"table":"UserSignals","key":"alice"}]}'
 curl -X POST localhost:8080/ping
 ```
 
@@ -171,7 +186,7 @@ No TLS in v0 — terminate at nginx, Envoy, or Cloudflare if you need it. No aut
 
 ## Learn more
 
-- [beava.dev](https://beava.dev) — site, docs, guides, RFCs, dev calls
+- [beava.dev](https://beava.dev) — site, docs, guides, roadmap, dev calls
 - [examples/](examples/) — vertical demos in Python
 - [crates/beava-bench/README.md](crates/beava-bench/README.md) — benchmark harness, reproduce the numbers
 
