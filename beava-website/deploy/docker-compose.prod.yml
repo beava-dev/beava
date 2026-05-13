@@ -21,6 +21,24 @@ services:
     networks:
       - beava-website-net
 
+  # Decision-feed generator. Connects to beava, registers the three demo
+  # pipelines (LoginAttempt / ProductClick / LLMRequest), pushes a
+  # synthetic event every ~1.4s, and serves the resulting feature rows at
+  # GET /feed for the homepage to poll via /api/feed (caddy route below).
+  generator:
+    build:
+      context: ./generator
+    container_name: beava-website-generator
+    restart: unless-stopped
+    environment:
+      BEAVA_URL: http://beava:8080
+      FEED_PORT: "8090"
+      PUSH_EVERY_S: "1.4"
+    depends_on:
+      - beava
+    networks:
+      - beava-website-net
+
   caddy:
     image: caddy:2-alpine
     container_name: beava-website-caddy
@@ -32,6 +50,7 @@ services:
       - ../project:/var/www/beava-website:ro
     depends_on:
       - beava
+      - generator
     networks:
       - beava-website-net
 

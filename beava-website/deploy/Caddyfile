@@ -33,6 +33,14 @@
         reverse_proxy beava:8090
     }
 
+    # Decision feed — the generator sidecar pushes synthetic fraud / recs /
+    # guardrails events to beava, then exposes the resulting feature rows at
+    # GET /feed. The homepage polls this every 700ms via /api/feed.
+    handle /api/feed {
+        rewrite * /feed
+        reverse_proxy generator:8090
+    }
+
     # Health probe for the public caddy's upstream check.
     handle /__up {
         respond "ok" 200

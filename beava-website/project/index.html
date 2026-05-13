@@ -117,7 +117,7 @@
 
         const tryLive = async () => {
           try {
-            const r = await fetch('/feed', { cache: 'no-store' });
+            const r = await fetch('/api/feed', { cache: 'no-store' });
             if (!r.ok) return false;
             const j = await r.json();
             if (cancelled || !j || !Array.isArray(j.rows) || j.rows.length === 0) return false;
@@ -137,39 +137,51 @@
           }
         };
 
+        // Two independent loops:
+        //   1. Synthetic ticker — primes the panel instantly so the first
+        //      paint is never empty, and carries the panel if /feed is down.
+        //   2. /feed probe — runs every 700ms. As soon as /feed returns
+        //      non-empty rows, we flip to live and silence the synthetic
+        //      ticker. If /feed starts failing, the synthetic ticker comes
+        //      back so the panel keeps animating.
+        //
+        // This replaces the prior probe-once-then-fall-back-forever logic,
+        // which got stuck in synthetic mode if the very first /feed probe
+        // hit the dev-demo orchestrator before its warm-start finished.
+        let synthInterval = null;
+        let probeInterval = null;
+
         const startSynthetic = () => {
-          if (synthId) return;
+          if (synthInterval) return;
           setIsLive(false);
-          synthId = setInterval(() => {
+          synthInterval = setInterval(() => {
             const name = ORDER[Math.floor(Math.random() * ORDER.length)];
             pushSynthetic(name);
           }, 2400);
         };
+        const stopSynthetic = () => {
+          if (synthInterval) { clearInterval(synthInterval); synthInterval = null; }
+        };
 
-        // Probe /feed once. If it works, keep polling; otherwise fall back to
-        // the synthetic stream that's always available.
-        (async () => {
-          const ok = await tryLive();
+        // Prime the panel immediately.
+        startSynthetic();
+
+        // Probe /feed once on mount (snappy flip if it's already up) and
+        // every 700ms after. tryLive flips isLive when it succeeds.
+        const probeOnce = async () => {
           if (cancelled) return;
-          if (!ok) {
-            startSynthetic();
-            return;
-          }
-          const id = setInterval(async () => {
-            const stillLive = await tryLive();
-            if (!stillLive) {
-              clearInterval(id);
-              startSynthetic();
-            }
-          }, 700);
-          // store so we can clear on unmount
-          synthId = { interval: id };
-        })();
+          const live = await tryLive();
+          if (cancelled) return;
+          if (live) stopSynthetic();
+          else startSynthetic();
+        };
+        probeOnce();
+        probeInterval = setInterval(probeOnce, 700);
 
         return () => {
           cancelled = true;
-          if (synthId && typeof synthId === 'object') clearInterval(synthId.interval);
-          else if (synthId) clearInterval(synthId);
+          stopSynthetic();
+          if (probeInterval) clearInterval(probeInterval);
         };
       }, [pushSynthetic]);
 

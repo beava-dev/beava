@@ -1,24 +1,23 @@
-"""Hook the homepage's Live decision feed up to a real beava server.
+"""Decision-feed generator for beava.dev.
 
 What this does
 --------------
-1. Connects to a beava server (you start it separately: see the comment block
-   at the bottom). Registers three pipelines that match the homepage tabs —
-   fraud (LoginAttempt → UserSignals), recommendations (ProductClick →
-   UserAffinity), and guardrails (LLMRequest → OrgBudget).
-2. Spawns a pusher thread that picks a random scenario every ~1.4s, pushes
-   the event, queries the resulting feature row, and emits a decision.
-3. Serves the website's static files from ./beava-website/project AND a
-   small JSON endpoint at /feed that the homepage polls. One origin, no
-   CORS hassle.
+1. Connects to the beava-website-beava container at http://beava:8080.
+2. Registers three demo pipelines on top of the existing SiteMetrics
+   pipeline that backs the site's own page-view tracking:
+     - LoginAttempt   -> UserSignals(failed_logins_10m, attempts_1h)
+     - ProductClick   -> UserAffinity(recent_clicks_30m, top_categories_1h)
+     - LLMRequest     -> OrgBudget(tokens_used_24h, requests_1m)
+3. Pushes a synthetic event every PUSH_EVERY_S seconds, queries the
+   resulting feature, composes a (event, entity, feature, decision) row,
+   and keeps the most recent FEED_LEN rows in an in-memory ring buffer.
+4. Serves `GET /feed` on FEED_PORT with the ring buffer + a measured
+   round-trip latency for the last push+get. Caddy proxies
+   /api/feed -> generator:FEED_PORT.
 
-Run
----
-    cargo run --release --bin beava -- --http-addr 127.0.0.1:6400 \\
-        --memory-only --test-mode &
-    python3 beava-website/scripts/dev-demo.py
-
-Then open http://127.0.0.1:8889/ — the hero feed is now real beava state.
+The events are synthetic; the FEATURE VALUES are real beava state.
+Each /feed row corresponds to an actual /push + /get round trip against
+the production beava on this box.
 """
 from __future__ import annotations
 
@@ -31,23 +30,17 @@ import sys
 import threading
 import time
 from collections import deque
-from pathlib import Path
 
-# Make the in-tree Python SDK importable without `pip install -e`.
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "python"))
+import beava as bv
 
-import beava as bv  # noqa: E402
-
-BEAVA_URL = os.environ.get("BEAVA_URL", "http://127.0.0.1:6400")
-SITE_DIR = ROOT / "beava-website" / "project"
-WEB_PORT = int(os.environ.get("WEB_PORT", "8889"))
+BEAVA_URL = os.environ.get("BEAVA_URL", "http://beava:8080")
+FEED_PORT = int(os.environ.get("FEED_PORT", "8090"))
 PUSH_EVERY_S = float(os.environ.get("PUSH_EVERY_S", "1.4"))
-FEED_LEN = 3
+FEED_LEN = int(os.environ.get("FEED_LEN", "3"))
+
 
 # ─────────────────────────────────────────────────────────────────────────
-# Pipelines — one per decision category shown on the homepage tabs.
-# Keeping them small so the demo registers in <1s.
+# Pipelines — same shape as the three homepage tabs.
 # ─────────────────────────────────────────────────────────────────────────
 
 
@@ -96,7 +89,7 @@ def OrgBudget(e: LLMRequest):
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# Pusher — turns the homepage's six "scenarios" into real beava events
+# Event generation
 # ─────────────────────────────────────────────────────────────────────────
 
 
@@ -108,39 +101,35 @@ def _random_org() -> str:
     return f"org_{random.choice(['acme', 'globex', 'umbra', 'soylent'])}"
 
 
+# One scenario per pipeline tab — keep this in sync with the homepage's
+# FEED_TEMPLATES order. Bias toward fraud (clearest read for new visitors).
 SCENARIOS = [
-    # One scenario per registered pipeline tab. Same order, same feature key
-    # the homepage code block declares. Don't add a scenario here without a
-    # matching tab on the page — the live feed would surface a feature key
-    # the user can't find in any visible pipeline.
     "login_failed",
-    "login_failed",  # bias toward fraud — clearest read for a new visitor
+    "login_failed",
     "product_clicked",
     "llm_request",
 ]
 
 
-def _make_event(name: str) -> tuple[str, dict, str]:
-    """Return (event_name, fields, entity_key)."""
-    if name == "login_failed":
+def _make_event(scenario: str) -> tuple[str, dict, str]:
+    if scenario == "login_failed":
         uid = _random_user()
         return "LoginAttempt", {"user_id": uid, "success": False}, uid
-    if name == "product_clicked":
+    if scenario == "product_clicked":
         uid = _random_user()
-        cat = random.choice(["shoes", "books", "kitchen", "tools", "garden"])
         return "ProductClick", {
             "user_id": uid,
             "product_id": f"p_{random.randint(100, 999)}",
-            "category": cat,
+            "category": random.choice(["shoes", "books", "kitchen", "tools", "garden"]),
         }, uid
-    if name == "llm_request":
+    if scenario == "llm_request":
         oid = _random_org()
         return "LLMRequest", {
             "org_id": oid,
             "tokens": random.randint(120, 4500),
             "model": random.choice(["gpt-5", "haiku-4-5", "sonnet-4-6"]),
         }, oid
-    raise KeyError(name)
+    raise KeyError(scenario)
 
 
 def _decide(scenario: str, feature_value) -> str:
@@ -160,34 +149,14 @@ def _format_value(scenario: str, value):
     return value
 
 
-# Ring buffer of recent decisions, newest-first. Thread-safe via the GIL on
-# list operations + an explicit lock around list/deque swaps.
+# ─────────────────────────────────────────────────────────────────────────
+# Ring buffer + pusher loop
+# ─────────────────────────────────────────────────────────────────────────
+
+
 _feed: deque = deque(maxlen=FEED_LEN)
 _feed_lock = threading.Lock()
 _latency_ms: float = 0.0
-
-
-def warm_start(app: bv.App) -> None:
-    """Synchronously seed the feed before the HTTP server starts serving.
-
-    Why synchronously: if the steady-state pusher runs in a daemon thread
-    AND the HTTP server starts at the same time, /feed can serve an empty
-    ring buffer for the first few hundred ms. The homepage flips to
-    synthetic mode on an empty response, which is the wrong default for
-    a freshly-booted demo.
-    """
-    for s in ("login_failed", "product_clicked", "llm_request"):
-        _push_one(app, s)
-
-
-def pusher_loop(app: bv.App) -> None:
-    while True:
-        scenario = random.choice(SCENARIOS)
-        try:
-            _push_one(app, scenario)
-        except Exception as exc:  # surface but don't die
-            sys.stderr.write(f"[dev-demo] push error: {exc!r}\n")
-        time.sleep(PUSH_EVERY_S)
 
 
 def _push_one(app: bv.App, scenario: str) -> None:
@@ -206,14 +175,13 @@ def _push_one(app: bv.App, scenario: str) -> None:
     t0 = time.perf_counter()
     app.push(event_name, fields)
     row = app.get(table, key=entity)
-    elapsed = (time.perf_counter() - t0) * 1000
-    _latency_ms = elapsed
+    _latency_ms = (time.perf_counter() - t0) * 1000
     value = row.get(feature_key) if isinstance(row, dict) else None
     decision = _decide(scenario, value)
     item = {
         "id": f"{int(time.time() * 1000)}-{random.randint(0, 9999)}",
         "ts": int(time.time() * 1000),
-        "event": event_name,  # @bv.event class name; matches the code block in the tab below
+        "event": event_name,  # the @bv.event class name; matches the homepage code block
         "entity": entity,
         "feature": {"key": feature_key, "value": _format_value(scenario, value)},
         "decision": decision,
@@ -222,58 +190,49 @@ def _push_one(app: bv.App, scenario: str) -> None:
         _feed.appendleft(item)
 
 
-# ─────────────────────────────────────────────────────────────────────────
-# HTTP server — static files + /feed
-# ─────────────────────────────────────────────────────────────────────────
+def warm_start(app: bv.App) -> None:
+    """Seed the feed before the HTTP server starts serving so /feed is never empty."""
+    for s in ("login_failed", "product_clicked", "llm_request"):
+        _push_one(app, s)
 
 
-class _Handler(http.server.SimpleHTTPRequestHandler):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=str(SITE_DIR), **kwargs)
-
-    def log_message(self, fmt, *args):  # quiet the access log
+def pusher_loop(app: bv.App) -> None:
+    while True:
         try:
-            msg = fmt % args
-        except Exception:
-            msg = fmt
-        if "/api/feed" in msg:
+            _push_one(app, random.choice(SCENARIOS))
+        except Exception as exc:
+            sys.stderr.write(f"[generator] push error: {exc!r}\n")
+        time.sleep(PUSH_EVERY_S)
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# HTTP server — GET /feed returns the ring buffer as JSON
+# ─────────────────────────────────────────────────────────────────────────
+
+
+class _FeedHandler(http.server.BaseHTTPRequestHandler):
+    def log_message(self, fmt, *args):  # quiet
+        if "/feed" in (args[0] if args else ""):
             return
-        sys.stderr.write("[dev-demo] " + msg + "\n")
+        sys.stderr.write("[generator] " + (fmt % args) + "\n")
 
     def do_GET(self):  # noqa: N802
-        if self.path.startswith("/api/feed"):
-            with _feed_lock:
-                payload = {
-                    "rows": list(_feed),
-                    "latency_ms": round(_latency_ms, 1),
-                }
-            body = json.dumps(payload).encode("utf-8")
+        if self.path == "/feed" or self.path == "/health":
+            if self.path == "/health":
+                body = b'{"status":"ok"}'
+            else:
+                with _feed_lock:
+                    payload = {"rows": list(_feed), "latency_ms": round(_latency_ms, 1)}
+                body = json.dumps(payload).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
-            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(body)
             return
-        return super().do_GET()
-
-    def send_error(self, code, message=None, explain=None):
-        # Cloudflare Pages serves /404.html on any unmatched URL. Mirror that
-        # locally so devs see the real 404 page, not Python's default plaintext.
-        if code == 404:
-            page = SITE_DIR / "404.html"
-            if page.is_file():
-                body = page.read_bytes()
-                self.send_response(404)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.send_header("Content-Length", str(len(body)))
-                self.send_header("Cache-Control", "no-store")
-                self.end_headers()
-                if self.command != "HEAD":
-                    self.wfile.write(body)
-                return
-        super().send_error(code, message, explain)
+        self.send_response(404)
+        self.end_headers()
 
 
 class _ThreadedHTTP(socketserver.ThreadingMixIn, http.server.HTTPServer):
@@ -282,31 +241,37 @@ class _ThreadedHTTP(socketserver.ThreadingMixIn, http.server.HTTPServer):
 
 
 def main() -> None:
-    print(f"[dev-demo] connecting to beava at {BEAVA_URL}", file=sys.stderr)
+    print(f"[generator] connecting to beava at {BEAVA_URL}", file=sys.stderr)
+    # Retry registration — beava container may not be ready on first try.
     app = bv.App(BEAVA_URL)
     app.__enter__()
-    try:
-        print("[dev-demo] registering pipelines", file=sys.stderr)
-        app.register(
-            LoginAttempt, UserSignals,
-            ProductClick, UserAffinity,
-            LLMRequest, OrgBudget,
-            force=True,
-        )
-    except Exception as exc:
-        print(f"[dev-demo] register failed: {exc!r}", file=sys.stderr)
-        sys.exit(1)
+    for attempt in range(60):
+        try:
+            app.register(
+                LoginAttempt, UserSignals,
+                ProductClick, UserAffinity,
+                LLMRequest, OrgBudget,
+                force=True,
+            )
+            print("[generator] pipelines registered", file=sys.stderr)
+            break
+        except Exception as exc:
+            sys.stderr.write(f"[generator] register attempt {attempt + 1} failed: {exc!r}\n")
+            time.sleep(2)
+    else:
+        sys.exit("[generator] could not register pipelines after 60 attempts")
+
+    print("[generator] warm-starting feed...", file=sys.stderr)
+    warm_start(app)
 
     t = threading.Thread(target=pusher_loop, args=(app,), daemon=True)
     t.start()
 
-    print(f"[dev-demo] serving {SITE_DIR} on http://127.0.0.1:{WEB_PORT}", file=sys.stderr)
-    print(f"[dev-demo] feed at      http://127.0.0.1:{WEB_PORT}/feed", file=sys.stderr)
-    server = _ThreadedHTTP(("127.0.0.1", WEB_PORT), _Handler)
+    print(f"[generator] serving /feed on 0.0.0.0:{FEED_PORT}", file=sys.stderr)
+    server = _ThreadedHTTP(("0.0.0.0", FEED_PORT), _FeedHandler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("[dev-demo] shutting down", file=sys.stderr)
         server.shutdown()
         app.close()
 
