@@ -3,14 +3,25 @@
 What this does
 --------------
 1. Connects to the beava-website-beava container at http://beava:8080.
-2. Registers three demo pipelines on top of the existing SiteMetrics
-   pipeline that backs the site's own page-view tracking:
-     - LoginAttempt   -> UserSignals(failed_logins_10m, attempts_1h)
-     - ProductClick   -> UserAffinity(recent_clicks_30m, top_categories_1h)
-     - LLMRequest     -> OrgBudget(tokens_used_24h, requests_1m)
-3. Pushes a synthetic event every PUSH_EVERY_S seconds, queries the
-   resulting feature, composes a (event, entity, feature, decision) row,
-   and keeps the most recent FEED_LEN rows in an in-memory ring buffer.
+2. Owns the FULL registry for the beava.dev instance and registers it
+   on startup with force=true:
+     - PageView       -> SiteMetrics   (real visitor page-view counter)
+     - LoginAttempt   -> UserSignals   (failed_logins_10m, attempts_1h)
+     - ProductClick   -> UserAffinity  (recent_clicks_30m, top_categories_1h)
+     - LLMRequest     -> OrgBudget     (tokens_used_24h, requests_1m)
+
+   Wholesale ownership matters: beava /register with force=true REPLACES
+   the registry. If two services both register with force=true but
+   different sets, the last one wins and the other's pipelines vanish.
+   Keeping all four definitions here means the generator owns the
+   schema; the deploy workflow no longer needs a separate register step.
+
+3. Pushes a synthetic event every PUSH_EVERY_S seconds for the three
+   demo pipelines, queries the resulting feature, composes a
+   (event, entity, feature, decision) row, and keeps the most recent
+   FEED_LEN rows in an in-memory ring buffer. PageView is fed by real
+   visitors via /api/push/PageView; we don't synthesize page-views here.
+
 4. Serves `GET /feed` on FEED_PORT with the ring buffer + a measured
    round-trip latency for the last push+get. Caddy proxies
    /api/feed -> generator:FEED_PORT.
@@ -40,8 +51,28 @@ FEED_LEN = int(os.environ.get("FEED_LEN", "3"))
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# Pipelines — same shape as the three homepage tabs.
+# Pipelines — same shape as the three homepage tabs, plus PageView for
+# the site's own visitor analytics. Keep all four here; the generator's
+# register call is the registry's single source of truth.
 # ─────────────────────────────────────────────────────────────────────────
+
+
+# Real-visitor page-view counter. Fed by /api/push/PageView from
+# project/js/track-pageview.js on every page load on beava.dev.
+@bv.event
+class PageView:
+    session_id: str
+    path: str
+    dwell_ms: int  # set when the visitor leaves the page
+
+
+@bv.table  # no key= -> one row, site-wide (ADR-003)
+def SiteMetrics(e: PageView):
+    return e.agg(
+        median_dwell_1h=bv.quantile("dwell_ms", q=0.5, window="1h"),
+        page_views_24h=bv.count(window="24h"),
+        top_page_1h=bv.top_k("path", k=1, window="1h"),
+    )
 
 
 @bv.event
@@ -248,12 +279,13 @@ def main() -> None:
     for attempt in range(60):
         try:
             app.register(
+                PageView, SiteMetrics,
                 LoginAttempt, UserSignals,
                 ProductClick, UserAffinity,
                 LLMRequest, OrgBudget,
                 force=True,
             )
-            print("[generator] pipelines registered", file=sys.stderr)
+            print("[generator] pipelines registered (4: SiteMetrics + 3 demo)", file=sys.stderr)
             break
         except Exception as exc:
             sys.stderr.write(f"[generator] register attempt {attempt + 1} failed: {exc!r}\n")

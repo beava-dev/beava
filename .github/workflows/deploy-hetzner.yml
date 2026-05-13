@@ -130,51 +130,14 @@ jobs:
             beava-website/project/ \
             root@178.104.164.100:/srv/beava-website/project/
 
-      - name: Set up Python + install Beava SDK
-        # The pipeline is defined in Python at beava-website/deploy/register_pipeline.py
-        # — same SDK code shown on the landing page. We install the SDK from
-        # this repo's python/ source (matching the merged commit) so the
-        # generated wire payload is always in sync with the SDK shipping in
-        # the same image.
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install Beava SDK
-        run: pip install ./python
-
-      - name: Generate wire payload from register_pipeline.py
-        # The Python file IS the source of truth. `--dump` emits the wire
-        # JSON the server expects, with force=true. No hand-written JSON.
-        run: |
-          python beava-website/deploy/register_pipeline.py --dump \
-            > /tmp/register-payload.json
-          echo "── payload preview (first 800 bytes) ──"
-          head -c 800 /tmp/register-payload.json; echo
-
-      - name: Re-register SiteMetrics pipeline against live beava
-        # Always-run, idempotent: POST the freshly-generated payload to
-        # /register on the internal beava (port 8080, docker network).
-        # `force=true` (set inside the payload by --dump) allows
-        # schema-changing updates to land without a manual override.
-        # The generator container re-registers its own three pipelines
-        # (UserSignals / UserAffinity / OrgBudget) on every container
-        # start, so this step only ships SiteMetrics.
-        run: |
-          rsync -av --no-perms --no-owner --no-group \
-            /tmp/register-payload.json \
-            root@178.104.164.100:/tmp/register-payload.json
-          # POST via a one-shot curlimages container on the docker network.
-          ssh -o StrictHostKeyChecking=no root@178.104.164.100 bash <<'REMOTE'
-            set -euo pipefail
-            docker run --rm --network beava-website-net \
-              -v /tmp/register-payload.json:/r.json:ro \
-              curlimages/curl:latest -sS --fail-with-body \
-              -X POST http://beava:8080/register \
-              -H "Content-Type: application/json" \
-              --data-binary @/r.json
-            rm -f /tmp/register-payload.json
-          REMOTE
+      # Registry ownership: the generator container is the single source
+      # of truth for what's registered on this beava. On startup it
+      # registers all four pipelines (PageView/SiteMetrics + the three
+      # demo pipelines) with force=true. The previous separate
+      # register-SiteMetrics step here used to fight the generator —
+      # whichever ran last wiped the other's pipelines, because beava's
+      # /register with force=true is a wholesale registry replace. We
+      # rebuilt the generator above, which already re-registered.
 
       - name: Smoke test live origin
         # Hit the internal caddy on 127.0.0.1:8082 over SSH. Verifies the
