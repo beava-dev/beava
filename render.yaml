@@ -30,6 +30,11 @@ services:
       name: beava-data
       mountPath: /data
       sizeGB: 1
-    envVars:
-      - key: PORT
-        value: 8080
+    # No envVars needed. The image's bundled /app/beava.yaml already binds
+    # HTTP to 0.0.0.0:8080, admin to 0.0.0.0:8090, and stores WAL + snapshots
+    # under /data. Override with BEAVA_LISTEN_ADDR / BEAVA_ADMIN_ADDR / etc.
+    # if you need to (see beava docs → Deploy → "Env var overrides").
+    #
+    # NOTE: The TCP fast-path on :8081 is NOT exposed by Render. Render web
+    # services only route HTTP/HTTPS. For TCP fast-path access, pick a host
+    # with raw-TCP support (Railway TCP Proxy, Fly.io, Hetzner, EC2).

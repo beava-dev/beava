@@ -62,6 +62,8 @@
       { id: 'render',  label: 'Deploy on Render' },
       { id: 'railway', label: 'Deploy on Railway' },
       { id: 'docker',  label: 'Run the Docker image' },
+      { id: 'tcp',     label: 'TCP fast-path' },
+      { id: 'env',     label: 'Env var overrides' },
       { id: 'verify',  label: 'Verify the deploy' },
       { id: 'sizing',  label: 'Sizing and limits' },
     ];
@@ -144,6 +146,39 @@
   -v $PWD/beava.yaml:/app/beava.yaml:ro \\
   beavadev/beava:latest`}
             </Code>
+
+            <h2 id="tcp">TCP fast-path</h2>
+
+            <p>beava serves two transports on separate ports: HTTP on <code>:8080</code> for curl, browsers, load balancers, and the SDK's HTTP transport; <strong>framed TCP on <code>:8081</code></strong> for the SDK's lower-latency fast-path. TCP shaves the per-request overhead by a few μs and is what production fraud-team workloads use.</p>
+
+            <p>The image ships with TCP <strong>disabled</strong>. To enable it, set two env vars on the service:</p>
+
+            <Code lang="bash">
+{`BEAVA_TCP_ENABLED=true
+BEAVA_TCP_HOST=0.0.0.0`}
+            </Code>
+
+            <p>Whether you can actually <em>reach</em> port 8081 from outside the box depends on the host:</p>
+
+            <ul>
+              <li><strong>Render</strong>: <em>not supported</em>. Render web services proxy HTTP/HTTPS only — raw TCP from the public internet won't reach the container. Keep HTTP if you're on Render.</li>
+              <li><strong>Railway</strong>: <em>supported</em> via <em>TCP Proxy</em>. In the service settings → <em>Networking</em> → click <em>TCP Proxy</em> → expose port <code>8081</code>. Railway hands back a <code>proxy.rlwy.net:NNNNN</code> public endpoint. Set <code>BEAVA_TCP_ENABLED=true</code> and <code>BEAVA_TCP_HOST=0.0.0.0</code> in the service env, redeploy, and point your SDK at the proxy endpoint.</li>
+              <li><strong>Fly.io / Hetzner / EC2 / your laptop</strong>: <em>supported</em>. Just bind port 8081 to the public interface and open it in your security group.</li>
+            </ul>
+
+            <h2 id="env">Env var overrides</h2>
+
+            <p>The image's bundled <code>/app/beava.yaml</code> provides sensible defaults — most deploys need <strong>zero env vars</strong>. Set these only if you need to override:</p>
+
+            <ul>
+              <li><code>BEAVA_LISTEN_ADDR</code> — HTTP data plane bind addr (default <code>0.0.0.0:8080</code> in the image)</li>
+              <li><code>BEAVA_ADMIN_ADDR</code> — admin sidecar bind addr (default <code>0.0.0.0:8090</code>)</li>
+              <li><code>BEAVA_TCP_ENABLED</code> — <code>true</code> / <code>false</code>. Default <strong>off</strong>; turn on to serve the TCP fast-path.</li>
+              <li><code>BEAVA_TCP_HOST</code> — TCP bind host (default <code>127.0.0.1</code>; set to <code>0.0.0.0</code> for external access)</li>
+              <li><code>BEAVA_TCP_PORT</code> — TCP bind port (default <code>8081</code>)</li>
+              <li><code>BEAVA_WAL_DIR</code>, <code>BEAVA_SNAPSHOT_DIR</code> — state paths (default <code>/data/wal</code> + <code>/data/snapshots</code> in the image)</li>
+              <li><code>BEAVA_LOG_LEVEL</code> — <code>trace</code> / <code>debug</code> / <code>info</code> / <code>warn</code> / <code>error</code> (default <code>info</code>)</li>
+            </ul>
 
             <h2 id="verify">Verify the deploy</h2>
 
