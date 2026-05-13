@@ -14,9 +14,8 @@
 </p>
 
 <p align="center">
-  <a href="https://render.com/deploy?repo=https://github.com/beava-dev/beava"><img src="https://render.com/images/deploy-to-render-button.svg" alt="Deploy to Render" height="32"/></a>
-  &nbsp;
-  <a href="https://railway.com/deploy/beava?referralCode=xkfMVJ&amp;utm_medium=integration&amp;utm_source=template&amp;utm_campaign=generic"><img src="https://railway.com/button.svg" alt="Deploy on Railway" height="32"/></a>
+  <a href="https://render.com/deploy?repo=https://github.com/beava-dev/beava"><img src="https://img.shields.io/badge/deploy-Render-46e3b7?logo=render&logoColor=white" alt="Deploy to Render"/></a>
+  <a href="https://railway.com/deploy/beava?referralCode=xkfMVJ&amp;utm_medium=integration&amp;utm_source=template&amp;utm_campaign=generic"><img src="https://img.shields.io/badge/deploy-Railway-0b0d0e?logo=railway&logoColor=white" alt="Deploy on Railway"/></a>
 </p>
 
 ---
