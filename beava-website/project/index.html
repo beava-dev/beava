@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>beava — real-time user features without heavy streaming infra</title>
-  <meta name="description" content="Define aggregations in Python, POST events over HTTP, and query fresh values by key in sub-millisecond latency. One binary. No Kafka, Flink, brokers, clusters, or stream jobs.">
+  <title>beava — react to what just happened</title>
+  <meta name="description" content="beava turns live events into fresh features for fraud, recommendations, and guardrails — no Kafka, no Flink, no feature store. One binary, HTTP in, HTTP out.">
   <link rel="stylesheet" href="styles/colors_and_type.css">
   <link rel="stylesheet" href="styles/site.css">
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="shortcut icon" href="/assets/favicon.ico">
@@ -21,404 +21,383 @@
   <script type="text/babel" src="js/_shared/SiteFooter.jsx"></script>
 
   <script type="text/babel">
-    // beava.dev homepage — Hero · PipelineShowcase · Pillars · FinalCTA
+    // beava.dev homepage — centered Hero · 3-tab PipelineShowcase · Pillars · FinalCTA
+    //
+    // Ported from beava-design-system/project/ui_kits/marketing/ (chat8,
+    // 2026-05-12). Hero is single-column centered: heading → subhead → CTAs →
+    // wide Live decision feed panel below. Mascot lives in the top-right
+    // corner as a slow-loop gif. The DecisionFeed auto-streams a synthetic
+    // event ≈ every 2.4s — replaces the prior live /api/get hero panel.
 
-    // LiveQueriesPanel — chat7 (2026-05-09) hero, refit to query the REAL
-    // SiteMetrics pipeline that backs this site. Polls /api/get every
-    // 1.5s; values you see are the live row from the production beava
-    // instance.
-    //
-    // Each card shows both sides of the loop:
-    //
-    //   Top row:    app.get("SiteMetrics")["<feature>"]   ← what a client types
-    //   Bottom row: → bv.<op>(...) = <live value>          ← the operator that
-    //                                                        defined the feature,
-    //                                                        plus its current value
-    //
-    // The three features map 1:1 to register_pipeline.py:
-    //
-    //   page_views_24h  ← bv.count(window="24h")
-    //   median_dwell_1h ← bv.quantile("dwell_ms", q=0.5, window="1h")
-    //   top_page_1h     ← bv.top_k("path", k=1, window="1h")
-    //
-    // PipelineOutput below polls the same endpoint independently (different
-    // cadence) — fault-tolerance: one panel surviving doesn't block the
-    // other. Cold-start fallback values match PipelineOutput's SEED.
-    const SITE_METRICS_SEED = {
-      page_views_24h: 14207,
-      median_dwell_1h: 6250.0,
-      top_page_1h: [{ value: '/', count: 412 }],
+    // ─────────────────────────────────────────────────────────────────────
+    // DecisionFeed — synthetic event stream that demos event → feature → decision
+    // ─────────────────────────────────────────────────────────────────────
+
+    const FEED_TEMPLATES = {
+      login_failed: {
+        event: 'login_failed',
+        entity: () => `user_${1000 + Math.floor(Math.random() * 900)}`,
+        feature: (n) => ({ key: 'failed_logins_10m', value: n }),
+        valueOf: (prev) => (prev ? prev + 1 : 3 + Math.floor(Math.random() * 5)),
+        decision: (v) => v >= 5 ? 'require verification' : 'increase risk score',
+      },
+      card_added: {
+        event: 'card_added',
+        entity: () => `device_${10 + Math.floor(Math.random() * 90)}`,
+        feature: (n) => ({ key: 'cards_per_device_1h', value: n }),
+        valueOf: (prev) => (prev ? prev + 1 : 2 + Math.floor(Math.random() * 3)),
+        decision: (v) => v >= 4 ? 'flag for review' : 'increase risk score',
+      },
+      product_clicked: {
+        event: 'product_clicked',
+        entity: () => `user_${1000 + Math.floor(Math.random() * 900)}`,
+        feature: () => ({ key: 'recent_clicks_30m', value: `${2 + Math.floor(Math.random() * 5)} items` }),
+        decision: () => 'refresh recommendations',
+      },
+      llm_request: {
+        event: 'llm_request',
+        entity: () => `org_${['acme','globex','umbra','soylent'][Math.floor(Math.random()*4)]}`,
+        feature: (n) => ({ key: 'tokens_used_24h', value: `${n}k` }),
+        valueOf: (prev) => prev ? prev + 4 + Math.floor(Math.random()*8) : 60 + Math.floor(Math.random() * 40),
+        decision: (v) => v >= 90 ? 'throttle expensive model' : 'route to cheap model',
+      },
+      payment_attempt: {
+        event: 'payment_attempt',
+        entity: () => `card_${10 + Math.floor(Math.random() * 90)}`,
+        feature: (n) => ({ key: 'cvc_fails_1h', value: n }),
+        valueOf: (prev) => prev ? prev + 1 : 1 + Math.floor(Math.random() * 3),
+        decision: (v) => v >= 3 ? 'block transaction' : 'allow',
+      },
+      search_query: {
+        event: 'search_query',
+        entity: () => `user_${1000 + Math.floor(Math.random() * 900)}`,
+        feature: () => ({ key: 'searches_5m', value: 4 + Math.floor(Math.random() * 10) }),
+        decision: () => 'boost ranking signals',
+      },
     };
 
-    const QUERY_ROWS = [
-      {
-        id: 'page_views_24h',
-        feature: 'page_views_24h',
-        op: { fn: 'bv.count', args: [{ k: 'window', v: '"24h"' }] },
-        fmt: (n) => Math.round(n || 0).toLocaleString('en-US'),
-        pick: (d) => d.page_views_24h ?? 0,
-      },
-      {
-        id: 'median_dwell_1h',
-        feature: 'median_dwell_1h',
-        op: { fn: 'bv.quantile', args: [{ v: '"dwell_ms"' }, { k: 'q', v: '0.5' }, { k: 'window', v: '"1h"' }] },
-        fmt: (ms) => `${((ms || 0) / 1000).toFixed(1)}s`,
-        pick: (d) => d.median_dwell_1h ?? 0,
-      },
-      {
-        id: 'top_page_1h',
-        feature: 'top_page_1h',
-        op: { fn: 'bv.top_k', args: [{ v: '"path"' }, { k: 'k', v: '1' }, { k: 'window', v: '"1h"' }] },
-        fmt: (top) => top ? `${JSON.stringify(top.value)} · ${(top.count || 0).toLocaleString('en-US')}` : '—',
-        pick: (d) => Array.isArray(d.top_page_1h) ? d.top_page_1h[0] : null,
-      },
-    ];
+    const ORDER = ['login_failed', 'card_added', 'product_clicked', 'llm_request', 'payment_attempt', 'search_query'];
 
-    // Renders `fn(arg, key=val, ...)` with syntax-coloured tokens. Args
-    // shaped `{ v }` render positional; `{ k, v }` render as kwargs.
-    // Optional `index` appends `["<index>"]` after the closing paren —
-    // for queries that read one feature out of a row dict.
-    const Signature = ({ fn, args, index }) => (
-      <React.Fragment>
-        <span style={{ color: 'var(--code-fn)' }}>{fn}</span>
-        <span style={{ color: 'var(--fg3)' }}>(</span>
-        {args.map((a, i) => (
-          <React.Fragment key={i}>
-            {i > 0 && <span style={{ color: 'var(--fg3)' }}>, </span>}
-            {a.k && (
-              <React.Fragment>
-                <span style={{ color: 'var(--code-keyword)' }}>{a.k}</span>
-                <span style={{ color: 'var(--fg3)' }}>=</span>
-              </React.Fragment>
-            )}
-            <span style={{ color: 'var(--code-string)' }}>{a.v}</span>
-          </React.Fragment>
-        ))}
-        <span style={{ color: 'var(--fg3)' }}>)</span>
-        {index && (
-          <React.Fragment>
-            <span style={{ color: 'var(--fg3)' }}>[</span>
-            <span style={{ color: 'var(--code-string)' }}>"{index}"</span>
-            <span style={{ color: 'var(--fg3)' }}>]</span>
-          </React.Fragment>
-        )}
-      </React.Fragment>
-    );
-
-    const QueryCard = ({ row, pulse }) => {
-      const text = row.fmt ? row.fmt(row.value) : String(row.value);
-      return (
-        <div style={{
-          background: '#fff', border: '1px solid var(--border)', borderRadius: 14,
-          padding: '12px 16px', boxShadow: 'var(--shadow-sm)',
-          display: 'flex', flexDirection: 'column', gap: 6,
-          minWidth: 0,
-        }}>
-          {/* Top row — the dict-access on `row` (hoisted to panel header) */}
-          <div style={{
-            fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 500,
-            color: 'var(--fg2)', minWidth: 0, overflow: 'hidden',
-            textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>
-            <span style={{ color: 'var(--fg3)' }}>row</span>
-            <span style={{ color: 'var(--fg3)' }}>[</span>
-            <span style={{ color: 'var(--code-string)' }}>"{row.feature}"</span>
-            <span style={{ color: 'var(--fg3)' }}>]</span>
-          </div>
-          {/* Bottom row — arrow → operator that computed the result = value */}
-          <div style={{
-            display: 'flex', alignItems: 'baseline', flexWrap: 'wrap',
-            columnGap: 8, rowGap: 4, minWidth: 0,
-            fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 500,
-            color: 'var(--fg2)',
-          }}>
-            <span style={{ color: 'var(--accent)', fontSize: 14, fontWeight: 600 }}>→</span>
-            <span style={{
-              minWidth: 0, overflow: 'hidden',
-              textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%',
-            }}>
-              <Signature {...row.op}/>
-            </span>
-            <span style={{ color: 'var(--fg3)' }}>=</span>
-            <span key={text} style={{
-              fontFamily: 'var(--font-mono)', fontSize: 14.5, fontWeight: 600,
-              color: 'var(--fg1)',
-              background: pulse ? 'var(--beava-orange-wash)' : 'transparent',
-              padding: '1px 8px', borderRadius: 6,
-              transition: 'background 600ms cubic-bezier(0.22,1,0.36,1)',
-              whiteSpace: 'nowrap',
-              animation: 'beava-fade-up 320ms cubic-bezier(0.22,1,0.36,1)',
-            }}>{text}</span>
-          </div>
-        </div>
-      );
+    const mintRow = (name, idx, ts) => {
+      const t = FEED_TEMPLATES[name];
+      const entity = t.entity();
+      const rawVal = t.valueOf ? t.valueOf() : null;
+      const feat = t.feature(rawVal);
+      const decision = t.decision(rawVal ?? feat.value);
+      return {
+        id: `${ts}-${idx}-${Math.random().toString(36).slice(2,6)}`,
+        ts, event: t.event, entity, feature: feat, decision,
+        isNew: true,
+      };
     };
 
-    const LiveQueriesPanel = () => {
-      const [data, setData] = React.useState(SITE_METRICS_SEED);
-      const [pulseId, setPulseId] = React.useState(null);
+    const seedRows = () => {
+      const initial = ['login_failed', 'product_clicked', 'llm_request'];
+      return initial.map((name, i) => mintRow(name, i, Date.now() - (initial.length - i) * 1800));
+    };
+
+    const ageLabel = (ts, now) => {
+      const sec = Math.max(0, Math.floor((now - ts) / 1000));
+      if (sec < 1) return 'just now';
+      if (sec < 60) return `${sec}s ago`;
+      return `${Math.floor(sec / 60)}m ago`;
+    };
+
+    // useDecisionFeed — polls /feed (served by beava-website/scripts/dev-demo.py
+    // when it's running) for real rows produced by a beava server. Falls back
+    // to the synthetic generator above if /feed returns anything but a valid
+    // payload, so the marketing site keeps animating even when there's no
+    // backend (e.g. static-hosted on Cloudflare).
+    const useDecisionFeed = () => {
+      const [rows, setRows] = React.useState(seedRows);
+      const [tickMs, setTickMs] = React.useState(0);
       const [isLive, setIsLive] = React.useState(false);
+      const [serverLatency, setServerLatency] = React.useState(null);
+
+      const pushSynthetic = React.useCallback((eventName) => {
+        setRows(prev => {
+          const ts = Date.now();
+          const row = mintRow(eventName, prev.length, ts);
+          return [row, ...prev.map(r => ({ ...r, isNew: false }))].slice(0, 3);
+        });
+      }, []);
 
       React.useEffect(() => {
         let cancelled = false;
-        let prev = SITE_METRICS_SEED;
-        let pulseTimer = null;
-        const refresh = async () => {
+        let synthId = null;
+        let prevIds = '';
+
+        const tryLive = async () => {
           try {
-            const r = await fetch('/api/get', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ table: 'SiteMetrics', key: '' }),
-            });
-            if (cancelled || !r.ok) return;
+            const r = await fetch('/feed', { cache: 'no-store' });
+            if (!r.ok) return false;
             const j = await r.json();
-            if (!j || typeof j !== 'object') return;
-            // Diff against previous to find the first changed feature; pulse it.
-            for (const r of QUERY_ROWS) {
-              if (JSON.stringify(r.pick(prev)) !== JSON.stringify(r.pick(j))) {
-                setPulseId(r.id);
-                if (pulseTimer) clearTimeout(pulseTimer);
-                pulseTimer = setTimeout(() => setPulseId(null), 700);
-                break;
-              }
-            }
-            prev = j;
-            setData(j);
+            if (cancelled || !j || !Array.isArray(j.rows) || j.rows.length === 0) return false;
+            // Mark each row "new" only if it wasn't in the prior list — this
+            // gives the wash-in highlight on actual fresh rows, not on every poll.
+            const ids = j.rows.map(r => r.id).join('|');
+            const fresh = ids !== prevIds;
+            const newestId = j.rows[0]?.id;
+            const next = j.rows.slice(0, 3).map(r => ({ ...r, isNew: fresh && r.id === newestId }));
+            prevIds = ids;
+            setRows(next);
             setIsLive(true);
-          } catch (_) { /* keep previous on transient failure */ }
+            if (typeof j.latency_ms === 'number') setServerLatency(j.latency_ms);
+            return true;
+          } catch (_) {
+            return false;
+          }
         };
-        refresh();
-        const id = setInterval(refresh, 1500);
-        return () => { cancelled = true; clearInterval(id); if (pulseTimer) clearTimeout(pulseTimer); };
+
+        const startSynthetic = () => {
+          if (synthId) return;
+          setIsLive(false);
+          synthId = setInterval(() => {
+            const name = ORDER[Math.floor(Math.random() * ORDER.length)];
+            pushSynthetic(name);
+          }, 2400);
+        };
+
+        // Probe /feed once. If it works, keep polling; otherwise fall back to
+        // the synthetic stream that's always available.
+        (async () => {
+          const ok = await tryLive();
+          if (cancelled) return;
+          if (!ok) {
+            startSynthetic();
+            return;
+          }
+          const id = setInterval(async () => {
+            const stillLive = await tryLive();
+            if (!stillLive) {
+              clearInterval(id);
+              startSynthetic();
+            }
+          }, 700);
+          // store so we can clear on unmount
+          synthId = { interval: id };
+        })();
+
+        return () => {
+          cancelled = true;
+          if (synthId && typeof synthId === 'object') clearInterval(synthId.interval);
+          else if (synthId) clearInterval(synthId);
+        };
+      }, [pushSynthetic]);
+
+      React.useEffect(() => {
+        const id = setInterval(() => setTickMs(Date.now()), 1000);
+        return () => clearInterval(id);
       }, []);
 
-      const rows = QUERY_ROWS.map(r => ({ ...r, value: r.pick(data) }));
+      return { rows, tickMs, isLive, serverLatency };
+    };
+
+    const EventTag = ({ name }) => (
+      <span style={{
+        fontFamily: 'var(--font-mono)', fontSize: 12.5, fontWeight: 600,
+        color: 'var(--fg2)', background: 'var(--beava-paper)',
+        border: '1px solid var(--border)', borderRadius: 6, padding: '3px 8px',
+        whiteSpace: 'nowrap',
+      }}>{name}</span>
+    );
+
+    const FeatureCell = ({ row }) => (
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13.5, color: 'var(--fg2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <span style={{ color: 'var(--fg3)' }}>{row.entity}</span>
+        <span style={{ color: 'var(--fg3)' }}>.</span>
+        <span style={{ color: 'var(--code-keyword)' }}>{row.feature.key}</span>
+        <span style={{ color: 'var(--fg3)' }}> = </span>
+        <span style={{ color: 'var(--fg1)', fontWeight: 600 }}>{row.feature.value}</span>
+      </span>
+    );
+
+    const DecisionCell = ({ text }) => (
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', gap: 8,
+        fontFamily: 'var(--font-sans)', fontSize: 14, fontWeight: 600,
+        color: 'var(--accent)',
+      }}>
+        <span aria-hidden style={{ fontFamily: 'var(--font-mono)', opacity: 0.65 }}>→</span>
+        {text}
+      </span>
+    );
+
+    const FeedRow = ({ row, now, columnWidths }) => (
+      <div style={{
+        display: 'grid', gridTemplateColumns: columnWidths,
+        alignItems: 'center', columnGap: 24,
+        padding: '11px 22px', borderTop: '1px solid var(--border)',
+        animation: row.isNew ? 'beava-row-in 420ms cubic-bezier(0.22,1,0.36,1)' : 'none',
+        background: row.isNew ? 'var(--beava-orange-wash)' : 'transparent',
+        transition: 'background 1200ms cubic-bezier(0.22,1,0.36,1)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+          <EventTag name={row.event}/>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--fg3)', whiteSpace: 'nowrap' }}>
+            {ageLabel(row.ts, now)}
+          </span>
+        </div>
+        <div style={{ minWidth: 0 }}><FeatureCell row={row}/></div>
+        <div style={{ minWidth: 0 }}><DecisionCell text={row.decision}/></div>
+      </div>
+    );
+
+    const ColumnHeader = ({ children }) => (
+      <div style={{
+        fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: 11,
+        textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--fg3)',
+      }}>{children}</div>
+    );
+
+    const DecisionFeed = () => {
+      const { rows, tickMs, isLive, serverLatency } = useDecisionFeed();
+      // When /feed is up, show the real RTT we just measured server-side.
+      // When falling back to the synthetic stream, jitter a plausible number
+      // so the footer doesn't read as a frozen string.
+      const [synthLatencyMs, setSynthLatencyMs] = React.useState(() => 8 + Math.floor(Math.random() * 14));
+      React.useEffect(() => {
+        if (isLive) return;
+        const id = setInterval(() => setSynthLatencyMs(6 + Math.floor(Math.random() * 16)), 1100);
+        return () => clearInterval(id);
+      }, [isLive]);
+      const latencyMs = isLive && typeof serverLatency === 'number'
+        ? (serverLatency < 10 ? serverLatency.toFixed(1) : Math.round(serverLatency))
+        : synthLatencyMs;
+      const columnWidths = 'minmax(240px, 1.05fr) minmax(280px, 1.55fr) minmax(220px, 1.2fr)';
       return (
-        <div style={{ position: 'relative' }}>
+        <div style={{
+          maxWidth: 1040, margin: '0 auto',
+          background: '#fff', border: '1px solid var(--border)',
+          borderRadius: 20, boxShadow: 'var(--shadow-md)', overflow: 'hidden',
+        }}>
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            marginBottom: 8, paddingLeft: 4,
+            padding: '10px 22px', background: 'var(--beava-cream-deep)',
+            borderBottom: '1px solid var(--border)',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{
-                fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 600,
-                textTransform: 'uppercase', letterSpacing: '0.1em',
-                color: 'var(--accent)',
-              }}>Live feature queries</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{
+                fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 700,
+                color: 'var(--fg1)', textTransform: 'uppercase', letterSpacing: '0.12em',
+              }}>Live decision feed</span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 <span style={{
-                  width: 7, height: 7, borderRadius: 999,
-                  background: isLive ? 'var(--beava-success)' : 'var(--border-strong)',
-                  boxShadow: isLive ? '0 0 0 3px rgba(74,122,58,0.20)' : 'none',
-                  animation: isLive ? 'beava-pulse 2s cubic-bezier(0.65,0,0.35,1) infinite' : 'none',
+                  width: 7, height: 7, borderRadius: 999, background: 'var(--beava-success)',
+                  boxShadow: '0 0 0 3px rgba(74,122,58,0.20)',
+                  animation: 'beava-pulse 2s cubic-bezier(0.65,0,0.35,1) infinite',
                 }}/>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg3)' }}>{isLive ? 'live' : 'seed'}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: isLive ? 'var(--beava-success)' : 'var(--fg3)', fontWeight: 600 }}>
+                  {isLive ? 'live · connected' : 'demo · synthetic'}
+                </span>
               </span>
             </div>
           </div>
-          {/* Hoisted query — every card below reads a feature out of `row` */}
+
+          <div className="beava-feed-headers" style={{
+            display: 'grid', gridTemplateColumns: columnWidths,
+            columnGap: 24, padding: '8px 22px 6px',
+          }}>
+            <ColumnHeader>Event</ColumnHeader>
+            <ColumnHeader>Fresh feature</ColumnHeader>
+            <ColumnHeader>Decision</ColumnHeader>
+          </div>
+
+          <div>
+            {rows.map((row) => (
+              <FeedRow key={row.id} row={row} now={tickMs || Date.now()} columnWidths={columnWidths}/>
+            ))}
+          </div>
+
           <div style={{
-            fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--fg2)',
-            paddingLeft: 4, marginBottom: 14, fontWeight: 500,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: 16, flexWrap: 'wrap', padding: '9px 22px',
+            borderTop: '1px solid var(--border)', background: 'var(--beava-paper)',
           }}>
-            <span style={{ color: 'var(--fg3)' }}>row </span>
-            <span style={{ color: 'var(--fg3)' }}>=</span>{' '}
-            <span style={{ color: 'var(--code-fn)' }}>app.get</span>
-            <span style={{ color: 'var(--fg3)' }}>(</span>
-            <span style={{ color: 'var(--code-string)' }}>"SiteMetrics"</span>
-            <span style={{ color: 'var(--fg3)' }}>)</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--fg3)' }}>
+              <span>fresh values</span>
+              <span style={{ color: 'var(--border-strong)' }}>·</span>
+              <span>updated <span style={{ color: 'var(--fg2)' }}>{latencyMs}ms ago</span></span>
+              <span style={{ color: 'var(--border-strong)' }}>·</span>
+              <span>no batch lag</span>
+            </div>
           </div>
-          <div style={{
-            display: 'grid', gridTemplateColumns: 'auto 1fr auto', alignItems: 'center', gap: 10,
-            marginBottom: 14, padding: '0 4px',
-          }}>
-            <span style={{
-              fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--fg3)',
-              padding: '3px 9px', background: 'var(--beava-paper)',
-              border: '1px solid var(--border)', borderRadius: 999,
-            }}>POST /push</span>
-            <span style={{
-              height: 1, background: 'repeating-linear-gradient(90deg, var(--border-strong) 0 4px, transparent 4px 8px)',
-            }}/>
-            <span style={{
-              fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--accent)',
-              padding: '3px 9px', background: 'var(--beava-orange-wash)',
-              border: '1px solid #f1d8c2', borderRadius: 999,
-            }}>fresh values</span>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
-            {rows.map(r => <QueryCard key={r.id} row={r} pulse={pulseId === r.id}/>)}
-          </div>
-          <p style={{
-            margin: '14px 4px 0',
-            fontFamily: 'var(--font-sans)', fontSize: 12.5, color: 'var(--fg3)',
-            fontStyle: 'italic', lineHeight: 1.5,
-          }}>
-            One <code style={{ fontFamily: 'var(--font-mono)', fontStyle: 'normal', color: 'var(--fg2)' }}>app.get</code> reads the row; each feature is a <code style={{ fontFamily: 'var(--font-mono)', fontStyle: 'normal', color: 'var(--fg2)' }}>bv.*</code> aggregation defined once at register time. Fed by HTTP events, served in <span style={{ color: 'var(--fg2)', fontStyle: 'normal' }}>&lt;1ms</span>.
-            {' '}
-            <a href="#pipeline" style={{
-              color: 'var(--accent)', textDecoration: 'none',
-              borderBottom: '1px solid color-mix(in oklab, var(--accent) 35%, transparent)',
-              fontStyle: 'normal', fontWeight: 500,
-            }}>See the pipeline ↓</a>
-          </p>
         </div>
       );
     };
 
-    // v0 install surface: pip (recommended) / docker / cargo. brew
-    // retired (pip wheels still ship to GH Releases / PyPI for SDK users —
-    // see python/README.md). pip install is the canonical first-touch path:
-    // detects platform, pulls the matching wheel from the latest GH Release,
-    // Docker is the zero-deps host alternative.
-    // cargo is the from-source path for Rust-toolchain users.
-    // Backslash-newline continuation in `cmd` is honored by the renderer
-    // (whiteSpace: 'pre') and copy-pastes correctly: shell ignores `\\\n`
-    // and runs the command as one logical line.
-    const INSTALL_TABS = [
-      { id: 'curl',   label: 'curl',   cmd: 'curl -fsSL https://raw.githubusercontent.com/beava-dev/beava/main/scripts/install.sh \\\n  | sh', recommended: true },
-      { id: 'docker', label: 'docker', cmd: 'docker run -p 8080:8080 beavadev/beava:latest' },
-      { id: 'brew',   label: 'brew',   cmd: 'brew install beava-dev/beava/beava' },
-    ];
-
-    const InstallTabs = () => {
-      const [tabId, setTabId] = React.useState('curl');
-      const [copied, setCopied] = React.useState(false);
-      const tab = INSTALL_TABS.find(t => t.id === tabId);
-      const copy = () => {
-        navigator.clipboard?.writeText(tab.cmd);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1400);
-      };
-      return (
-        <div style={{ marginBottom: 18 }}>
-          <div style={{ display: 'flex', gap: 2, paddingLeft: 4 }}>
-            {INSTALL_TABS.map(t => {
-              const active = t.id === tabId;
-              return (
-                <button key={t.id} onClick={() => setTabId(t.id)} style={{
-                  padding: '6px 12px 8px', borderRadius: '8px 8px 0 0',
-                  background: active ? 'var(--code-bg)' : 'transparent',
-                  border: '1px solid', borderColor: active ? 'var(--border)' : 'transparent',
-                  borderBottom: active ? '1px solid var(--code-bg)' : '1px solid var(--border)',
-                  position: 'relative', top: 1,
-                  fontFamily: 'var(--font-mono)', fontSize: 12.5,
-                  fontWeight: active ? 600 : 500,
-                  color: active ? 'var(--fg1)' : 'var(--fg3)',
-                  cursor: 'pointer',
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  transition: 'color 200ms',
-                }}>
-                  {t.label}
-                  {t.recommended && (
-                    <span style={{
-                      fontFamily: 'var(--font-sans)', fontSize: 9.5, fontWeight: 700,
-                      letterSpacing: '0.04em', textTransform: 'uppercase',
-                      color: 'var(--accent)', background: 'var(--beava-orange-wash)',
-                      padding: '1px 5px', borderRadius: 3,
-                    }}>recommended</span>
-                  )}
-                </button>
-              );
-            })}
-            <div style={{ flex: 1, borderBottom: '1px solid var(--border)' }}/>
-          </div>
-          <div style={{
-            display: 'flex', alignItems: 'flex-start', gap: 12,
-            padding: '12px 14px',
-            background: 'var(--code-bg)', border: '1px solid var(--border)', borderTop: 'none',
-            borderRadius: '0 10px 10px 10px',
-            boxShadow: 'var(--shadow-inset)',
-          }}>
-            <span style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 14, userSelect: 'none', lineHeight: 1.55 }}>$</span>
-            <code style={{
-              fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--code-fg)',
-              background: 'transparent', border: 0, padding: 0, flex: 1, minWidth: 0,
-              /* `pre-wrap` honors literal \n in the cmd while soft-wrapping long
-                 lines (URLs, mostly) on width. `overflow-wrap: anywhere` lets URLs
-                 break at any character; without it pre-wrap would still let an
-                 unbroken URL push past the column edge. */
-              whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', lineHeight: 1.55,
-            }}>{tab.cmd}</code>
-            <button onClick={copy} title="Copy" style={{
-              fontFamily: 'var(--font-mono)', fontSize: 12,
-              padding: '4px 10px',
-              background: copied ? 'var(--beava-success-wash)' : '#fff',
-              color: copied ? 'var(--beava-success)' : 'var(--fg2)',
-              border: '1px solid', borderColor: copied ? '#cdd9b6' : 'var(--border)',
-              borderRadius: 6, cursor: 'pointer', fontWeight: 600,
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-              transition: 'all 200ms', whiteSpace: 'nowrap',
-            }}>{copied ? '✓ copied' : '⎘ copy'}</button>
-          </div>
-        </div>
-      );
-    };
+    // ─────────────────────────────────────────────────────────────────────
+    // Hero — centered, single column, mascot in top-right corner
+    // ─────────────────────────────────────────────────────────────────────
 
     const Hero = () => (
-      <section style={{ padding: '56px 24px 96px', position: 'relative', overflow: 'hidden' }}>
-        <div className="beava-hero-grid" style={{
-          maxWidth: 1200, margin: '0 auto',
-          display: 'grid', gridTemplateColumns: 'minmax(0, 1.05fr) minmax(0, 1fr)', gap: 80, alignItems: 'center',
-        }}>
-          <div>
-            {/* Eyebrow does work now: license · binary · language. Clickable to GitHub. */}
+      <section style={{ padding: '36px 24px 56px', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto', position: 'relative' }}>
+          {/* Corner mascot — top-right, slow-loop gif. Hidden under 1100px. */}
+          <img src="/assets/mascot-floating-slow.gif" alt="" className="beava-hero-mascot" style={{
+            position: 'absolute', top: -8, right: 0,
+            width: 140, height: 140, transform: 'rotate(8deg)',
+            filter: 'drop-shadow(0 10px 22px rgba(26,23,20,0.12))',
+            pointerEvents: 'none', userSelect: 'none', zIndex: 1,
+          }}/>
+
+          <div style={{ textAlign: 'center', maxWidth: 820, margin: '0 auto 32px', position: 'relative', zIndex: 2 }}>
             <a href="https://github.com/beava-dev/beava" target="_blank" rel="noopener" style={{
               display: 'inline-flex', alignItems: 'center', gap: 10,
               padding: '5px 12px 5px 10px', borderRadius: 999,
               background: 'var(--beava-orange-wash)', border: '1px solid #f1d8c2',
-              color: 'var(--accent)', fontSize: 12.5, fontWeight: 600,
-              marginBottom: 22, fontFamily: 'var(--font-sans)',
-              whiteSpace: 'nowrap', flexWrap: 'nowrap', textDecoration: 'none',
-              transition: 'all 200ms cubic-bezier(0.22,1,0.36,1)',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = '#f1d8c2'; e.currentTarget.style.transform = ''; }}>
-              <span style={{ width: 6, height: 6, background: 'var(--accent)', borderRadius: 999, boxShadow: '0 0 0 3px rgba(184,92,32,0.18)' }}/>
+              color: 'var(--accent)', fontSize: 12, fontWeight: 600,
+              marginBottom: 16, fontFamily: 'var(--font-sans)',
+              whiteSpace: 'nowrap', textDecoration: 'none',
+            }}>
+              <span style={{
+                width: 6, height: 6, background: 'var(--accent)', borderRadius: 999,
+                boxShadow: '0 0 0 3px rgba(184,92,32,0.18)',
+              }}/>
               <span>Apache 2.0</span>
               <span style={{ color: '#d8b594' }}>·</span>
               <span>single binary</span>
               <span style={{ color: '#d8b594' }}>·</span>
-              <span>Python-defined streams</span>
-              <span style={{ color: 'var(--fg3)', fontSize: 11, marginLeft: 2 }}>↗</span>
+              <span>HTTP in, HTTP out</span>
             </a>
-            <div style={{ marginBottom: 14 }}>
-              <span style={{
-                fontFamily: 'var(--font-accent)', fontWeight: 700,
-                fontSize: 24, lineHeight: 1, color: 'var(--accent)',
-                transform: 'rotate(-2deg)', transformOrigin: 'left center',
-                display: 'inline-block',
-              }}>Dam good at streams.</span>
-            </div>
+
             <h1 style={{
               fontFamily: 'var(--font-serif)', fontWeight: 600,
-              fontSize: 'clamp(38px, 4.8vw, 60px)',
+              fontSize: 'clamp(34px, 4.4vw, 56px)',
               lineHeight: 1.1, letterSpacing: '-0.02em',
-              color: 'var(--fg1)', margin: '0 0 28px',
-              maxWidth: 620, textWrap: 'balance',
-            }}>Real-time user features <em style={{ color: 'var(--accent)', fontStyle: 'italic' }}>without streaming infra.</em></h1>
+              color: 'var(--fg1)', margin: '0 auto 20px',
+              maxWidth: '100%', textWrap: 'balance',
+            }}>
+              Make your AI product react to <em style={{ color: 'var(--accent)', fontStyle: 'italic' }}>what just happened.</em>
+            </h1>
+
             <p style={{
               fontFamily: 'var(--font-sans)', fontWeight: 400,
-              fontSize: 17.5, lineHeight: 1.55,
-              color: 'var(--fg2)', margin: '0 0 32px',
-              maxWidth: 540, textWrap: 'pretty',
-            }}>Define aggregations in Python, POST events over HTTP, and query fresh values by key in sub-millisecond latency. One binary. No Kafka, Flink, brokers, clusters, or stream jobs.</p>
-            <InstallTabs/>
-            {/* Single primary CTA + Read-docs as a quiet text link. Discord lives in the nav. */}
-            <div style={{ display: 'flex', gap: 18, alignItems: 'center', marginTop: 20, flexWrap: 'wrap' }}>
-              <Button variant="primary" size="lg" href="/docs/get-started/quickstart/" icon={<Icon name="arrow" size={16}/>}>Run quickstart</Button>
+              fontSize: 17, lineHeight: 1.55,
+              color: 'var(--fg2)', margin: '0 auto 24px',
+              maxWidth: 680, textWrap: 'pretty',
+            }}>
+              beava turns live events into fresh features for fraud, recommendations,
+              and guardrails — no Kafka, no Flink, no feature store.
+            </p>
+
+            <div style={{ display: 'inline-flex', gap: 18, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+              <Button variant="primary" size="lg" href="/docs/get-started/quickstart/" icon={<Icon name="arrow" size={16}/>}>
+                Run quickstart
+              </Button>
               <a href="/docs/" style={{
-                fontFamily: 'var(--font-sans)', fontSize: 14.5, fontWeight: 500,
+                fontFamily: 'var(--font-sans)', fontSize: 15, fontWeight: 500,
                 color: 'var(--fg2)', textDecoration: 'none',
                 borderBottom: '1px solid color-mix(in oklab, var(--fg3) 35%, transparent)',
                 paddingBottom: 1,
-              }}>Read the docs →</a>
+              }}>
+                Read the docs →
+              </a>
             </div>
-            {/* Support strip — replaces the secondary-CTA cluster with a fact line */}
+
             <div style={{
-              marginTop: 22, paddingLeft: 4,
-              fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--fg3)',
+              marginTop: 14,
+              fontFamily: 'var(--font-sans)', fontSize: 12.5, color: 'var(--fg3)',
               lineHeight: 1.5,
             }}>
               ~14 MB <span style={{ color: 'var(--border-strong)' }}>·</span> macOS, Linux, Windows
@@ -426,226 +405,366 @@
               <span style={{ color: 'var(--border-strong)' }}> · </span> scales to one big box
             </div>
           </div>
-          <div style={{ position: 'relative', minWidth: 0 }}>
-            {/* Mascot peek — top-right, slight rotation, drop-shadow.
-                Anchored to the right column's right edge (right: 0) so it
-                can't push past the viewport on narrower grids — clamps
-                inward instead of outward. */}
-            <img src="/assets/mascot-pose-2.svg" alt="" width={108} height={108} className="beava-hero-mascot" style={{
-              position: 'absolute',
-              top: -82, right: 0,
-              transform: 'rotate(8deg)',
-              filter: 'drop-shadow(0 6px 14px rgba(26,23,20,0.12))',
-              pointerEvents: 'none', zIndex: 2,
-            }}/>
-            <LiveQueriesPanel/>
+
+          <div style={{ position: 'relative', maxWidth: 1040, margin: '0 auto' }}>
+            <DecisionFeed/>
           </div>
+
+          <p style={{
+            marginTop: 14, textAlign: 'center',
+            fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--fg3)',
+            fontStyle: 'italic',
+          }}>
+            Each row is a real event pushed to a single beava: feature recomputed, decision served.{' '}
+            <a href="#pipeline" style={{
+              color: 'var(--accent)', textDecoration: 'none',
+              borderBottom: '1px solid color-mix(in oklab, var(--accent) 35%, transparent)',
+              fontStyle: 'normal', fontWeight: 500,
+            }}>See the pipeline ↓</a>
+          </p>
         </div>
+
         <style>{`
-          @keyframes beava-fade-up {
-            from { opacity: 0; transform: translateY(6px); }
-            to   { opacity: 1; transform: translateY(0); }
-          }
           @keyframes beava-pulse {
             0%, 100% { transform: scale(1); opacity: 1; }
             50%      { transform: scale(1.4); opacity: 0.55; }
           }
-          @media (max-width: 960px) {
-            .beava-hero-grid { grid-template-columns: 1fr !important; gap: 48px !important; }
+          @keyframes beava-row-in {
+            from { opacity: 0; transform: translateY(-6px); }
+            to   { opacity: 1; transform: translateY(0); }
+          }
+          @media (max-width: 1100px) {
             .beava-hero-mascot { display: none !important; }
-            .beava-pillars-grid { grid-template-columns: repeat(2, 1fr) !important; }
           }
           @media (max-width: 760px) {
             section { padding-left: 18px !important; padding-right: 18px !important; }
-            .beava-hero-grid > div:first-child > a:first-child { white-space: normal !important; flex-wrap: wrap !important; }
-            .bv-metric-mascot { width: 56px !important; height: 56px !important; top: 8px !important; right: 8px !important; opacity: 0.7 !important; }
-            .bv-metric-label { padding-right: 64px !important; }
-            #pipeline { padding: 56px 18px 64px !important; }
-            #pipeline pre { padding: 16px 18px !important; font-size: 12.5px !important; line-height: 1.6 !important; }
-            #pipeline pre + div { grid-template-columns: 1fr !important; }
-            #pipeline pre + div > div { border-right: 0 !important; border-bottom: 1px solid var(--border) !important; }
-            #pipeline pre + div > div:last-child { border-bottom: 0 !important; }
+            .beava-feed-headers { display: none !important; }
             .beava-pillars-grid { grid-template-columns: 1fr !important; }
             .beava-finalcta-grid { grid-template-columns: 1fr !important; }
-            .beava-finalcta-founders { flex-direction: column !important; align-items: flex-start !important; }
-            .beava-finalcta-mascot { display: none !important; }
             footer .bv-foot-grid { grid-template-columns: 1fr !important; gap: 32px !important; }
-          }
-          @media (max-width: 480px) {
-            section { padding-left: 14px !important; padding-right: 14px !important; }
-            .bv-metric-mascot { display: none !important; }
-            .bv-metric-label { padding-right: 0 !important; }
-            .beava-hero-grid h1 { margin-bottom: 24px !important; }
-            .beava-hero-grid h1 + p { font-size: 18px !important; margin-bottom: 24px !important; }
-            .bv-site-nav-link { padding: 6px 6px !important; font-size: 13px !important; }
           }
         `}</style>
       </section>
     );
 
-    // ---------- PipelineOutput ----------
-    // Live-polled JSON output panel that closes the visual loop: the
-    // 13-line site_metrics.py shown above runs against POST /get and
-    // returns this JSON shape. Hero LiveQueriesPanel uses representative
-    // mock signatures (bv.count / bv.p50 / bv.top_k); the production
-    // /api/get poll lives here — every page-view event on this site
-    // pushes a real event, and the JSON below is the resulting feature
-    // row. Falls back to a static seed shape on cold start so the panel
-    // always renders something representative.
-    const PipelineOutput = () => {
-      const SEED = {
-        median_dwell_1h: 6250.0,
-        page_views_24h: 14207,
-        top_page_1h: [{ value: '/', count: 412 }],
-      };
-      const [data, setData] = React.useState(null);
-      React.useEffect(() => {
-        let cancelled = false;
-        const refresh = async () => {
-          try {
-            const r = await fetch('/api/get', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ table: 'SiteMetrics', key: '' }),
-            });
-            if (cancelled || !r.ok) return;
-            const j = await r.json();
-            if (j && typeof j === 'object') setData(j);
-          } catch (_) { /* keep previous on transient failure */ }
-        };
-        refresh();
-        const id = setInterval(refresh, 3000);
-        return () => { cancelled = true; clearInterval(id); };
-      }, []);
-      const display = data || SEED;
-      const isLive = data !== null;
-      return (
-        <div style={{
-          marginTop: 18,
-          background: '#fff', border: '1px solid var(--border)',
-          borderRadius: 12, boxShadow: 'var(--shadow-sm)',
-          overflow: 'hidden',
-        }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '8px 14px', borderBottom: '1px solid var(--border)',
-            background: 'var(--beava-paper)',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--fg2)' }}>
-              <span style={{ color: 'var(--fg3)' }}>→</span>
-              <span style={{ fontWeight: 600 }}>output</span>
-              <span style={{ color: 'var(--fg3)' }}>·</span>
-              <span style={{ color: 'var(--fg3)' }}>POST /get  {`{table:"SiteMetrics", key:""}`}</span>
-            </div>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-mono)', fontSize: 11, color: isLive ? 'var(--beava-success)' : 'var(--fg3)', whiteSpace: 'nowrap' }}>
-              <span style={{ width: 6, height: 6, borderRadius: 999, background: isLive ? 'var(--beava-success)' : 'var(--border-strong)' }}/>
-              {isLive ? 'live' : 'seed'}
-            </span>
-          </div>
-          <pre style={{
-            margin: 0, padding: '14px 18px',
-            fontFamily: 'var(--font-mono)', fontSize: 13, lineHeight: 1.55,
-            color: 'var(--code-fg)', background: 'var(--code-bg)',
-            border: 0, overflowX: 'auto',
-          }}>{JSON.stringify(display, null, 2)}</pre>
-        </div>
-      );
+    // ─────────────────────────────────────────────────────────────────────
+    // PipelineShowcase — 3 tabs, one pipeline per decision category
+    //
+    // The hero claims beava powers three decision shapes (fraud, recs,
+    // guardrails). Each tab is the smallest realistic pipeline that backs
+    // ONE of those decisions, end-to-end: event class → table aggregations
+    // → register + serve.
+    // ─────────────────────────────────────────────────────────────────────
+
+    const S_TOKEN = {
+      kw:  { color: 'var(--code-keyword)' },
+      str: { color: 'var(--code-string)' },
+      cmt: { color: 'var(--code-comment)', fontStyle: 'italic' },
+      fn:  { color: 'var(--code-fn)' },
+      num: { color: 'var(--code-number)' },
+      ty:  { color: 'var(--code-type)' },
+      hl:  (color) => ({ background: color, borderRadius: 3, padding: '0 2px' }),
     };
 
-    // ---------- PipelineShowcase ----------
+    // Hand-drawn line annotation — sits at the end of a code line in Gaegu
+    // orange, points back at it with `←`. Pattern from design-system's
+    // comp-code-annotated.html. Hidden on narrow viewports to avoid
+    // forcing the code block to scroll horizontally.
+    // aria-hidden + user-select: none means the annotation is visual chrome
+    // only — it doesn't ride along on copy and screen readers skip it (the
+    // code block it points at carries the meaning).
+    const Anno = ({ children }) => (
+      <span className="beava-anno" aria-hidden="true" style={{
+        fontFamily: 'var(--font-accent)', fontWeight: 700,
+        color: 'var(--accent)', fontSize: 14.5,
+        paddingLeft: 18, whiteSpace: 'nowrap',
+        transform: 'translateY(-1px)', display: 'inline-block',
+        userSelect: 'none', WebkitUserSelect: 'none',
+      }}>{children}</span>
+    );
+
+    const PIPELINE_TABS = [
+      {
+        id: 'fraud',
+        label: 'Fraud',
+        kicker: '01 · fraud',
+        title: 'Block the 4th failed login before the 5th',
+        blurb: 'Per-user counters across short windows. Push login attempts; query the same row at decision time.',
+        file: 'fraud.py',
+        lines: 15,
+        features: [
+          { color: 'rgba(184,92,32,0.10)',  dot: 'var(--accent)',             label: 'failed_logins_10m', maps: 'Failed logins · last 10m' },
+          { color: 'rgba(58,106,138,0.10)', dot: 'var(--beava-info)',         label: 'attempts_1h',        maps: 'Total attempts · last 1h' },
+        ],
+        render: (S) => (
+          <>
+            <span style={S.kw}>import</span> beava <span style={S.kw}>as</span> bv{'\n\n'}
+            <span style={S.fn}>@bv.event</span>{'\n'}
+            <span style={S.kw}>class</span> <span style={S.ty}>LoginAttempt</span>:{'\n'}
+            {'    '}user_id: <span style={S.ty}>str</span>{'\n'}
+            {'    '}success: <span style={S.ty}>bool</span>   <span style={S.cmt}># False = wrong password this time</span>{'\n\n'}
+            <span style={S.fn}>@bv.table</span>(key=<span style={S.str}>"user_id"</span>){'\n'}
+            <span style={S.kw}>def</span> <span style={S.fn}>UserSignals</span>(e: <span style={S.ty}>LoginAttempt</span>):{'\n'}
+            {'    '}<span style={S.kw}>return</span> e.<span style={S.fn}>group_by</span>(<span style={S.str}>"user_id"</span>).<span style={S.fn}>agg</span>({'\n'}
+            {'        '}<span style={S.hl('rgba(184,92,32,0.10)')}>failed_logins_10m</span> = bv.<span style={S.fn}>count</span>(window=<span style={S.str}>"10m"</span>, where=~bv.<span style={S.fn}>col</span>(<span style={S.str}>"success"</span>)),<Anno>← only the misses</Anno>{'\n'}
+            {'        '}<span style={S.hl('rgba(58,106,138,0.10)')}>attempts_1h</span>       = bv.<span style={S.fn}>count</span>(window=<span style={S.str}>"1h"</span>),<Anno>← every try — the denominator</Anno>{'\n'}
+            {'    '}){'\n\n'}
+            bv.<span style={S.fn}>App</span>(<span style={S.str}>"0.0.0.0:6400"</span>).<span style={S.fn}>register</span>(<span style={S.ty}>LoginAttempt</span>, <span style={S.fn}>UserSignals</span>).<span style={S.fn}>serve</span>()<Anno>← one HTTP port, one binary</Anno>{'\n'}
+          </>
+        ),
+      },
+      {
+        id: 'recommendations',
+        label: 'Recommendations',
+        kicker: '02 · recommendations',
+        title: 'Refresh the home feed off the last 30 minutes of clicks',
+        blurb: 'Recent activity per user, plus a rolling top-k of categories. Read both at request time.',
+        file: 'recs.py',
+        lines: 16,
+        features: [
+          { color: 'rgba(184,92,32,0.10)',  dot: 'var(--accent)',             label: 'recent_clicks_30m', maps: 'Clicks · last 30m' },
+          { color: 'rgba(217,122,62,0.12)', dot: 'var(--beava-orange-soft)',  label: 'top_categories_1h', maps: 'Top 3 categories · 1h' },
+        ],
+        render: (S) => (
+          <>
+            <span style={S.kw}>import</span> beava <span style={S.kw}>as</span> bv{'\n\n'}
+            <span style={S.fn}>@bv.event</span>{'\n'}
+            <span style={S.kw}>class</span> <span style={S.ty}>ProductClick</span>:{'\n'}
+            {'    '}user_id: <span style={S.ty}>str</span>{'\n'}
+            {'    '}product_id: <span style={S.ty}>str</span>{'\n'}
+            {'    '}category: <span style={S.ty}>str</span>   <span style={S.cmt}># "shoes" · "books" · your taxonomy</span>{'\n\n'}
+            <span style={S.fn}>@bv.table</span>(key=<span style={S.str}>"user_id"</span>){'\n'}
+            <span style={S.kw}>def</span> <span style={S.fn}>UserAffinity</span>(e: <span style={S.ty}>ProductClick</span>):{'\n'}
+            {'    '}<span style={S.kw}>return</span> e.<span style={S.fn}>group_by</span>(<span style={S.str}>"user_id"</span>).<span style={S.fn}>agg</span>({'\n'}
+            {'        '}<span style={S.hl('rgba(184,92,32,0.10)')}>recent_clicks_30m</span>  = bv.<span style={S.fn}>count</span>(window=<span style={S.str}>"30m"</span>),<Anno>← are they shopping right now?</Anno>{'\n'}
+            {'        '}<span style={S.hl('rgba(217,122,62,0.12)')}>top_categories_1h</span> = bv.<span style={S.fn}>top_k</span>(<span style={S.str}>"category"</span>, k=<span style={S.num}>3</span>, window=<span style={S.str}>"1h"</span>),<Anno>← their top 3 vibes this hour</Anno>{'\n'}
+            {'    '}){'\n\n'}
+            bv.<span style={S.fn}>App</span>(<span style={S.str}>"0.0.0.0:6400"</span>).<span style={S.fn}>register</span>(<span style={S.ty}>ProductClick</span>, <span style={S.fn}>UserAffinity</span>).<span style={S.fn}>serve</span>()<Anno>← one HTTP port, one binary</Anno>{'\n'}
+          </>
+        ),
+      },
+      {
+        id: 'guardrails',
+        label: 'Guardrails',
+        kicker: '03 · guardrails',
+        title: 'Throttle the org that just blew through its token budget',
+        blurb: 'Rolling token sums per organization. Read the budget on the way into the expensive model.',
+        file: 'guardrails.py',
+        lines: 16,
+        features: [
+          { color: 'rgba(184,92,32,0.10)',  dot: 'var(--accent)',             label: 'tokens_used_24h', maps: 'Tokens used · last 24h' },
+          { color: 'rgba(58,106,138,0.10)', dot: 'var(--beava-info)',         label: 'requests_1m',      maps: 'Requests · last 1m' },
+        ],
+        render: (S) => (
+          <>
+            <span style={S.kw}>import</span> beava <span style={S.kw}>as</span> bv{'\n\n'}
+            <span style={S.fn}>@bv.event</span>{'\n'}
+            <span style={S.kw}>class</span> <span style={S.ty}>LLMRequest</span>:{'\n'}
+            {'    '}org_id: <span style={S.ty}>str</span>{'\n'}
+            {'    '}tokens: <span style={S.ty}>int</span>     <span style={S.cmt}># bill this one to the org</span>{'\n'}
+            {'    '}model: <span style={S.ty}>str</span>      <span style={S.cmt}># e.g. "gpt-5", "haiku-4-5"</span>{'\n\n'}
+            <span style={S.fn}>@bv.table</span>(key=<span style={S.str}>"org_id"</span>){'\n'}
+            <span style={S.kw}>def</span> <span style={S.fn}>OrgBudget</span>(e: <span style={S.ty}>LLMRequest</span>):{'\n'}
+            {'    '}<span style={S.kw}>return</span> e.<span style={S.fn}>group_by</span>(<span style={S.str}>"org_id"</span>).<span style={S.fn}>agg</span>({'\n'}
+            {'        '}<span style={S.hl('rgba(184,92,32,0.10)')}>tokens_used_24h</span> = bv.<span style={S.fn}>sum</span>(<span style={S.str}>"tokens"</span>, window=<span style={S.str}>"24h"</span>),<Anno>← rolling daily spend</Anno>{'\n'}
+            {'        '}<span style={S.hl('rgba(58,106,138,0.10)')}>requests_1m</span>     = bv.<span style={S.fn}>count</span>(window=<span style={S.str}>"1m"</span>),<Anno>← catches a runaway agent</Anno>{'\n'}
+            {'    '}){'\n\n'}
+            bv.<span style={S.fn}>App</span>(<span style={S.str}>"0.0.0.0:6400"</span>).<span style={S.fn}>register</span>(<span style={S.ty}>LLMRequest</span>, <span style={S.fn}>OrgBudget</span>).<span style={S.fn}>serve</span>()<Anno>← one HTTP port, one binary</Anno>{'\n'}
+          </>
+        ),
+      },
+    ];
+
     const PipelineShowcase = () => {
-      const S = {
-        kw:  { color: 'var(--code-keyword)' },
-        str: { color: 'var(--code-string)' },
-        cmt: { color: 'var(--code-comment)', fontStyle: 'italic' },
-        fn:  { color: 'var(--code-fn)' },
-        num: { color: 'var(--code-number)' },
-        ty:  { color: 'var(--code-type)' },
-      };
+      const [tabId, setTabId] = React.useState('fraud');
+      const tab = PIPELINE_TABS.find(t => t.id === tabId);
       return (
-        <section id="pipeline" style={{ padding: '88px 24px 96px', background: 'var(--beava-cream-deep)', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
+        <section id="pipeline" style={{
+          padding: '88px 24px 96px', background: 'var(--beava-cream-deep)',
+          borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)',
+        }}>
           <div style={{ maxWidth: 1040, margin: '0 auto' }}>
-            <div style={{ marginBottom: 36 }}>
-              <Eyebrow>The homepage runs beava</Eyebrow>
+            <div style={{ marginBottom: 28 }}>
+              <Eyebrow>One pipeline per decision</Eyebrow>
               <h2 style={{
                 fontFamily: 'var(--font-serif)', fontWeight: 600,
                 fontSize: 44, lineHeight: 1.1, letterSpacing: '-0.02em',
-                color: 'var(--fg1)', margin: '10px 0 14px', maxWidth: 720, textWrap: 'balance',
+                color: 'var(--fg1)', margin: '10px 0 14px',
+                maxWidth: 740, textWrap: 'balance',
               }}>
-                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>13 lines.</span> That&rsquo;s the whole pipeline.
+                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>~13 lines</span> — pick a decision, see the pipeline.
               </h2>
-              <p style={{ fontFamily: 'var(--font-sans)', fontSize: 17, lineHeight: 1.55, color: 'var(--fg2)', margin: 0, maxWidth: 640, textWrap: 'pretty' }}>
-                Every page view on this site pushes a real event to this pipeline. The JSON below is the live feature row for this exact moment.
+              <p style={{
+                fontFamily: 'var(--font-sans)', fontSize: 17, lineHeight: 1.55,
+                color: 'var(--fg2)', margin: 0, maxWidth: 660, textWrap: 'pretty',
+              }}>
+                Three shapes of the live feed above — fraud, recommendations, guardrails —
+                each as the smallest realistic pipeline. Same primitives, same single binary.
               </p>
             </div>
-            <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 16, boxShadow: 'var(--shadow-sm)', overflow: 'hidden' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid var(--border)', background: 'var(--beava-paper)' }}>
+
+            {/* Tab strip */}
+            <div role="tablist" aria-label="Pipeline example" style={{
+              display: 'flex', gap: 4, alignItems: 'flex-end',
+              paddingLeft: 4, marginBottom: -1,
+            }} className="beava-pipeline-tabs">
+              {PIPELINE_TABS.map(t => {
+                const active = t.id === tabId;
+                return (
+                  <button
+                    key={t.id}
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setTabId(t.id)}
+                    style={{
+                      fontFamily: 'var(--font-sans)', fontSize: 13.5,
+                      padding: '10px 18px 12px', cursor: 'pointer',
+                      background: active ? '#fff' : 'transparent',
+                      color: active ? 'var(--fg1)' : 'var(--fg3)',
+                      border: '1px solid',
+                      borderColor: active ? 'var(--border)' : 'transparent',
+                      borderBottom: active ? '1px solid #fff' : '1px solid var(--border)',
+                      borderRadius: '12px 12px 0 0',
+                      fontWeight: active ? 600 : 500,
+                      position: 'relative', top: 1,
+                      display: 'inline-flex', alignItems: 'center', gap: 8,
+                      transition: 'color 160ms cubic-bezier(0.22,1,0.36,1)',
+                    }}>
+                    <span style={{
+                      width: 7, height: 7, borderRadius: 999,
+                      background: active ? 'var(--accent)' : 'var(--border-strong)',
+                    }}/>
+                    {t.label}
+                  </button>
+                );
+              })}
+              <div style={{ flex: 1, borderBottom: '1px solid var(--border)' }}/>
+            </div>
+
+            {/* Tab body — the card */}
+            <div style={{
+              background: '#fff', border: '1px solid var(--border)',
+              borderTopLeftRadius: tabId === 'fraud' ? 0 : 16,
+              borderTopRightRadius: 16, borderBottomLeftRadius: 16, borderBottomRightRadius: 16,
+              boxShadow: 'var(--shadow-sm)', overflow: 'hidden',
+            }}>
+              {/* Title strip */}
+              <div style={{
+                padding: '18px 24px 16px', borderBottom: '1px solid var(--border)',
+              }}>
+                <div style={{
+                  fontFamily: 'var(--font-sans)', fontSize: 11, fontWeight: 600,
+                  textTransform: 'uppercase', letterSpacing: '0.1em',
+                  color: 'var(--accent)', marginBottom: 6,
+                }}>{tab.kicker}</div>
+                <div style={{
+                  fontFamily: 'var(--font-serif)', fontWeight: 600,
+                  fontSize: 22, lineHeight: 1.25, color: 'var(--fg1)',
+                  marginBottom: 6, textWrap: 'balance',
+                }}>{tab.title}</div>
+                <p style={{
+                  fontFamily: 'var(--font-sans)', fontSize: 14.5, lineHeight: 1.5,
+                  color: 'var(--fg2)', margin: 0, maxWidth: 720, textWrap: 'pretty',
+                }}>{tab.blurb}</p>
+              </div>
+
+              {/* Window chrome */}
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '10px 16px', borderBottom: '1px solid var(--border)',
+                background: 'var(--beava-paper)',
+              }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span style={{ width: 11, height: 11, borderRadius: 999, background: '#ff5f57', boxShadow: 'inset 0 0 0 0.5px rgba(0,0,0,0.15)' }}/>
                   <span style={{ width: 11, height: 11, borderRadius: 999, background: '#febc2e', boxShadow: 'inset 0 0 0 0.5px rgba(0,0,0,0.15)' }}/>
                   <span style={{ width: 11, height: 11, borderRadius: 999, background: '#28c840', boxShadow: 'inset 0 0 0 0.5px rgba(0,0,0,0.15)' }}/>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--fg2)', marginLeft: 6 }}>site_metrics.py</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg3)', padding: '2px 8px', borderRadius: 999, background: '#fff', border: '1px solid var(--border)', marginLeft: 4, whiteSpace: 'nowrap' }}>13 lines</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--fg2)', marginLeft: 6 }}>
+                    {tab.file}
+                  </span>
+                  <span style={{
+                    fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg3)',
+                    padding: '2px 8px', borderRadius: 999, background: '#fff',
+                    border: '1px solid var(--border)', marginLeft: 4, whiteSpace: 'nowrap',
+                  }}>{tab.lines} lines</span>
                 </div>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--beava-success)', whiteSpace: 'nowrap' }}>
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--beava-success)',
+                  whiteSpace: 'nowrap',
+                }}>
                   <span style={{ width: 6, height: 6, borderRadius: 999, background: 'var(--beava-success)' }}/>
-                  registered on beava.dev
+                  one binary · HTTP in
                 </span>
               </div>
-              <pre style={{ margin: 0, padding: '22px 28px', fontFamily: 'var(--font-mono)', fontSize: 14, lineHeight: 1.7, color: 'var(--code-fg)', background: 'var(--code-bg)', border: 0, borderRadius: 0, boxShadow: 'none', overflowX: 'auto' }}>
-<span style={S.kw}>import</span> beava <span style={S.kw}>as</span> bv{'\n'}
-{'\n'}
-<span style={S.fn}>@bv.event</span>{'\n'}
-<span style={S.kw}>class</span> <span style={S.ty}>PageView</span>:{'\n'}
-{'    '}session_id: <span style={S.ty}>str</span>{'\n'}
-{'    '}path: <span style={S.ty}>str</span>{'\n'}
-{'    '}dwell_ms: <span style={S.ty}>int</span>   <span style={S.cmt}># set when the visitor leaves the page</span>{'\n'}
-{'\n'}
-<span style={S.fn}>@bv.table</span>{'   '}<span style={S.cmt}># no key=  →  one row, site-wide</span>{'\n'}
-<span style={S.kw}>def</span> <span style={S.fn}>SiteMetrics</span>(e: <span style={S.ty}>PageView</span>):{'\n'}
-{'    '}<span style={S.kw}>return</span> e.<span style={S.fn}>agg</span>({'\n'}
-{'        '}<span style={{ background: 'rgba(184,92,32,0.10)', borderRadius: 3, padding: '0 2px' }}>median_dwell_1h</span>  = bv.<span style={S.fn}>quantile</span>(<span style={S.str}>"dwell_ms"</span>, q=<span style={S.num}>0.5</span>, window=<span style={S.str}>"1h"</span>),{'\n'}
-{'        '}<span style={{ background: 'rgba(58,106,138,0.10)', borderRadius: 3, padding: '0 2px' }}>page_views_24h</span> = bv.<span style={S.fn}>count</span>(window=<span style={S.str}>"24h"</span>),{'\n'}
-{'        '}<span style={{ background: 'rgba(217,122,62,0.12)', borderRadius: 3, padding: '0 2px' }}>top_page_1h</span>      = bv.<span style={S.fn}>top_k</span>(<span style={S.str}>"path"</span>, k=<span style={S.num}>1</span>, window=<span style={S.str}>"1h"</span>),{'\n'}
-{'    '}){'\n'}
-{'\n'}
-bv.<span style={S.fn}>App</span>(<span style={S.str}>"0.0.0.0:8080"</span>).<span style={S.fn}>register</span>(<span style={S.ty}>PageView</span>, <span style={S.fn}>SiteMetrics</span>).<span style={S.fn}>serve</span>(){'\n'}
-{'\n'}
-<span style={S.cmt}># Query the global row — no key, just the table name.</span>{'\n'}
-bv.<span style={S.fn}>get</span>(<span style={S.str}>"SiteMetrics"</span>)  <span style={S.cmt}># → {`{median_dwell_1h: 6_250, views_24h: 14_207, …}`}</span>{'\n'}
-{'\n'}
-<span style={S.cmt}># Or over HTTP (the panel above is hitting this exact endpoint):</span>{'\n'}
-<span style={S.kw}>$</span> curl https://beava.dev/api/get -d '{`{"table":"SiteMetrics","key":""}`}'
+
+              <pre style={{
+                margin: 0, padding: '22px 28px',
+                fontFamily: 'var(--font-mono)', fontSize: 14, lineHeight: 1.7,
+                color: 'var(--code-fg)', background: 'var(--code-bg)',
+                border: 0, borderRadius: 0, boxShadow: 'none', overflowX: 'auto',
+              }}>
+                {tab.render(S_TOKEN)}
               </pre>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0, borderTop: '1px solid var(--border)', background: '#fff' }}>
-                {[
-                  { color: 'rgba(184,92,32,0.10)', dot: 'var(--accent)',             label: 'median_dwell_1h',  maps: 'Median time on page · 1h' },
-                  { color: 'rgba(58,106,138,0.10)', dot: 'var(--beava-info)',        label: 'page_views_24h', maps: 'Page views (last 24h)' },
-                  { color: 'rgba(217,122,62,0.12)', dot: 'var(--beava-orange-soft)', label: 'top_page_1h',      maps: 'Top page · this hour' },
-                ].map((row, i) => (
-                  <div key={row.label} style={{ padding: '14px 18px', borderRight: i < 2 ? '1px solid var(--border)' : 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
+
+              {/* Feature legend */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: `repeat(${tab.features.length}, 1fr)`,
+                gap: 0, borderTop: '1px solid var(--border)', background: '#fff',
+              }} className="beava-pipeline-features">
+                {tab.features.map((row, i) => (
+                  <div key={row.label} style={{
+                    padding: '14px 18px',
+                    borderRight: i < tab.features.length - 1 ? '1px solid var(--border)' : 'none',
+                    display: 'flex', flexDirection: 'column', gap: 4,
+                  }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ width: 8, height: 8, borderRadius: 2, background: row.dot }}/>
-                      <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5, background: row.color, padding: '2px 6px', borderRadius: 4, color: 'var(--code-fg)', border: 0 }}>{row.label}</code>
+                      <code style={{
+                        fontFamily: 'var(--font-mono)', fontSize: 12.5,
+                        background: row.color, padding: '2px 6px', borderRadius: 4,
+                        color: 'var(--code-fg)', border: 0,
+                      }}>{row.label}</code>
                     </div>
                     <div style={{ fontFamily: 'var(--font-sans)', fontSize: 12.5, color: 'var(--fg3)', paddingLeft: 16 }}>
-                      → <span style={{ color: 'var(--fg2)' }}>{row.maps}</span> in the hero
+                      → <span style={{ color: 'var(--fg2)' }}>{row.maps}</span>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
-            {/* D2 — output panel beside the code (live-polled /api/get
-                 result), closes the visual loop: 13 lines of source on
-                 top, the JSON shape they produce right below it. */}
-            <PipelineOutput/>
-            <p style={{ fontFamily: 'var(--font-sans)', fontSize: 14, color: 'var(--fg3)', margin: '20px 4px 0', textAlign: 'center', fontStyle: 'italic' }}>
-              No tracking cookies, no fingerprinting. Anonymous session id per visit.
+
+            <p style={{
+              fontFamily: 'var(--font-sans)', fontSize: 13.5, color: 'var(--fg3)',
+              margin: '18px 4px 0', textAlign: 'center', fontStyle: 'italic',
+            }}>
+              Each pipeline is one file. Push events with{' '}
+              <code style={{ fontFamily: 'var(--font-mono)', fontStyle: 'normal', color: 'var(--fg2)' }}>POST /push</code>;
+              read fresh features with{' '}
+              <code style={{ fontFamily: 'var(--font-mono)', fontStyle: 'normal', color: 'var(--fg2)' }}>POST /get</code>.
             </p>
           </div>
+
+          <style>{`
+            @media (max-width: 860px) {
+              .beava-anno { display: none !important; }
+            }
+            @media (max-width: 760px) {
+              #pipeline { padding: 56px 18px 64px !important; }
+              #pipeline pre { padding: 16px 18px !important; font-size: 12.5px !important; line-height: 1.6 !important; }
+              .beava-pipeline-features { grid-template-columns: 1fr !important; }
+              .beava-pipeline-features > div { border-right: 0 !important; border-bottom: 1px solid var(--border) !important; }
+              .beava-pipeline-features > div:last-child { border-bottom: 0 !important; }
+              .beava-pipeline-tabs button { padding: 8px 12px 10px !important; font-size: 12.5px !important; }
+            }
+          `}</style>
         </section>
       );
     };
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Pillars — what makes beava different
+    // ─────────────────────────────────────────────────────────────────────
 
     const PILLARS = [
       { kicker: '01', title: 'Replaces Redis + Lua',  body: 'No more 200-line Lua scripts maintaining counters. beava is the table.', foot: 'redis-cli → bv.get(...)' },
@@ -655,7 +774,11 @@ bv.<span style={S.fn}>get</span>(<span style={S.str}>"SiteMetrics"</span>)  <spa
     ];
 
     const Pillars = () => (
-      <section style={{ padding: '88px 24px', background: 'var(--bg-alt)', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', position: 'relative', overflow: 'hidden' }}>
+      <section style={{
+        padding: '88px 24px', background: 'var(--bg-alt)',
+        borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)',
+        position: 'relative', overflow: 'hidden',
+      }}>
         <img src="/assets/mascot-mark-geometric.png" alt="" width={220} height={220}
           style={{ position: 'absolute', top: 24, right: -40, opacity: 0.06, pointerEvents: 'none', transform: 'rotate(8deg)' }}/>
         <div style={{ maxWidth: 1200, margin: '0 auto', position: 'relative' }}>
@@ -688,14 +811,20 @@ bv.<span style={S.fn}>get</span>(<span style={S.str}>"SiteMetrics"</span>)  <spa
             ))}
           </div>
         </div>
+        <style>{`
+          @media (max-width: 960px) { .beava-pillars-grid { grid-template-columns: repeat(2, 1fr) !important; } }
+          @media (max-width: 560px) { .beava-pillars-grid { grid-template-columns: 1fr !important; } }
+        `}</style>
       </section>
     );
+
+    // ─────────────────────────────────────────────────────────────────────
+    // FinalCTA — three ways in
+    // ─────────────────────────────────────────────────────────────────────
 
     const FinalCTA = () => (
       <section style={{ padding: '96px 24px', background: 'var(--beava-cream-deep)', borderTop: '1px solid var(--border)' }}>
         <div style={{ maxWidth: 920, margin: '0 auto', textAlign: 'center', position: 'relative' }}>
-          {/* Canonical brand lockup — geometric mascot + serif italic wordmark.
-              Same lockup as nav, footer, and the README banner. */}
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 14, marginBottom: 18 }}>
             <img src="/assets/mascot-mark-geometric-transparent.png" alt="" width={56} height={56} style={{ display: 'block' }}/>
             <span style={{ fontFamily: 'var(--font-serif)', fontWeight: 600, fontStyle: 'italic', fontSize: 48, letterSpacing: '-0.025em', lineHeight: 1, color: 'var(--fg1)' }}>beava</span>
@@ -740,7 +869,7 @@ bv.<span style={S.fn}>get</span>(<span style={S.str}>"SiteMetrics"</span>)  <spa
               <img src="/assets/mascot-pose-3.svg" alt="" width={44} height={44} style={{ display: 'block', flexShrink: 0 }}/>
               <div>
                 <div style={{ fontFamily: 'var(--font-serif)', fontWeight: 600, fontSize: 17, lineHeight: 1.3, color: 'var(--fg1)' }}>
-                  Want to talk it through with the founders?
+                  Want to talk it through with Hoang?
                 </div>
                 <div style={{ fontFamily: 'var(--font-sans)', fontSize: 13.5, lineHeight: 1.45, color: 'var(--fg2)', marginTop: 2 }}>
                   30 minutes, no sales pitch. Bring a use case, a doubt, or a roadmap question.
@@ -752,6 +881,12 @@ bv.<span style={S.fn}>get</span>(<span style={S.str}>"SiteMetrics"</span>)  <spa
             </Button>
           </div>
         </div>
+        <style>{`
+          @media (max-width: 760px) {
+            .beava-finalcta-grid { grid-template-columns: 1fr !important; }
+            .beava-finalcta-founders { flex-direction: column !important; align-items: flex-start !important; }
+          }
+        `}</style>
       </section>
     );
 
