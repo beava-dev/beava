@@ -109,21 +109,23 @@ def _random_org() -> str:
 
 
 SCENARIOS = [
+    # One scenario per registered pipeline tab. Same order, same feature key
+    # the homepage code block declares. Don't add a scenario here without a
+    # matching tab on the page — the live feed would surface a feature key
+    # the user can't find in any visible pipeline.
     "login_failed",
-    "login_failed",  # bias the feed toward the fraud shape — it's the clearest read
+    "login_failed",  # bias toward fraud — clearest read for a new visitor
     "product_clicked",
     "llm_request",
-    "payment_attempt",
-    "search_query",
 ]
 
 
 def _make_event(name: str) -> tuple[str, dict, str]:
     """Return (event_name, fields, entity_key)."""
-    if name in ("login_failed", "payment_attempt"):
+    if name == "login_failed":
         uid = _random_user()
         return "LoginAttempt", {"user_id": uid, "success": False}, uid
-    if name in ("product_clicked", "search_query"):
+    if name == "product_clicked":
         uid = _random_user()
         cat = random.choice(["shoes", "books", "kitchen", "tools", "garden"])
         return "ProductClick", {
@@ -144,12 +146,8 @@ def _make_event(name: str) -> tuple[str, dict, str]:
 def _decide(scenario: str, feature_value) -> str:
     if scenario == "login_failed":
         return "require verification" if (feature_value or 0) >= 5 else "increase risk score"
-    if scenario == "payment_attempt":
-        return "block transaction" if (feature_value or 0) >= 3 else "allow"
     if scenario == "product_clicked":
         return "refresh recommendations"
-    if scenario == "search_query":
-        return "boost ranking signals"
     if scenario == "llm_request":
         kilo = (feature_value or 0) / 1000.0
         return "throttle expensive model" if kilo >= 90 else "route to cheap model"
@@ -194,9 +192,7 @@ def _push_one(app: bv.App, scenario: str) -> None:
     }[event_name]
     feature_key = {
         "login_failed": "failed_logins_10m",
-        "payment_attempt": "attempts_1h",
         "product_clicked": "recent_clicks_30m",
-        "search_query": "recent_clicks_30m",
         "llm_request": "tokens_used_24h",
     }[scenario]
     t0 = time.perf_counter()
@@ -209,7 +205,7 @@ def _push_one(app: bv.App, scenario: str) -> None:
     item = {
         "id": f"{int(time.time() * 1000)}-{random.randint(0, 9999)}",
         "ts": int(time.time() * 1000),
-        "event": scenario,
+        "event": event_name,  # @bv.event class name; matches the code block in the tab below
         "entity": entity,
         "feature": {"key": feature_key, "value": _format_value(scenario, value)},
         "decision": decision,

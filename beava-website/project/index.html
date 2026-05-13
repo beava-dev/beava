@@ -33,50 +33,38 @@
     // DecisionFeed — synthetic event stream that demos event → feature → decision
     // ─────────────────────────────────────────────────────────────────────
 
+    // Each scenario maps one-for-one to a tab in the PipelineShowcase
+    // below. Event names, feature keys, and entity-key shape match what
+    // the user can see registered in the code blocks. Adding a scenario
+    // here without a matching tab leaks "ghost" features.
     const FEED_TEMPLATES = {
+      // Fraud — LoginAttempt → UserSignals
       login_failed: {
-        event: 'login_failed',
+        event: 'LoginAttempt',
         entity: () => `user_${1000 + Math.floor(Math.random() * 900)}`,
         feature: (n) => ({ key: 'failed_logins_10m', value: n }),
         valueOf: (prev) => (prev ? prev + 1 : 3 + Math.floor(Math.random() * 5)),
         decision: (v) => v >= 5 ? 'require verification' : 'increase risk score',
       },
-      card_added: {
-        event: 'card_added',
-        entity: () => `device_${10 + Math.floor(Math.random() * 90)}`,
-        feature: (n) => ({ key: 'cards_per_device_1h', value: n }),
-        valueOf: (prev) => (prev ? prev + 1 : 2 + Math.floor(Math.random() * 3)),
-        decision: (v) => v >= 4 ? 'flag for review' : 'increase risk score',
-      },
+      // Recommendations — ProductClick → UserAffinity
       product_clicked: {
-        event: 'product_clicked',
+        event: 'ProductClick',
         entity: () => `user_${1000 + Math.floor(Math.random() * 900)}`,
-        feature: () => ({ key: 'recent_clicks_30m', value: `${2 + Math.floor(Math.random() * 5)} items` }),
+        feature: (n) => ({ key: 'recent_clicks_30m', value: n }),
+        valueOf: (prev) => (prev ? prev + 1 : 2 + Math.floor(Math.random() * 5)),
         decision: () => 'refresh recommendations',
       },
+      // LLM guardrails — LLMRequest → OrgBudget
       llm_request: {
-        event: 'llm_request',
+        event: 'LLMRequest',
         entity: () => `org_${['acme','globex','umbra','soylent'][Math.floor(Math.random()*4)]}`,
         feature: (n) => ({ key: 'tokens_used_24h', value: `${n}k` }),
         valueOf: (prev) => prev ? prev + 4 + Math.floor(Math.random()*8) : 60 + Math.floor(Math.random() * 40),
         decision: (v) => v >= 90 ? 'throttle expensive model' : 'route to cheap model',
       },
-      payment_attempt: {
-        event: 'payment_attempt',
-        entity: () => `card_${10 + Math.floor(Math.random() * 90)}`,
-        feature: (n) => ({ key: 'cvc_fails_1h', value: n }),
-        valueOf: (prev) => prev ? prev + 1 : 1 + Math.floor(Math.random() * 3),
-        decision: (v) => v >= 3 ? 'block transaction' : 'allow',
-      },
-      search_query: {
-        event: 'search_query',
-        entity: () => `user_${1000 + Math.floor(Math.random() * 900)}`,
-        feature: () => ({ key: 'searches_5m', value: 4 + Math.floor(Math.random() * 10) }),
-        decision: () => 'boost ranking signals',
-      },
     };
 
-    const ORDER = ['login_failed', 'card_added', 'product_clicked', 'llm_request', 'payment_attempt', 'search_query'];
+    const ORDER = ['login_failed', 'product_clicked', 'llm_request'];
 
     const mintRow = (name, idx, ts) => {
       const t = FEED_TEMPLATES[name];
