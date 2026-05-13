@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Deploy beava · beava docs</title>
+  <meta name="description" content="Get beava running on a managed host in a few minutes — one-click Render, one-click Railway, or a Docker image you can drop into any provider.">
+  <link rel="canonical" href="https://beava.dev/docs/get-started/deploy/">
+  <meta property="og:site_name" content="beava">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://beava.dev/docs/get-started/deploy/">
+  <meta property="og:title" content="Deploy beava">
+  <meta property="og:description" content="Get beava running on a managed host in a few minutes — one-click Render, one-click Railway, or a Docker image you can drop into any provider.">
+  <meta property="og:image" content="https://beava.dev/assets/readme-banner.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Deploy beava">
+  <meta name="twitter:description" content="Get beava running on a managed host in a few minutes — one-click Render, one-click Railway, or a Docker image you can drop into any provider.">
+  <meta name="twitter:image" content="https://beava.dev/assets/readme-banner.png">
+  <link rel="stylesheet" href="../../../styles/colors_and_type.css">
+  <link rel="stylesheet" href="../../../styles/site.css">
+  <link rel="stylesheet" href="../../../styles/docs-kit.css">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="shortcut icon" href="/assets/favicon.ico">
+  <style>
+    html, body { margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--fg1); font-family: var(--font-sans); }
+    .bv-deploy-buttons {
+      display: flex; flex-wrap: wrap; gap: 14px; margin: 18px 0 28px;
+    }
+    .bv-deploy-buttons a {
+      display: inline-flex; align-items: center;
+      text-decoration: none;
+    }
+    .bv-deploy-buttons img {
+      height: 44px; display: block;
+    }
+    .bv-deploy-note {
+      margin: 0 0 22px;
+      padding: 12px 16px;
+      background: var(--beava-paper);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: 6px;
+      font-size: 14px; color: var(--fg2);
+    }
+  </style>
+</head>
+<body class="beava">
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="../../../js/_shared/SiteHeader.jsx"></script>
+  <script type="text/babel" src="../../../js/_shared/SiteFooter.jsx"></script>
+  <script type="text/babel" src="../../../js/docs/DocsShared.jsx"></script>
+  <script type="text/babel" src="../../../js/docs/DocsSidebar.jsx"></script>
+  <script type="text/babel" src="../../../js/docs/DocsTOC.jsx"></script>
+
+  <script type="text/babel">
+    const TOC = [
+      { id: 'render',  label: 'Deploy on Render' },
+      { id: 'railway', label: 'Deploy on Railway' },
+      { id: 'docker',  label: 'Run the Docker image' },
+      { id: 'verify',  label: 'Verify the deploy' },
+      { id: 'sizing',  label: 'Sizing and limits' },
+    ];
+
+    const App = () => (
+      <>
+        <SiteHeader active="docs" search maxWidth={1400}/>
+        <div className="bv-docs-shell">
+          <DocsSidebar active="Deploy"/>
+
+          <main className="bv-content">
+            <div className="bv-crumbs">
+              <a href="/docs/">Docs</a>
+              <span className="bv-crumb-sep">/</span>
+              <a href="#">Getting started</a>
+              <span className="bv-crumb-sep">/</span>
+              <span className="bv-crumb-cur">Deploy</span>
+            </div>
+
+            <h1>Deploy beava</h1>
+
+            <p className="bv-lede">beava is a single binary with a 1 GB disk requirement and no external dependencies. You can deploy it the same way you would Redis. The fastest path is a one-click button on a managed host.</p>
+
+            <p>beava listens on two ports: <code>:8080</code> for the data plane (<code>/push</code>, <code>/get</code>, <code>/register</code>) and <code>:8090</code> for the admin sidecar (<code>/health</code>, <code>/ready</code>, <code>/metrics</code>, <code>/registry</code>). Persistent state — the WAL and snapshots — lives under <code>/data</code>. Mount a disk there.</p>
+
+            <h2 id="render">Deploy on Render</h2>
+
+            <p>One click. Render reads <a href="https://github.com/beava-dev/beava/blob/main/render.yaml"><code>render.yaml</code></a> from the repo root and provisions a web service with the official <code>beavadev/beava:latest</code> image plus a 1 GB persistent disk mounted at <code>/data</code>.</p>
+
+            <div className="bv-deploy-buttons">
+              <a href="https://render.com/deploy?repo=https://github.com/beava-dev/beava" target="_blank" rel="noopener">
+                <img src="https://render.com/images/deploy-to-render-button.svg" alt="Deploy to Render"/>
+              </a>
+            </div>
+
+            <p>What Render provisions:</p>
+            <ul>
+              <li>Web service on the Starter plan ($7/mo — the free plan does not include persistent disks).</li>
+              <li>1 GB SSD disk at <code>/data</code>, attached on every redeploy.</li>
+              <li>Public HTTPS URL on <code>:8080</code> (data plane). The admin port stays in-cluster.</li>
+              <li><code>autoDeploy: false</code> — Render does not auto-pull <code>:latest</code>. Trigger a manual redeploy from the dashboard when you want to roll forward.</li>
+            </ul>
+
+            <p>To roll forward to a newer beava release, open the service in Render → <em>Manual Deploy</em> → <em>Deploy latest commit</em>. Render re-pulls <code>beavadev/beava:latest</code> on every manual redeploy.</p>
+
+            <h2 id="railway">Deploy on Railway</h2>
+
+            <div className="bv-deploy-note">
+              <strong>Heads up.</strong> A published Railway template is in the works — until it lands, the fastest path on Railway is a 30-second dashboard setup. Both routes use the same prebuilt image; only the click count differs.
+            </div>
+
+            <p><strong>Manual dashboard setup</strong> (works today):</p>
+            <ol>
+              <li>Open <a href="https://railway.com/new" target="_blank" rel="noopener">railway.com/new</a> → <em>Empty Project</em>.</li>
+              <li>Click <em>+ Create</em> → <em>Docker Image</em>. Paste <code>beavadev/beava:latest</code>.</li>
+              <li>In the service settings, set the public port to <code>8080</code>.</li>
+              <li>Right-click the service → <em>Attach Volume</em> → mount path <code>/data</code>, size <code>1 GB</code>.</li>
+              <li>Click <em>Deploy</em>. First boot takes ~30 seconds.</li>
+            </ol>
+
+            <p>Railway will generate a public URL on the data-plane port. The admin port stays internal; if you want <code>/health</code> reachable, add a second port mapping for <code>8090</code> or use the Railway CLI to <code>railway run curl localhost:8090/health</code> from inside the service.</p>
+
+            <h2 id="docker">Run the Docker image directly</h2>
+
+            <p>If your provider is not in the list above (Fly.io, AWS App Runner, GCP Cloud Run, Hetzner, your laptop), pull the official image and bind-mount a directory for state:</p>
+
+            <Code lang="bash">
+{`docker run -d --name beava \\
+  -p 8080:8080 -p 8090:8090 \\
+  -v $PWD/beava-data:/data \\
+  beavadev/beava:latest`}
+            </Code>
+
+            <p>The image ships a default <code>/app/beava.yaml</code> that listens on <code>0.0.0.0:8080</code> + <code>0.0.0.0:8090</code> and stores the WAL + snapshots under <code>/data</code>. Override the config by mounting your own:</p>
+
+            <Code lang="bash">
+{`docker run -d --name beava \\
+  -p 8080:8080 -p 8090:8090 \\
+  -v $PWD/beava-data:/data \\
+  -v $PWD/beava.yaml:/app/beava.yaml:ro \\
+  beavadev/beava:latest`}
+            </Code>
+
+            <h2 id="verify">Verify the deploy</h2>
+
+            <p>Once the service is up, hit the admin port to confirm beava is healthy:</p>
+
+            <Code lang="bash">{`curl https://your-app.example.com/health`}</Code>
+
+            <p>Expected response: <code>200 OK</code> with body <code>"ok"</code>. Note that on Render and Railway the admin port stays internal by default, so this works from inside the service but not from the public URL — see the platform sections above for how to expose it.</p>
+
+            <p>Then push a synthetic event from your laptop and read it back:</p>
+
+            <Code lang="bash">
+{`curl -X POST https://your-app.example.com/push/Click \\
+  -H 'Content-Type: application/json' \\
+  -d '{"user_id": "u1", "ts": 1715000000.0}'
+
+curl https://your-app.example.com/get/UserCounts/u1`}
+            </Code>
+
+            <p>The second call will <code>404</code> until you register a pipeline that consumes <code>Click</code> events and writes to <code>UserCounts</code>. Walk through the <a href="/docs/get-started/quickstart/">Quickstart</a> for that flow.</p>
+
+            <h2 id="sizing">Sizing and limits</h2>
+
+            <p>beava is in-memory. The disk is for the WAL and snapshots; the working set lives in RAM. Budget roughly <strong>~7 KB per entity</strong> for a rich 30-feature pack — see the <a href="/docs/vision/benchmarks/">benchmarks page</a> for the measurement.</p>
+
+            <ul>
+              <li><strong>Render Starter</strong>: 512 MB RAM → ~70k entities of rich state. Good for staging or low-volume production.</li>
+              <li><strong>Render Standard</strong> ($25/mo): 2 GB RAM → ~280k entities.</li>
+              <li><strong>Railway hobby</strong>: 8 GB RAM ceiling → ~1.1M entities.</li>
+              <li><strong>Your own box</strong>: 64 GB RAM → ~9M entities; 256 GB → ~36M.</li>
+            </ul>
+
+            <p>If your working set exceeds the box, beava will not page to SSD. Size up, or shard across instances Redis-style (one beava process per shard, application-level routing).</p>
+
+            <div className="docs-help-callout">
+              <img src="/assets/mascot-work-pose.svg" alt="" width="72" height="72" className="docs-help-mascot"/>
+              <div className="docs-help-body">
+                <div className="docs-help-kicker">Deploy didn't take?</div>
+                <p className="docs-help-text">Render and Railway both surface container logs in their dashboard. If beava is crash-looping, the most common cause is the disk not being mounted at <code>/data</code> — check the volume config first.</p>
+                <div className="docs-help-actions">
+                  <a className="docs-help-cta-primary" href="https://github.com/beava-dev/beava/discussions" target="_blank" rel="noopener">Ask on GitHub →</a>
+                  <a className="docs-help-cta-ghost" href="https://discord.gg/J5trwbCYpS" target="_blank" rel="noopener">Ask on Discord</a>
+                </div>
+              </div>
+            </div>
+
+
+            <Pager auto/>
+          </main>
+
+          <DocsTOC items={TOC} editHref="https://github.com/beava-dev/beava-website/edit/main/project/docs/get-started/deploy/index.html"/>
+        </div>
+        <SiteFooter maxWidth={1400}/>
+      </>
+    );
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+  </script>
+  <script src="/scripts/docs-headings.js" defer></script>
+  <script src="/js/track-pageview.js" defer></script>
+</body>
+</html>

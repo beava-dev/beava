@@ -13,6 +13,12 @@
   <a href="https://github.com/beava-dev/beava/releases/latest"><img src="https://img.shields.io/github/v/release/beava-dev/beava?include_prereleases&label=release&color=d97757" alt="release"/></a>
 </p>
 
+<p align="center">
+  <a href="https://render.com/deploy?repo=https://github.com/beava-dev/beava"><img src="https://render.com/images/deploy-to-render-button.svg" alt="Deploy to Render" height="32"/></a>
+  &nbsp;
+  <a href="https://beava.dev/docs/get-started/deploy/#railway"><img src="https://railway.com/button.svg" alt="Deploy on Railway" height="32"/></a>
+</p>
+
 ---
 
 **Make your AI product react to what just happened.**

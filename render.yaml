@@ -1,0 +1,35 @@
+# Render Blueprint — one-click beava deploy.
+#
+# Boots a single beava feature server from the published
+# `beavadev/beava:latest` image (rolls forward with each tagged GitHub
+# release; not the rolling :edge image, which tracks every commit to
+# main). The default image config listens on :8080 (data plane: /push,
+# /get, /register) and :8090 (admin: /health, /ready, /metrics,
+# /registry). Render only routes external traffic to the first declared
+# port; the admin port stays in-cluster.
+#
+# Deploy with the "Deploy to Render" button on the beava.dev docs, or:
+#   https://render.com/deploy?repo=https://github.com/beava-dev/beava
+#
+# Persistence: WAL + snapshots live at /data. Render automatically attaches
+# the disk on every redeploy. To reset state, detach the disk in the dashboard.
+#
+# Cost: requires Render's Starter plan ($7/mo) — the free plan does not
+# include persistent disks, and beava needs one for durability.
+
+services:
+  - type: web
+    name: beava
+    runtime: image
+    image:
+      url: docker.io/beavadev/beava:latest
+    plan: starter
+    region: oregon
+    autoDeploy: false
+    disk:
+      name: beava-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: PORT
+        value: 8080

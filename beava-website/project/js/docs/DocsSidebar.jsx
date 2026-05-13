@@ -10,8 +10,10 @@ const Chev = () => (
   </svg>
 );
 
-// IA: at most 3 entries per section. Sub-pages are kept on disk + indexed
-// for search; just removed from sidebar nav. Re-surface by adding back here.
+// IA: ~3 entries per section (Getting started runs 4 — Deploy joins the
+// natural Intro→Quickstart→Build→Deploy arc). Sub-pages are kept on disk
+// + indexed for search; just removed from sidebar nav. Re-surface by
+// adding back here.
 //
 // Hidden-but-on-disk:
 //   Getting started — /docs/get-started/query-features/
@@ -27,6 +29,7 @@ const SECTIONS = [
     { label: 'Introduction',         href: '/docs/' },
     { label: 'Quickstart',           href: '/docs/get-started/quickstart/' },
     { label: 'Build a pipeline',     href: '/docs/get-started/define-a-pipeline/' },
+    { label: 'Deploy',               href: '/docs/get-started/deploy/' },
   ]},
   { title: 'Vision', open: true, items: [
     { label: 'Why beava',                href: '/docs/vision/why-beava/' },
