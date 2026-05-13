@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RFC-008 — Latency vs throughput tradeoffs · beava docs</title>
+  <title>Latency vs throughput tradeoffs · beava docs</title>
   <meta name="description" content="Trade strict atomicity for higher throughput when the workload allows it. Three opt-in knobs: client-side batching, server-side coalescing with early ack, and lockless reads.">
   <link rel="stylesheet" href="../../../../styles/colors_and_type.css">
   <link rel="stylesheet" href="../../../../styles/site.css">
@@ -41,19 +41,19 @@
       <>
         <SiteHeader active="docs" search maxWidth={1400}/>
         <div className="bv-docs-shell">
-          <DocsSidebar active="RFC-008 — Latency vs throughput"/>
+          <DocsSidebar active="Latency vs throughput tradeoffs"/>
 
           <main className="bv-content">
             <div className="bv-crumbs">
               <a href="/docs/">Docs</a>
               <span className="bv-crumb-sep">/</span>
-              <a href="/docs/community/rfcs/">RFCs</a>
+              <a href="/docs/community/roadmap/">Roadmap</a>
               <span className="bv-crumb-sep">/</span>
-              <span className="bv-crumb-cur">RFC-008 — Latency vs throughput tradeoffs</span>
+              <span className="bv-crumb-cur">Latency vs throughput tradeoffs</span>
             </div>
 
-            <h1>RFC-008 — Latency vs throughput tradeoffs</h1>
-            <span className="rfc-meta"><span className="dot"/>Status: Draft</span>
+            <h1>Latency vs throughput tradeoffs</h1>
+            <span className="rfc-meta"><span className="dot"/>Status: Planned</span>
 
             <h2 id="summary">Summary</h2>
             <p className="bv-lede">beava's current data plane applies events one at a time and serializes reads against writes — clean to reason about, but leaves an order of magnitude of throughput on the table for workloads that don't need that strictness. Propose three opt-in knobs that let users trade strict atomicity for batch-shaped throughput, while keeping the strict default unchanged.</p>
@@ -77,7 +77,7 @@
               <li><strong>WAL-append-then-ack durability promise.</strong> How do we communicate &quot;at-most-once between fsyncs&quot; without people misreading it as &quot;will lose events&quot;?</li>
               <li><strong>Throughput marketing math.</strong> If the strict-tier number gets a 10× boost in the batched tier, do we lead with the high or low number? Probably the strict number, with the tiered number as a footnote.</li>
               <li><strong>Where does this leave the &quot;Redis-shaped&quot; story?</strong> Redis is single-threaded, ack-after-write. Tier #2 is closer to Cassandra. Tier #3 is closer to a read replica. We'd be picking a position on that spectrum per workload, not for the whole system.</li>
-              <li><strong>Interaction with RFC-007 (event-log retention).</strong> If raw events are retained, can a fresh node always rebuild even from the at-most-once tier? Probably yes, with replay from the last fsynced offset.</li>
+              <li><strong>Interaction with event-log retention.</strong> If raw events are retained, can a fresh node always rebuild even from the at-most-once tier? Probably yes, with replay from the last fsynced offset.</li>
             </ul>
 
             <div className="docs-help-callout">
@@ -96,7 +96,7 @@
             <Pager auto/>
           </main>
 
-          <DocsTOC items={TOC} editHref="https://github.com/beava-dev/beava-website/edit/main/project/docs/community/rfcs/rfc-008-latency-vs-throughput/index.html"/>
+          <DocsTOC items={TOC} editHref="https://github.com/beava-dev/beava-website/edit/main/project/docs/community/roadmap/008-latency-vs-throughput/index.html"/>
         </div>
         <SiteFooter maxWidth={1400}/>
       </>

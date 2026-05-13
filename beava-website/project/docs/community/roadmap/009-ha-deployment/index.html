@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RFC-009 — HA deployment for single-node beava · beava docs</title>
+  <title>HA deployment for single-node beava · beava docs</title>
   <meta name="description" content="Active-passive replication and automatic failover for single-instance beava. Keeps the single-node programming model; eliminates the single point of failure for production deployments.">
   <link rel="stylesheet" href="../../../../styles/colors_and_type.css">
   <link rel="stylesheet" href="../../../../styles/site.css">
@@ -40,19 +40,19 @@
       <>
         <SiteHeader active="docs" search maxWidth={1400}/>
         <div className="bv-docs-shell">
-          <DocsSidebar active="RFC-009 — HA deployment"/>
+          <DocsSidebar active="HA deployment for single-node beava"/>
 
           <main className="bv-content">
             <div className="bv-crumbs">
               <a href="/docs/">Docs</a>
               <span className="bv-crumb-sep">/</span>
-              <a href="/docs/community/rfcs/">RFCs</a>
+              <a href="/docs/community/roadmap/">Roadmap</a>
               <span className="bv-crumb-sep">/</span>
-              <span className="bv-crumb-cur">RFC-009 — HA deployment for single-node beava</span>
+              <span className="bv-crumb-cur">HA deployment for single-node beava</span>
             </div>
 
-            <h1>RFC-009 — HA deployment for single-node beava</h1>
-            <span className="rfc-meta"><span className="dot"/>Status: Draft</span>
+            <h1>HA deployment for single-node beava</h1>
+            <span className="rfc-meta"><span className="dot"/>Status: Planned</span>
 
             <h2 id="summary">Summary</h2>
             <p className="bv-lede">Run beava as a primary plus a hot standby. The primary handles all reads and writes; the standby tails the primary's WAL in real time and is ready to take over within seconds on failure. Programming model stays single-node — clients still see one logical beava — but the deployment is no longer a single point of failure.</p>
@@ -60,16 +60,16 @@
             <h2 id="motivation">Motivation</h2>
             <p>Single-node beava is the right choice for the programming model: one process, atomic apply, easy to reason about. But for any production deployment with real revenue or compliance pressure, "what happens when the box dies?" is the first question.</p>
             <p>In v0 the answer is: spin up a fresh box, restore from snapshot, replay WAL since the snapshot. RPO ≈ last fsync (seconds). RTO ≈ minutes-to-hours depending on snapshot size and replay throughput. That's acceptable for analytics; not acceptable for fraud-decisioning at a payments fintech.</p>
-            <p>This RFC closes that gap without sharding apply or breaking the single-instance contract — by adding a hot standby that's already running and already caught up.</p>
+            <p>This roadmap item closes that gap without sharding apply or breaking the single-instance contract — by adding a hot standby that's already running and already caught up.</p>
             <h2 id="questions">Open questions</h2>
             <ul>
               <li><strong>Quorum vs single-standby.</strong> 1+1 is simplest (one primary, one standby) but split-brain prone if the network partitions and both sides believe they should be primary. 1+2 with majority-quorum write-acks is safer; 1+1+arbiter is the minimum cost form. Probably default to 1+2 for sync mode, allow 1+1 for async/dev.</li>
               <li><strong>WAL transport protocol.</strong> Reuse the existing TCP framed wire? Add a new opcode (<code>OP_WAL_STREAM</code>)? Or run a sidecar gRPC channel? Reusing the existing framed protocol is simplest.</li>
-              <li><strong>Snapshot bootstrap.</strong> A new standby joining an existing cluster needs a base snapshot before tailing WAL. Stream the latest snapshot to the standby first, then start WAL tailing from the snapshot's offset. Trivial when state fits in RAM (it does, by design); revisit if RFC-001 tiered storage lands.</li>
+              <li><strong>Snapshot bootstrap.</strong> A new standby joining an existing cluster needs a base snapshot before tailing WAL. Stream the latest snapshot to the standby first, then start WAL tailing from the snapshot's offset. Trivial when state fits in RAM (it does, by design); revisit if tiered storage lands.</li>
               <li><strong>Configuration discovery.</strong> Hard-coded peer lists in flags vs. service discovery (Consul / DNS-SRV / k8s). Start with flags; add discovery later.</li>
               <li><strong>Network failure isolation.</strong> If the primary can't reach standbys but clients can still reach the primary, what does sync mode do? Block writes? Degrade to async? Most systems block; users should opt in to either.</li>
               <li><strong>Cross-region.</strong> Async replication across regions for DR is a different shape (RPO seconds, RTO minutes, manual promotion). Probably out of scope for v0.x; revisit when there's demand.</li>
-              <li><strong>Interaction with RFC-007 (event log retention).</strong> If raw events are retained, replication is a strict subset of replay — same machinery, different speed. Could share a lot of code.</li>
+              <li><strong>Interaction with event log retention.</strong> If raw events are retained, replication is a strict subset of replay — same machinery, different speed. Could share a lot of code.</li>
               <li><strong>beava Cloud implementation.</strong> The managed product can ship HA-by-default from day one using this design; self-hosters opt in. Cleanest commercial split — same binary, same primitives, the cloud just handles the operator overhead.</li>
             </ul>
 
@@ -89,7 +89,7 @@
             <Pager auto/>
           </main>
 
-          <DocsTOC items={TOC} editHref="https://github.com/beava-dev/beava-website/edit/main/project/docs/community/rfcs/rfc-009-ha-deployment/index.html"/>
+          <DocsTOC items={TOC} editHref="https://github.com/beava-dev/beava-website/edit/main/project/docs/community/roadmap/009-ha-deployment/index.html"/>
         </div>
         <SiteFooter maxWidth={1400}/>
       </>

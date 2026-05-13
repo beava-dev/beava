@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RFCs · beava docs</title>
-  <meta name="description" content="beava uses public RFCs to discuss important design decisions. Transparent design builds trust.">
+  <title>Roadmap · beava docs</title>
+  <meta name="description" content="What we're building next, in the open. Each item is a planned change with a sketch of the design and the open questions.">
   <link rel="stylesheet" href="../../../styles/colors_and_type.css">
   <link rel="stylesheet" href="../../../styles/site.css">
   <link rel="stylesheet" href="../../../styles/docs-kit.css">
@@ -29,102 +29,45 @@
 
   <script type="text/babel">
     const TOC = [
-      { id: 'shape', label: 'Shape beava in the open' },
-      { id: 'active', label: 'Active RFCs' },
-      { id: 'when', label: 'What belongs in an RFC?' },
-      { id: 'format', label: 'RFC format' },
-      { id: 'philosophy', label: 'RFC philosophy' },
+      { id: 'shape', label: 'What we are building, in the open' },
+      { id: 'active', label: 'Planned items' },
+      { id: 'process', label: 'Roadmap, not RFCs' },
     ];
     const App = () => (
       <>
         <SiteHeader active="docs" search maxWidth={1400}/>
         <div className="bv-docs-shell">
-          <DocsSidebar active="About RFCs"/>
+          <DocsSidebar active="Roadmap"/>
 
           <main className="bv-content">
             <div className="bv-crumbs">
               <a href="/docs/">Docs</a>
               <span className="bv-crumb-sep">/</span>
-              <a href="#">RFCs</a>
-              <span className="bv-crumb-sep">/</span>
-              <span className="bv-crumb-cur">About RFCs</span>
+              <span className="bv-crumb-cur">Roadmap</span>
             </div>
 
-            <h1>RFCs</h1>
+            <h1>Roadmap</h1>
 
-            <h2 id="shape">Shape beava in the open</h2>
-            <p className="bv-lede">beava uses public RFCs to discuss important design decisions. RFCs are where we explore tradeoffs before they become permanent parts of the system.</p>
+            <h2 id="shape">What we are building, in the open</h2>
+            <p className="bv-lede">A short list of the next big changes we expect to make to beava. Each item is a sketch — the shape of the change, why it matters, and the open questions — written down so you can see what we're thinking and push back early.</p>
             <p><strong>The open-source project should be the real system</strong>, and that means design should happen in the open whenever possible.</p>
 
-            <h2 id="active">Active RFCs</h2>
-            <p>The current set of open RFCs. All are early drafts; comments and counter-proposals are welcome on each one.</p>
+            <h2 id="active">Planned items</h2>
+            <p>Comments and counter-proposals are welcome on each one. None of these have shipped; expect the design to shift as we learn.</p>
             <ul>
-              <li><a href="/docs/community/rfcs/rfc-001-tiered-storage/"><strong>RFC-001 — Tiered storage</strong></a> (RAM → SSD → S3). Spill cold state to disk and object storage. Hot path stays sub-ms.</li>
-              <li><a href="/docs/community/rfcs/rfc-002-table-ingestion/"><strong>RFC-002 — Table ingestion</strong></a>. Direct <code>app.upsert</code> and <code>app.delete</code> for static and slowly-changing state.</li>
-              <li><a href="/docs/community/rfcs/rfc-003-stream-to-table-join/"><strong>RFC-003 — Stream-to-table join</strong></a>. Join an event stream against a sibling table inside a pipeline. Snapshot read of the table side.</li>
-              <li><a href="/docs/community/rfcs/rfc-004-out-of-order-events/"><strong>RFC-004 — Out-of-order events</strong></a>. Tolerate events that arrive late; revise v0's processing-time-only default.</li>
-              <li><a href="/docs/community/rfcs/rfc-005-event-log-query-replay/"><strong>RFC-005 — Event-log query and replay</strong></a>. Re-feed retained events for debug, A/B, training data. (Depends on RFC-007.)</li>
-              <li><a href="/docs/community/rfcs/rfc-006-online-pipeline-migration/"><strong>RFC-006 — Online pipeline migration</strong></a>. Add features and modify windows without bouncing the process.</li>
-              <li><a href="/docs/community/rfcs/rfc-007-event-log-retention/"><strong>RFC-007 — Event log retention</strong></a>. Keep raw events past the WAL window so a fresh node can replay the log to reconstruct itself.</li>
-              <li><a href="/docs/community/rfcs/rfc-008-latency-vs-throughput/"><strong>RFC-008 — Latency vs throughput tradeoffs</strong></a>. Opt-in tiers (client batching, early ack, lockless reads) for workloads that don't need strict atomicity.</li>
-              <li><a href="/docs/community/rfcs/rfc-009-ha-deployment/"><strong>RFC-009 — HA deployment for single-node beava</strong></a>. Active-passive WAL replication and automatic failover. Keeps the single-node programming model; eliminates the SPOF.</li>
+              <li><a href="/docs/community/roadmap/001-tiered-storage/"><strong>Tiered storage</strong></a> (RAM → SSD → S3). Spill cold state to disk and object storage. Hot path stays sub-ms.</li>
+              <li><a href="/docs/community/roadmap/002-table-ingestion/"><strong>Table ingestion</strong></a>. Direct <code>app.upsert</code> and <code>app.delete</code> for static and slowly-changing state.</li>
+              <li><a href="/docs/community/roadmap/003-stream-to-table-join/"><strong>Stream-to-table join</strong></a>. Join an event stream against a sibling table inside a pipeline. Snapshot read of the table side.</li>
+              <li><a href="/docs/community/roadmap/004-out-of-order-events/"><strong>Out-of-order events</strong></a>. Tolerate events that arrive late; revise v0's processing-time-only default.</li>
+              <li><a href="/docs/community/roadmap/005-event-log-query-replay/"><strong>Event-log query and replay</strong></a>. Re-feed retained events for debug, A/B, training data. (Depends on event-log retention.)</li>
+              <li><a href="/docs/community/roadmap/006-online-pipeline-migration/"><strong>Online pipeline migration</strong></a>. Add features and modify windows without bouncing the process.</li>
+              <li><a href="/docs/community/roadmap/007-event-log-retention/"><strong>Event log retention</strong></a>. Keep raw events past the WAL window so a fresh node can replay the log to reconstruct itself.</li>
+              <li><a href="/docs/community/roadmap/008-latency-vs-throughput/"><strong>Latency vs throughput tradeoffs</strong></a>. Opt-in tiers (client batching, early ack, lockless reads) for workloads that don't need strict atomicity.</li>
+              <li><a href="/docs/community/roadmap/009-ha-deployment/"><strong>HA deployment for single-node beava</strong></a>. Active-passive WAL replication and automatic failover. Keeps the single-node programming model; eliminates the SPOF.</li>
             </ul>
 
-            <h2 id="when">What belongs in an RFC?</h2>
-            <p>Use an RFC for changes that affect:</p>
-            <ul>
-              <li>The programming model.</li>
-              <li>Stream or table semantics.</li>
-              <li>Window behavior.</li>
-              <li>Aggregation behavior.</li>
-              <li>Storage design.</li>
-              <li>Durability.</li>
-              <li>Replay and backfill.</li>
-              <li>Deployment modes.</li>
-              <li>Query APIs.</li>
-              <li>Compatibility.</li>
-              <li>Operational behavior.</li>
-            </ul>
-            <p>Small fixes and obvious improvements may not need an RFC. But if a change affects how users understand or operate beava, it probably deserves one.</p>
-
-            <h2 id="format">RFC format</h2>
-            <p>A good RFC should include:</p>
-            <Code lang="markdown">
-{`# Title
-
-## Summary
-
-What is being proposed?
-
-## Motivation
-
-Why does this matter?
-
-## Design
-
-How should it work?
-
-## Examples
-
-What does it look like in code?
-
-## Tradeoffs
-
-What are we choosing, and what are we giving up?
-
-## Alternatives
-
-What other approaches were considered?
-
-## Open Questions
-
-What still needs discussion?`}
-            </Code>
-
-            <h2 id="philosophy">RFC philosophy</h2>
-            <p>RFCs should make beava easier to understand.</p>
-            <p>They are not just approval documents. They are a way to build shared context.</p>
-            <p><strong>Transparent design builds trust.</strong></p>
+            <h2 id="process">Roadmap, not RFCs</h2>
+            <p>These items aren't formal RFCs — there's no review process, no approval, no template. They're roadmap items written down so the design is visible before the code lands. When the project is big enough that external contributors are proposing design changes, we'll graduate to a real RFC process. Until then, the bar is much lower: a maintainer wrote down what they were planning to build.</p>
 
             <div className="docs-help-callout">
               <img src="/assets/mascot-work-pose.svg" alt="" width="72" height="72" className="docs-help-mascot"/>
@@ -142,7 +85,7 @@ What still needs discussion?`}
             <Pager auto/>
           </main>
 
-          <DocsTOC items={TOC} editHref="https://github.com/beava-dev/beava-website/edit/main/project/docs/community/rfcs/index.html"/>
+          <DocsTOC items={TOC} editHref="https://github.com/beava-dev/beava-website/edit/main/project/docs/community/roadmap/index.html"/>
         </div>
         <SiteFooter maxWidth={1400}/>
       </>

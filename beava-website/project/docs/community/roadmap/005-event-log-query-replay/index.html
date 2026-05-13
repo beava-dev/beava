@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RFC-005 — Event-log query and replay · beava docs</title>
+  <title>Event-log query and replay · beava docs</title>
   <meta name="description" content="Read the raw event log directly and replay subsets into a new pipeline for backfill or A/B feature tests.">
   <link rel="stylesheet" href="../../../../styles/colors_and_type.css">
   <link rel="stylesheet" href="../../../../styles/site.css">
@@ -40,25 +40,25 @@
       <>
         <SiteHeader active="docs" search maxWidth={1400}/>
         <div className="bv-docs-shell">
-          <DocsSidebar active="RFC-005 — Event-log query and replay"/>
+          <DocsSidebar active="Event-log query and replay"/>
 
           <main className="bv-content">
             <div className="bv-crumbs">
               <a href="/docs/">Docs</a>
               <span className="bv-crumb-sep">/</span>
-              <a href="/docs/community/rfcs/">RFCs</a>
+              <a href="/docs/community/roadmap/">Roadmap</a>
               <span className="bv-crumb-sep">/</span>
-              <span className="bv-crumb-cur">RFC-005 — Event-log query and replay</span>
+              <span className="bv-crumb-cur">Event-log query and replay</span>
             </div>
 
-            <h1>RFC-005 — Event-log query and replay</h1>
-            <span className="rfc-meta"><span className="dot"/>Status: Draft</span>
+            <h1>Event-log query and replay</h1>
+            <span className="rfc-meta"><span className="dot"/>Status: Planned</span>
 
             <h2 id="summary">Summary</h2>
             <p className="bv-lede">Read the raw event log directly (filter by stream, key, time range), and replay subsets into a new pipeline for backfill, A/B feature tests, or historical feature extraction.</p>
 
             <h2 id="motivation">Motivation</h2>
-            <p>Once events are durable past the in-memory window (<a href="/docs/community/rfcs/rfc-007-event-log-retention/">RFC-007</a>), the natural next step is to query and replay them. Evaluating a new feature definition requires re-running production traffic — which is slow, risky, and only tells you about the future. Direct replay enables iterative feature development against real history.</p>
+            <p>Once events are durable past the in-memory window (see <a href="/docs/community/roadmap/007-event-log-retention/">event log retention</a>), the natural next step is to query and replay them. Evaluating a new feature definition requires re-running production traffic — which is slow, risky, and only tells you about the future. Direct replay enables iterative feature development against real history.</p>
             <p><strong>Backfill should be a query, not a deployment.</strong></p>
             <h2 id="questions">Open questions</h2>
             <ul>
@@ -67,7 +67,7 @@
               <li><strong>Throughput contract.</strong> Replay should not starve live serving. CPU/IO budget per replay job.</li>
               <li><strong>Authorization.</strong> Reading raw events is more sensitive than reading aggregates. Token scope: feature-read vs event-read.</li>
               <li><strong>Cost guardrails.</strong> A 1-year replay across 1B keys should not silently OOM. Pre-flight cost estimate, dry-run mode.</li>
-              <li><strong>Backfill correctness.</strong> The replay must produce the same final aggregate as a live run, modulo out-of-order semantics (RFC-004).</li>
+              <li><strong>Backfill correctness.</strong> The replay must produce the same final aggregate as a live run, modulo out-of-order semantics.</li>
             </ul>
 
             <div className="docs-help-callout">
@@ -86,7 +86,7 @@
             <Pager auto/>
           </main>
 
-          <DocsTOC items={TOC} editHref="https://github.com/beava-dev/beava-website/edit/main/project/docs/community/rfcs/rfc-005-event-log-query-replay/index.html"/>
+          <DocsTOC items={TOC} editHref="https://github.com/beava-dev/beava-website/edit/main/project/docs/community/roadmap/005-event-log-query-replay/index.html"/>
         </div>
         <SiteFooter maxWidth={1400}/>
       </>

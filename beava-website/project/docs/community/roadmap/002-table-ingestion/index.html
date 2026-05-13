@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RFC-002 — Table ingestion · beava docs</title>
+  <title>Table ingestion · beava docs</title>
   <meta name="description" content="Direct table ingestion via app.upsert and app.delete. The native home for static and slowly-changing state in beava.">
   <link rel="stylesheet" href="../../../../styles/colors_and_type.css">
   <link rel="stylesheet" href="../../../../styles/site.css">
@@ -40,26 +40,26 @@
       <>
         <SiteHeader active="docs" search maxWidth={1400}/>
         <div className="bv-docs-shell">
-          <DocsSidebar active="RFC-002 — Table ingestion"/>
+          <DocsSidebar active="Table ingestion"/>
 
           <main className="bv-content">
             <div className="bv-crumbs">
               <a href="/docs/">Docs</a>
               <span className="bv-crumb-sep">/</span>
-              <a href="/docs/community/rfcs/">RFCs</a>
+              <a href="/docs/community/roadmap/">Roadmap</a>
               <span className="bv-crumb-sep">/</span>
-              <span className="bv-crumb-cur">RFC-002 — Table ingestion</span>
+              <span className="bv-crumb-cur">Table ingestion</span>
             </div>
 
-            <h1>RFC-002 — Table ingestion</h1>
-            <span className="rfc-meta"><span className="dot"/>Status: Draft</span>
+            <h1>Table ingestion</h1>
+            <span className="rfc-meta"><span className="dot"/>Status: Planned</span>
 
             <h2 id="summary">Summary</h2>
             <p className="bv-lede">Direct ingestion into tables via <code>app.upsert(table, key, value)</code> and <code>app.delete(table, key)</code>. The native home for static and slowly-changing state in beava — user tiers, merchant categories, allow/block lists, feature flags — without forcing it through the event path.</p>
 
             <h2 id="motivation">Motivation</h2>
             <p>Static or slowly-changing data — user tiers, merchant categories, allow/block lists, feature flags, tenant config — has no native home in v0. Teams stuff this data into events and aggregate (which is awkward and lossy), or query an external store at decision time (which adds a network hop and a second system).</p>
-            <p>Direct table ingestion is also a <strong>prerequisite for <a href="/docs/community/rfcs/rfc-003-stream-to-table-join/">RFC-003 stream-to-table joins</a></strong> — there has to be a clean way to maintain the joined-against table before joins become useful.</p>
+            <p>Direct table ingestion is also a <strong>prerequisite for <a href="/docs/community/roadmap/003-stream-to-table-join/">stream-to-table joins</a></strong> — there has to be a clean way to maintain the joined-against table before joins become useful.</p>
             <h2 id="questions">Open questions</h2>
             <ul>
               <li><strong>Wire format.</strong> HTTP routes shown above; TCP framing parallels push.</li>
@@ -86,7 +86,7 @@
             <Pager auto/>
           </main>
 
-          <DocsTOC items={TOC} editHref="https://github.com/beava-dev/beava-website/edit/main/project/docs/community/rfcs/rfc-002-table-ingestion/index.html"/>
+          <DocsTOC items={TOC} editHref="https://github.com/beava-dev/beava-website/edit/main/project/docs/community/roadmap/002-table-ingestion/index.html"/>
         </div>
         <SiteFooter maxWidth={1400}/>
       </>

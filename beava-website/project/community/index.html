@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Community — beava</title>
-  <meta name="description" content="beava is built in the open. Weekly streamed dev meetups, public RFCs, GitHub Discussions. The model is TiDB and PingCAP.">
+  <meta name="description" content="beava is built in the open. Weekly streamed dev meetups, a public roadmap, GitHub Discussions. The model is TiDB and PingCAP.">
   <link rel="stylesheet" href="../styles/colors_and_type.css">
   <link rel="stylesheet" href="../styles/site.css">
   <link rel="stylesheet" href="../styles/docs-kit.css">
@@ -92,7 +92,7 @@
               the load-bearing reason for keeping the class. */}
           <main className="bv-content" style={{ margin: '0 auto', padding: 0, maxWidth: '100%' }}>
             <h1>Community</h1>
-            <p className="bv-lede">beava is built in the open. Weekly streamed dev meetups, public RFCs, GitHub Discussions. The model is TiDB and PingCAP: OSS engine fully featured, commercial scope explicit, no paywalls on basics.</p>
+            <p className="bv-lede">beava is built in the open. Weekly streamed dev meetups, a public roadmap, GitHub Discussions. The model is TiDB and PingCAP: OSS engine fully featured, commercial scope explicit, no paywalls on basics.</p>
 
             <h2 id="commitments">Four commitments, from launch day</h2>
             <p>The contract you're signing up for when you depend on beava.</p>
@@ -116,13 +116,13 @@
                 <span className="more">See the benchmarks →</span>
               </a>
 
-              <a className="commit" href="/docs/community/rfcs/">
+              <a className="commit" href="/docs/community/roadmap/">
                 <span className="ic">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0-3-3.87"/></svg>
                 </span>
                 <h3>Decisions in public</h3>
-                <p>Every meaningful change starts as an RFC. You can read why, push back, or write your own.</p>
-                <span className="more">Browse RFCs →</span>
+                <p>Every meaningful change shows up on the roadmap before it lands. You can read why, push back, or write your own.</p>
+                <span className="more">Browse the roadmap →</span>
               </a>
 
               <a className="commit" href="#">
@@ -135,18 +135,18 @@
               </a>
             </div>
 
-            <h2 id="rfcs">RFCs in flight</h2>
-            <p>The RFCs we're discussing now, in numeric order.</p>
+            <h2 id="roadmap">Roadmap items in flight</h2>
+            <p>What we're designing in the open right now.</p>
             <ul>
-              <li><a href="/docs/community/rfcs/rfc-001-tiered-storage/"><strong>RFC-001</strong></a> — Tiered storage (RAM → SSD → S3). Spill cold state to disk and object storage. Hot path stays sub-ms.</li>
-              <li><a href="/docs/community/rfcs/rfc-002-table-ingestion/"><strong>RFC-002</strong></a> — Table ingestion. Direct <code>app.upsert</code> and <code>app.delete</code> for static and slowly-changing state.</li>
-              <li><a href="/docs/community/rfcs/rfc-003-stream-to-table-join/"><strong>RFC-003</strong></a> — Stream-to-table join. Join an event stream against a sibling table inside a pipeline. Snapshot read of the table side.</li>
-              <li><a href="/docs/community/rfcs/rfc-004-out-of-order-events/"><strong>RFC-004</strong></a> — Out-of-order events. Tolerate events that arrive late; revise v0's processing-time-only default.</li>
-              <li><a href="/docs/community/rfcs/rfc-005-event-log-query-replay/"><strong>RFC-005</strong></a> — Event-log query and replay. Re-feed retained events for debug, A/B, training data. (Depends on RFC-007.)</li>
-              <li><a href="/docs/community/rfcs/rfc-006-online-pipeline-migration/"><strong>RFC-006</strong></a> — Online pipeline migration. Add features and modify windows without bouncing the process.</li>
-              <li><a href="/docs/community/rfcs/rfc-007-event-log-retention/"><strong>RFC-007</strong></a> — Event log retention. Keep raw events past the WAL window so a fresh node can replay the log to reconstruct itself.</li>
-              <li><a href="/docs/community/rfcs/rfc-008-latency-vs-throughput/"><strong>RFC-008</strong></a> — Latency vs throughput tradeoffs. Opt-in tiers (client batching, early ack, lockless reads) for workloads that don't need strict atomicity.</li>
-              <li><a href="/docs/community/rfcs/rfc-009-ha-deployment/"><strong>RFC-009</strong></a> — HA deployment. Active-passive WAL replication + automatic failover. Same single-node programming model; no more SPOF.</li>
+              <li><a href="/docs/community/roadmap/001-tiered-storage/"><strong>Tiered storage</strong></a> (RAM → SSD → S3). Spill cold state to disk and object storage. Hot path stays sub-ms.</li>
+              <li><a href="/docs/community/roadmap/002-table-ingestion/"><strong>Table ingestion</strong></a>. Direct <code>app.upsert</code> and <code>app.delete</code> for static and slowly-changing state.</li>
+              <li><a href="/docs/community/roadmap/003-stream-to-table-join/"><strong>Stream-to-table join</strong></a>. Join an event stream against a sibling table inside a pipeline. Snapshot read of the table side.</li>
+              <li><a href="/docs/community/roadmap/004-out-of-order-events/"><strong>Out-of-order events</strong></a>. Tolerate events that arrive late; revise v0's processing-time-only default.</li>
+              <li><a href="/docs/community/roadmap/005-event-log-query-replay/"><strong>Event-log query and replay</strong></a>. Re-feed retained events for debug, A/B, training data. (Depends on event log retention.)</li>
+              <li><a href="/docs/community/roadmap/006-online-pipeline-migration/"><strong>Online pipeline migration</strong></a>. Add features and modify windows without bouncing the process.</li>
+              <li><a href="/docs/community/roadmap/007-event-log-retention/"><strong>Event log retention</strong></a>. Keep raw events past the WAL window so a fresh node can replay the log to reconstruct itself.</li>
+              <li><a href="/docs/community/roadmap/008-latency-vs-throughput/"><strong>Latency vs throughput tradeoffs</strong></a>. Opt-in tiers (client batching, early ack, lockless reads) for workloads that don't need strict atomicity.</li>
+              <li><a href="/docs/community/roadmap/009-ha-deployment/"><strong>HA deployment</strong></a>. Active-passive WAL replication + automatic failover. Same single-node programming model; no more SPOF.</li>
             </ul>
             <p>Want one expedited? <a href="https://github.com/beava-dev/beava/discussions" target="_blank" rel="noopener">Open a Discussion</a> with your use case and the rough number of entities you'd run on it.</p>
 

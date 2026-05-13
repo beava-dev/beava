@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RFC-003 — Stream-to-table join · beava docs</title>
+  <title>Stream-to-table join · beava docs</title>
   <meta name="description" content="Stream-to-table join inside a pipeline. Snapshot reads of a sibling table. Not a stream-stream join.">
   <link rel="stylesheet" href="../../../../styles/colors_and_type.css">
   <link rel="stylesheet" href="../../../../styles/site.css">
@@ -40,19 +40,19 @@
       <>
         <SiteHeader active="docs" search maxWidth={1400}/>
         <div className="bv-docs-shell">
-          <DocsSidebar active="RFC-003 — Stream-to-table join"/>
+          <DocsSidebar active="Stream-to-table join"/>
 
           <main className="bv-content">
             <div className="bv-crumbs">
               <a href="/docs/">Docs</a>
               <span className="bv-crumb-sep">/</span>
-              <a href="/docs/community/rfcs/">RFCs</a>
+              <a href="/docs/community/roadmap/">Roadmap</a>
               <span className="bv-crumb-sep">/</span>
-              <span className="bv-crumb-cur">RFC-003 — Stream-to-table join</span>
+              <span className="bv-crumb-cur">Stream-to-table join</span>
             </div>
 
-            <h1>RFC-003 — Stream-to-table join</h1>
-            <span className="rfc-meta"><span className="dot"/>Status: Draft</span>
+            <h1>Stream-to-table join</h1>
+            <span className="rfc-meta"><span className="dot"/>Status: Planned</span>
 
             <h2 id="summary">Summary</h2>
             <p className="bv-lede">Join an incoming event stream against a sibling table inside a pipeline. The table side is read as a snapshot of its current state at apply time. This is a <strong>stream-to-table join</strong> — distinct from stream-stream joins, which v0 doesn’t do.</p>
@@ -63,7 +63,7 @@
             <p><strong>Real-time features should feel like application code</strong> — including the joins to context.</p>
             <h2 id="questions">Open questions</h2>
             <ul>
-              <li><strong>Snapshot semantics.</strong> Read-latest is the simplest and matches v0’s processing-time default. Other choices (read-at-event-time) re-open separate questions and probably belong in a different RFC.</li>
+              <li><strong>Snapshot semantics.</strong> Read-latest is the simplest and matches v0’s processing-time default. Other choices (read-at-event-time) re-open separate questions and probably belong in a different roadmap item.</li>
               <li><strong>Missing key.</strong> Default value? Skip the event? Error? Per-call vs per-table policy.</li>
               <li><strong>Chained joins.</strong> Can a join target another joined table? Cycle detection at register time.</li>
               <li><strong>Performance contract.</strong> Join is on the hot path. Latency budget and cardinality limits for the table side.</li>
@@ -87,7 +87,7 @@
             <Pager auto/>
           </main>
 
-          <DocsTOC items={TOC} editHref="https://github.com/beava-dev/beava-website/edit/main/project/docs/community/rfcs/rfc-003-stream-to-table-join/index.html"/>
+          <DocsTOC items={TOC} editHref="https://github.com/beava-dev/beava-website/edit/main/project/docs/community/roadmap/003-stream-to-table-join/index.html"/>
         </div>
         <SiteFooter maxWidth={1400}/>
       </>

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RFC-006 — Online pipeline migration · beava docs</title>
+  <title>Online pipeline migration · beava docs</title>
   <meta name="description" content="Change a pipeline definition without losing aggregate state or downtime.">
   <link rel="stylesheet" href="../../../../styles/colors_and_type.css">
   <link rel="stylesheet" href="../../../../styles/site.css">
@@ -40,19 +40,19 @@
       <>
         <SiteHeader active="docs" search maxWidth={1400}/>
         <div className="bv-docs-shell">
-          <DocsSidebar active="RFC-006 — Online pipeline migration"/>
+          <DocsSidebar active="Online pipeline migration"/>
 
           <main className="bv-content">
             <div className="bv-crumbs">
               <a href="/docs/">Docs</a>
               <span className="bv-crumb-sep">/</span>
-              <a href="/docs/community/rfcs/">RFCs</a>
+              <a href="/docs/community/roadmap/">Roadmap</a>
               <span className="bv-crumb-sep">/</span>
-              <span className="bv-crumb-cur">RFC-006 — Online pipeline migration</span>
+              <span className="bv-crumb-cur">Online pipeline migration</span>
             </div>
 
-            <h1>RFC-006 — Online pipeline migration</h1>
-            <span className="rfc-meta"><span className="dot"/>Status: Draft</span>
+            <h1>Online pipeline migration</h1>
+            <span className="rfc-meta"><span className="dot"/>Status: Planned</span>
 
             <h2 id="summary">Summary</h2>
             <p className="bv-lede">Change a pipeline definition — add features, change windows, fix expressions — without losing aggregate state or downtime.</p>
@@ -67,7 +67,7 @@
               <li><strong>Rollback.</strong> A migration that turns out to be wrong needs a path back. Keep N old graphs hot in memory? Snapshot before swap?</li>
               <li><strong>Schema versioning.</strong> WAL and snapshot formats need to know which graph version produced them.</li>
               <li><strong>UX.</strong> Declarative migration file (à la django/alembic) or auto-detected? Operator runs <code>beava migrate plan</code> first.</li>
-              <li><strong>Interaction with replay.</strong> Many migrations only succeed if event-log replay is available; this RFC depends on RFC-005 (replay) + RFC-007 (retention) for those shapes.</li>
+              <li><strong>Interaction with replay.</strong> Many migrations only succeed if event-log replay is available; the harder migrations depend on event-log query/replay plus event log retention for those shapes.</li>
             </ul>
 
             <div className="docs-help-callout">
@@ -86,7 +86,7 @@
             <Pager auto/>
           </main>
 
-          <DocsTOC items={TOC} editHref="https://github.com/beava-dev/beava-website/edit/main/project/docs/community/rfcs/rfc-006-online-pipeline-migration/index.html"/>
+          <DocsTOC items={TOC} editHref="https://github.com/beava-dev/beava-website/edit/main/project/docs/community/roadmap/006-online-pipeline-migration/index.html"/>
         </div>
         <SiteFooter maxWidth={1400}/>
       </>

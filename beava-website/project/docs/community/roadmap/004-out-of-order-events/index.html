@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RFC-004 — Out-of-order events · beava docs</title>
+  <title>Out-of-order events · beava docs</title>
   <meta name="description" content="Tolerate events that arrive out of order or late. Revises v0's processing-time-only default — the harder semantic discussion.">
   <link rel="stylesheet" href="../../../../styles/colors_and_type.css">
   <link rel="stylesheet" href="../../../../styles/site.css">
@@ -41,19 +41,19 @@
       <>
         <SiteHeader active="docs" search maxWidth={1400}/>
         <div className="bv-docs-shell">
-          <DocsSidebar active="RFC-004 — Out-of-order events"/>
+          <DocsSidebar active="Out-of-order events"/>
 
           <main className="bv-content">
             <div className="bv-crumbs">
               <a href="/docs/">Docs</a>
               <span className="bv-crumb-sep">/</span>
-              <a href="/docs/community/rfcs/">RFCs</a>
+              <a href="/docs/community/roadmap/">Roadmap</a>
               <span className="bv-crumb-sep">/</span>
-              <span className="bv-crumb-cur">RFC-004 — Out-of-order events</span>
+              <span className="bv-crumb-cur">Out-of-order events</span>
             </div>
 
-            <h1>RFC-004 — Out-of-order events</h1>
-            <span className="rfc-meta"><span className="dot"/>Status: Draft</span>
+            <h1>Out-of-order events</h1>
+            <span className="rfc-meta"><span className="dot"/>Status: Planned</span>
 
             <h2 id="summary">Summary</h2>
             <p className="bv-lede">Tolerate events that arrive out of order or late, within a bounded window. Revises v0's processing-time-only default — windowed aggregations would honor an event-time field on the wire and reorder within a tolerance budget.</p>
@@ -63,7 +63,7 @@
             <p>The fix is event-time semantics with bounded tolerance: events carry their original timestamp on the wire; the engine reorders within a configurable lateness budget; windowed aggregations stay correct as long as events arrive within the budget. Past the budget the event is dropped or routed to a late-event sink.</p>
 
             <div className="rfc-warn">
-              <strong>Tension with the v0 default.</strong> v0 ships with processing-time only — no event-time, no watermarks, no lateness handling. Out-of-order support means revising that default: adding an event-time field on the wire, picking a watermark strategy, deciding what happens past the bound. This RFC is the place to debate the shape.
+              <strong>Tension with the v0 default.</strong> v0 ships with processing-time only — no event-time, no watermarks, no lateness handling. Out-of-order support means revising that default: adding an event-time field on the wire, picking a watermark strategy, deciding what happens past the bound. This is the place to debate the shape.
             </div>
 
             <h2 id="questions">Open questions</h2>
@@ -76,7 +76,7 @@
               <li><strong>Migration path.</strong> Existing v0 pipelines run processing-time. Is event-time opt-in per-event (an explicit field on <code>@bv.event</code>) or per-pipeline?</li>
             </ul>
 
-            <p>Companion RFC: <a href="/docs/community/rfcs/rfc-007-event-log-retention/">RFC-007 — Event log retention</a> covers persisting raw events for replay (the operational counterpart to out-of-order tolerance).</p>
+            <p>Companion roadmap item: <a href="/docs/community/roadmap/007-event-log-retention/">event log retention</a> covers persisting raw events for replay (the operational counterpart to out-of-order tolerance).</p>
 
             <div className="docs-help-callout">
               <img src="/assets/mascot-work-pose.svg" alt="" width="72" height="72" className="docs-help-mascot"/>
@@ -94,7 +94,7 @@
             <Pager auto/>
           </main>
 
-          <DocsTOC items={TOC} editHref="https://github.com/beava-dev/beava-website/edit/main/project/docs/community/rfcs/rfc-004-out-of-order-events/index.html"/>
+          <DocsTOC items={TOC} editHref="https://github.com/beava-dev/beava-website/edit/main/project/docs/community/roadmap/004-out-of-order-events/index.html"/>
         </div>
         <SiteFooter maxWidth={1400}/>
       </>

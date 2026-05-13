@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RFC-001 — Tiered storage · beava docs</title>
+  <title>Tiered storage · beava docs</title>
   <meta name="description" content="Spill cold per-key state from RAM to SSD and S3 so memory stops being the cap on total entity count.">
   <link rel="stylesheet" href="../../../../styles/colors_and_type.css">
   <link rel="stylesheet" href="../../../../styles/site.css">
@@ -40,19 +40,19 @@
       <>
         <SiteHeader active="docs" search maxWidth={1400}/>
         <div className="bv-docs-shell">
-          <DocsSidebar active="RFC-001 — Tiered storage"/>
+          <DocsSidebar active="Tiered storage"/>
 
           <main className="bv-content">
             <div className="bv-crumbs">
               <a href="/docs/">Docs</a>
               <span className="bv-crumb-sep">/</span>
-              <a href="/docs/community/rfcs/">RFCs</a>
+              <a href="/docs/community/roadmap/">Roadmap</a>
               <span className="bv-crumb-sep">/</span>
-              <span className="bv-crumb-cur">RFC-001 — Tiered storage</span>
+              <span className="bv-crumb-cur">Tiered storage</span>
             </div>
 
-            <h1>RFC-001 — Tiered storage</h1>
-            <span className="rfc-meta"><span className="dot"/>Status: Draft</span>
+            <h1>Tiered storage</h1>
+            <span className="rfc-meta"><span className="dot"/>Status: Planned</span>
 
             <h2 id="summary">Summary</h2>
             <p className="bv-lede">Spill cold per-key state from RAM to local SSD and S3 so memory budget stops being the cap on total entity count. The hot path stays sub-millisecond; cold reads accept a degraded latency contract.</p>
@@ -69,7 +69,7 @@
               <li><strong>WAL interaction.</strong> Does spill change the durability story? Can we skip WAL for state that already lives on durable storage?</li>
               <li><strong>S3 cost model.</strong> A naive design hits S3 on every cold key. Need a strategy (per-key vs batched, prefetch, request budget).</li>
               <li><strong>Ops UX.</strong> How does an operator see "this query went to S3 and took 200 ms"? Per-table tier dashboards.</li>
-              <li><strong>Relationship to the v0 design.</strong> v0 ships in-memory only — users size their box. Tiered storage changes that. The RFC has to make the case that the new shape is worth the additional surface.</li>
+              <li><strong>Relationship to the v0 design.</strong> v0 ships in-memory only — users size their box. Tiered storage changes that. The proposal has to make the case that the new shape is worth the additional surface.</li>
             </ul>
 
             <div className="docs-help-callout">
@@ -88,7 +88,7 @@
             <Pager auto/>
           </main>
 
-          <DocsTOC items={TOC} editHref="https://github.com/beava-dev/beava-website/edit/main/project/docs/community/rfcs/rfc-001-tiered-storage/index.html"/>
+          <DocsTOC items={TOC} editHref="https://github.com/beava-dev/beava-website/edit/main/project/docs/community/roadmap/001-tiered-storage/index.html"/>
         </div>
         <SiteFooter maxWidth={1400}/>
       </>

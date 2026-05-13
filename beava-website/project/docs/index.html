@@ -29,8 +29,8 @@
 
   <script type="text/babel">
     const TOC = [
-      { id: 'fresh-state', label: 'Fresh state, no platform' },
-      { id: 'why', label: 'Why beava?' },
+      { id: 'react', label: 'React to live events' },
+      { id: 'why', label: 'Why beava' },
       { id: 'how', label: 'How beava works' },
       { id: 'build', label: 'What you can build' },
       { id: 'start', label: 'Start here' },
@@ -54,41 +54,42 @@
 
             <h1>beava</h1>
 
-            <h2 id="fresh-state">Fresh state without a streaming platform</h2>
-            <p className="bv-lede">beava is a single-threaded event processing and serving engine for building real-time features with much less infrastructure.</p>
-            <p>It lets developers define streams, feature tables, aggregations, and windows in a declarative Python SDK that feels closer to Polars than traditional stream processing frameworks. Events can be pushed over TCP or HTTP, and fresh features can be served immediately through simple <code>get</code> and <code>batch_get</code> queries.</p>
-            <p><strong>beava turns events into fresh, queryable state.</strong></p>
-            <p>The goal is to make real-time feature pipelines feel as lightweight, practical, and straightforward as Redis.</p>
+            <h2 id="react">React to live events</h2>
+            <p className="bv-lede">beava is a single-binary feature server for the decisions that have to use the latest event: fraud signals, recommendations, LLM guardrails.</p>
+            <p>You declare features in Python, push events over HTTP, and read fresh values by entity key in sub-millisecond latency. One process. No Kafka, no Flink, no feature store.</p>
+            <p>Three primitives carry the whole API: <code>@bv.event</code> for the shape of what you push, <code>@bv.table</code> for the keyed feature row those events maintain, and <code>app.get</code> for the read at decision time.</p>
+            <p><strong>beava turns live events into fresh features.</strong></p>
 
-            <h2 id="why">Why beava?</h2>
-            <p>Modern applications need to make fast decisions from recent data. Models rank, personalize, predict, bid, route, and react in milliseconds. Agents increasingly need fresh state about users, tools, products, workflows, and the environment around them.</p>
-            <p>But developers still lack a simple way to process the latest event data and query it immediately.</p>
-            <p>The standard stack often becomes a collection of separate systems: an event bus, a stream processor, a serving store, and custom glue code. That stack is powerful, but for many application teams it is too heavy, too slow to adapt, and too far away from the code developers want to write.</p>
+            <h2 id="why">Why beava</h2>
+            <p>Modern applications make fast decisions from recent data. A fraud rule decides whether to block a charge in milliseconds. A recommendation model leans on the last 30 minutes of clicks. An agent checks a token budget before it routes to an expensive model.</p>
+            <p>The conventional stack delivers all of that with several systems: an event bus, a stream processor, a serving store, and the glue between them. Powerful, but heavy to operate and far from the code most developers want to write.</p>
             <p><strong>Stream processing should not require a platform team.</strong></p>
-            <p>beava exists because teams need a simpler primitive for turning events into fresh, queryable, windowed features and agentic state.</p>
+            <p>beava collapses the stack into one binary. You write the Python that defines the features and the HTTP client that reads them. That is the whole loop.</p>
             <p><a href="/docs/vision/why-beava/" style={{color:'var(--accent)', fontWeight:600}}>Read the longer story →</a></p>
 
             <h2 id="how">How beava works</h2>
-            <p>A beava app has three basic parts:</p>
+            <p>A beava app has three parts:</p>
             <ol>
-              <li><strong>Streams</strong> describe the events your application produces.</li>
-              <li><strong>Tables</strong> describe the grouped, windowed, aggregated state you want to maintain.</li>
-              <li><strong>Queries</strong> let your application fetch the latest values by key with <code>get</code> and <code>batch_get</code>.</li>
+              <li><strong>Events</strong> describe what your application emits, declared with <code>@bv.event</code>.</li>
+              <li><strong>Tables</strong> describe the keyed, windowed, aggregated state those events maintain, declared with <code>@bv.table</code> over a <code>group_by(...).agg(...)</code> chain.</li>
+              <li><strong>Queries</strong> read the latest row by entity key with <code>app.get</code> and <code>app.batch_get</code>.</li>
             </ol>
-            <p>As events arrive, beava updates the relevant tables inline and makes the latest values available to your application.</p>
-            <p><strong>Low-latency reads are useful; low-latency freshness changes the architecture.</strong></p>
-            <p>When a new event becomes queryable quickly enough, teams can put fresh state directly inside personalization, ranking, bidding, fraud, recommendation, and agent decision paths.</p>
+            <p>Events arrive over HTTP. Tables update inline. Reads return the freshest value the system has for that key.</p>
+            <p><strong>Low-latency freshness is what changes the architecture.</strong> When a new event becomes queryable in milliseconds, fresh state goes directly into your decision path without a second store in front of it.</p>
 
             <h2 id="build">What you can build</h2>
-            <p>Use beava when <strong>fresh events need to become a fast decision</strong>.</p>
-            <p>Common starting points include:</p>
+            <p>The three shapes the homepage demonstrates are the canonical starting points:</p>
             <ul>
-              <li><strong>Personalization and recommendations</strong></li>
-              <li><strong>Real-time bidding and ads systems</strong></li>
-              <li><strong>Fraud, abuse, and risk scoring</strong></li>
-              <li><strong>Agentic state</strong></li>
+              <li><strong>Fraud signals.</strong> Failed-login counters per user, payment-velocity windows, CVC-fail counters per card.</li>
+              <li><strong>Recommendation features.</strong> Recent-click counts per user, top-k categories over a rolling hour.</li>
+              <li><strong>LLM guardrails.</strong> Token budgets per org, short-burst request gauges that catch a runaway agent.</li>
+            </ul>
+            <p>The same primitives extend to:</p>
+            <ul>
+              <li><strong>Real-time bidding and ad-tech</strong></li>
+              <li><strong>Agentic state</strong>, the per-tool, per-org context an agent reads at decision time</li>
               <li><strong>Product analytics that become product logic</strong></li>
-              <li><strong>ML feature iteration</strong></li>
+              <li><strong>ML feature iteration</strong> without a data-engineering ticket</li>
             </ul>
 
             <h2 id="start">Start here</h2>
@@ -109,7 +110,7 @@
 
             <h2 id="join">Join the project</h2>
             <p>beava is early, and we want to build it with people who feel this problem directly.</p>
-            <p>Try it locally, read the public RFCs, join the weekly dev call, or catch up through summaries from previous calls.</p>
+            <p>Try it locally, read the public roadmap, join the weekly dev call, or catch up through summaries from previous calls.</p>
             <p>Help us make <strong>real-time features feel like application code</strong>.</p>
 
             <Pager

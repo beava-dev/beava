@@ -3,3 +3,16 @@
 /operators        /docs/operators/          301
 /wire             /docs/wire-spec/          301
 /api              /docs/http-api/           301
+
+# Roadmap was previously called "RFCs" and lived under /docs/community/rfcs/.
+# Keep these so external links (Discord pins, blog posts, search caches) land.
+/docs/community/rfcs/                                       /docs/community/roadmap/                                  301
+/docs/community/rfcs/rfc-001-tiered-storage/                /docs/community/roadmap/001-tiered-storage/               301
+/docs/community/rfcs/rfc-002-table-ingestion/               /docs/community/roadmap/002-table-ingestion/              301
+/docs/community/rfcs/rfc-003-stream-to-table-join/          /docs/community/roadmap/003-stream-to-table-join/         301
+/docs/community/rfcs/rfc-004-out-of-order-events/           /docs/community/roadmap/004-out-of-order-events/          301
+/docs/community/rfcs/rfc-005-event-log-query-replay/        /docs/community/roadmap/005-event-log-query-replay/       301
+/docs/community/rfcs/rfc-006-online-pipeline-migration/     /docs/community/roadmap/006-online-pipeline-migration/    301
+/docs/community/rfcs/rfc-007-event-log-retention/           /docs/community/roadmap/007-event-log-retention/          301
+/docs/community/rfcs/rfc-008-latency-vs-throughput/         /docs/community/roadmap/008-latency-vs-throughput/        301
+/docs/community/rfcs/rfc-009-ha-deployment/                 /docs/community/roadmap/009-ha-deployment/                301

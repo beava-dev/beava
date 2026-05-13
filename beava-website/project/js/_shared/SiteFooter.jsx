@@ -8,13 +8,13 @@ const SITE_FOOTER_COLS = [
   { title: 'Project', links: [
     { label: 'Guide',           href: '/guide/' },
     { label: 'Docs',            href: '/docs/' },
-    { label: 'Roadmap',         href: '/docs/community/rfcs/' },
+    { label: 'Roadmap',         href: '/docs/community/roadmap/' },
     { label: 'OSS commitment',  href: '/docs/vision/open-source/' },
   ]},
   { title: 'Community', links: [
     { label: 'GitHub',      href: 'https://github.com/beava-dev/beava', external: true },
     { label: 'Discussions', href: 'https://github.com/beava-dev/beava/discussions', external: true },
-    { label: 'RFCs',        href: '/docs/community/rfcs/' },
+    { label: 'Contributing', href: '/docs/community/contributing/' },
   ]},
 ];
 

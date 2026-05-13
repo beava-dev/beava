@@ -1,7 +1,7 @@
 // js/docs/DocsSidebar.jsx
 // IA mirrors scripts/render-docs-config.json — keep both in sync.
 // Top groups (Getting started, Concepts) start expanded.
-// Reference / Architecture / Vision / Community & RFCs start collapsed
+// Reference / Architecture / Vision / Community start collapsed
 // but auto-expand if the active page lives inside.
 
 const Chev = () => (
@@ -38,7 +38,7 @@ const SECTIONS = [
     { label: 'Push and fetch features',  href: '/docs/get-started/push-events/' },
   ]},
   { title: 'Community', open: false, items: [
-    { label: 'About RFCs',           href: '/docs/community/rfcs/' },
+    { label: 'Roadmap',              href: '/docs/community/roadmap/' },
     { label: 'Contributing',         href: '/docs/community/contributing/' },
     { label: 'Discussions',          href: 'https://github.com/beava-dev/beava/discussions', external: true },
   ]},

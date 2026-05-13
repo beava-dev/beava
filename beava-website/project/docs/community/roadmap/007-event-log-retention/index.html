@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RFC-007 — Event log retention · beava docs</title>
+  <title>Event log retention · beava docs</title>
   <meta name="description" content="Persist raw events past the in-memory window so a fresh node can rebuild itself from the log instead of from a peer.">
   <link rel="stylesheet" href="../../../../styles/colors_and_type.css">
   <link rel="stylesheet" href="../../../../styles/site.css">
@@ -41,19 +41,19 @@
       <>
         <SiteHeader active="docs" search maxWidth={1400}/>
         <div className="bv-docs-shell">
-          <DocsSidebar active="RFC-007 — Event log retention"/>
+          <DocsSidebar active="Event log retention"/>
 
           <main className="bv-content">
             <div className="bv-crumbs">
               <a href="/docs/">Docs</a>
               <span className="bv-crumb-sep">/</span>
-              <a href="/docs/community/rfcs/">RFCs</a>
+              <a href="/docs/community/roadmap/">Roadmap</a>
               <span className="bv-crumb-sep">/</span>
-              <span className="bv-crumb-cur">RFC-007 — Event log retention</span>
+              <span className="bv-crumb-cur">Event log retention</span>
             </div>
 
-            <h1>RFC-007 — Event log retention</h1>
-            <span className="rfc-meta"><span className="dot"/>Status: Draft</span>
+            <h1>Event log retention</h1>
+            <span className="rfc-meta"><span className="dot"/>Status: Planned</span>
 
             <h2 id="summary">Summary</h2>
             <p className="bv-lede">Persist raw events past the in-memory window so a fresh beava instance can replay the log to reconstruct its state — instead of streaming a snapshot off a peer or asking the application to backfill.</p>
@@ -61,15 +61,15 @@
             <h2 id="motivation">Motivation</h2>
             <p>In v0 beava persists aggregates, not events. WAL covers durability inside a process; once aggregates are folded, the original events are gone. This is great for memory and for the simple mental model — but it means a fresh node has nothing to replay. To bring up a new instance you either copy a snapshot from a peer (if one exists) or have the application replay from its own source-of-truth (Kafka, S3, the OLTP DB).</p>
             <p>Event log retention closes that loop: beava itself keeps a bounded raw-event log, and a new instance bootstraps by replaying it. Same binary, no external dependency, deterministic reconstruction.</p>
-            <p>This is the operational counterpart to <a href="/docs/community/rfcs/rfc-005-event-log-query-replay/">RFC-005 — Event-log query and replay</a>: RFC-005 lets you query and replay subsets for backfill / A/B feature work; RFC-007 is the storage layer that makes both possible. The two land together or RFC-005 stays theoretical.</p>
+            <p>This is the operational counterpart to <a href="/docs/community/roadmap/005-event-log-query-replay/">event-log query and replay</a>: query/replay lets you re-feed subsets for backfill / A/B feature work; retention is the storage layer that makes both possible. The two land together or query/replay stays theoretical.</p>
 
             <div className="rfc-warn">
-              <strong>Scope note.</strong> This RFC is purely about the storage and replay-on-bootstrap mechanics. Out-of-order tolerance — re-aggregating when an event arrives late — is covered separately by <a href="/docs/community/rfcs/rfc-004-out-of-order-events/">RFC-004</a>. The two don't depend on each other; retention can land standalone.
+              <strong>Scope note.</strong> This item is purely about the storage and replay-on-bootstrap mechanics. Out-of-order tolerance — re-aggregating when an event arrives late — is covered separately by the <a href="/docs/community/roadmap/004-out-of-order-events/">out-of-order events</a> roadmap item. The two don't depend on each other; retention can land standalone.
             </div>
 
             <h2 id="questions">Open questions</h2>
             <ul>
-              <li><strong>Storage tier.</strong> Local disk only? Spill to S3 / object storage like RFC-001? Object storage is cheaper for long retention but adds replay latency. Probably tier-1 (local disk) for v0.x, tier-2 (S3) deferred.</li>
+              <li><strong>Storage tier.</strong> Local disk only? Spill to S3 / object storage like the tiered-storage proposal? Object storage is cheaper for long retention but adds replay latency. Probably tier-1 (local disk) for v0.x, tier-2 (S3) deferred.</li>
               <li><strong>Retention windows.</strong> 24h? 7d? 90d? Per-event-type retention, so high-volume telemetry can be 24h while low-volume billing events are 90d?</li>
               <li><strong>Format.</strong> Append-only event log alongside the WAL, or extend the WAL with a "retain raw" flag per event? The latter is simpler operationally; the former is friendlier to compaction and tiering.</li>
               <li><strong>Replay throughput.</strong> A new instance replaying 7 days of events at apply-time speeds — is that hours or days? Determines how aggressive the fast-replay path needs to be (batch-folding, parallel rebuild, etc.).</li>
@@ -94,7 +94,7 @@
             <Pager auto/>
           </main>
 
-          <DocsTOC items={TOC} editHref="https://github.com/beava-dev/beava-website/edit/main/project/docs/community/rfcs/rfc-007-event-log-retention/index.html"/>
+          <DocsTOC items={TOC} editHref="https://github.com/beava-dev/beava-website/edit/main/project/docs/community/roadmap/007-event-log-retention/index.html"/>
         </div>
         <SiteFooter maxWidth={1400}/>
       </>
