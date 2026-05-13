@@ -90,38 +90,46 @@
     // DecisionFeed — synthetic event stream that demos event → feature → decision
     // ─────────────────────────────────────────────────────────────────────
 
-    // Each scenario maps one-for-one to a tab in the PipelineShowcase
-    // below. Event names, feature keys, and entity-key shape match what
-    // the user can see registered in the code blocks. Adding a scenario
-    // here without a matching tab leaks "ghost" features.
+    // Three reflex categories — agent safety, model cost, user
+    // personalization. Each row reads as a live intervention, not a
+    // counter readout: pause, switch, show. The live /api/feed served by
+    // deploy/generator/generator.py registers the matching pipelines so
+    // the same shapes appear whether the row was synthetic or real.
     const FEED_TEMPLATES = {
-      // Fraud — LoginAttempt → UserSignals
-      login_failed: {
-        event: 'LoginAttempt',
-        entity: () => `user_${1000 + Math.floor(Math.random() * 900)}`,
-        feature: (n) => ({ key: 'failed_logins_10m', value: n }),
-        valueOf: (prev) => (prev ? prev + 1 : 3 + Math.floor(Math.random() * 5)),
-        decision: (v) => v >= 5 ? 'require verification' : 'increase risk score',
+      // Agent safety reflex — AgentStep → AgentGuardrails
+      agent_loop: {
+        event: 'AgentStep',
+        entity: () => `agent_${[42, 77, 91][Math.floor(Math.random() * 3)]}`,
+        feature: (n) => ({ key: 'repeated_action_30s', value: n }),
+        valueOf: () => 5 + Math.floor(Math.random() * 5),  // 5–9, always above the pause threshold
+        decision: (v) => v >= 5 ? 'pause runaway agent' : 'continue monitoring',
       },
-      // Recommendations — ProductClick → UserAffinity
-      product_clicked: {
-        event: 'ProductClick',
-        entity: () => `user_${1000 + Math.floor(Math.random() * 900)}`,
-        feature: (n) => ({ key: 'recent_clicks_30m', value: n }),
-        valueOf: (prev) => (prev ? prev + 1 : 2 + Math.floor(Math.random() * 5)),
-        decision: () => 'refresh recommendations',
+      // Model cost reflex — ModelCall → OrgBudget
+      model_cost: {
+        event: 'ModelCall',
+        entity: () => `org_${['acme','globex','umbra','soylent'][Math.floor(Math.random() * 4)]}`,
+        feature: (n) => ({ key: 'token_burn_rate_1m', value: `${n}k/min` }),
+        valueOf: () => 100 + Math.floor(Math.random() * 60),  // 100–160 (k tokens / minute)
+        decision: (v) => v >= 100 ? 'switch to cheaper model' : 'route to default model',
       },
-      // LLM guardrails — LLMRequest → OrgBudget
-      llm_request: {
-        event: 'LLMRequest',
-        entity: () => `org_${['acme','globex','umbra','soylent'][Math.floor(Math.random()*4)]}`,
-        feature: (n) => ({ key: 'tokens_used_24h', value: `${n}k` }),
-        valueOf: (prev) => prev ? prev + 4 + Math.floor(Math.random()*8) : 60 + Math.floor(Math.random() * 40),
-        decision: (v) => v >= 90 ? 'throttle expensive model' : 'route to cheap model',
+      // Personalization reflex — UserIntent → UserAffinity
+      user_intent: {
+        event: 'UserIntent',
+        entity: () => `user_${1000 + Math.floor(Math.random() * 900)}`,
+        feature: () => {
+          const intents = ['compare plans', 'browse docs', 'see api reference', 'ask sales'];
+          const intent = intents[Math.floor(Math.random() * intents.length)];
+          return { key: 'intent_now', value: `"${intent}"` };
+        },
+        // No valueOf — mintRow falls back to feat.value (the quoted intent string)
+        // when computing the decision, which is what we want here.
+        decision: (v) => v === '"compare plans"' ? 'show pricing assistant'
+                        : v === '"ask sales"'     ? 'escalate to human'
+                        : 'personalize next screen',
       },
     };
 
-    const ORDER = ['login_failed', 'product_clicked', 'llm_request'];
+    const ORDER = ['agent_loop', 'model_cost', 'user_intent'];
 
     const mintRow = (name, idx, ts) => {
       const t = FEED_TEMPLATES[name];
@@ -137,7 +145,7 @@
     };
 
     const seedRows = () => {
-      const initial = ['login_failed', 'product_clicked', 'llm_request'];
+      const initial = ['agent_loop', 'model_cost', 'user_intent'];
       // Seed rows are settled history — render without the fresh-row wash so
       // the panel opens calm and only later arrivals get the orange highlight.
       return initial.map((name, i) => ({
@@ -342,7 +350,7 @@
               <span style={{
                 fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 700,
                 color: 'var(--fg1)', textTransform: 'uppercase', letterSpacing: '0.12em',
-              }}>Live decision feed</span>
+              }}>Live product reflexes</span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 <span style={{
                   width: 7, height: 7, borderRadius: 999, background: 'var(--beava-success)',
@@ -419,22 +427,23 @@
 
             <h1 style={{
               fontFamily: 'var(--font-serif)', fontWeight: 600,
-              fontSize: 'clamp(34px, 4.4vw, 56px)',
+              fontSize: 'clamp(30px, 4vw, 52px)',
               lineHeight: 1.1, letterSpacing: '-0.02em',
               color: 'var(--fg1)', margin: '0 auto 20px',
               maxWidth: '100%', textWrap: 'balance',
             }}>
-              Make your AI product react to <em style={{ color: 'var(--accent)', fontStyle: 'italic' }}>what just happened.</em>
+              Give your AI product <em style={{ color: 'var(--accent)', fontStyle: 'italic' }}>live reflexes.</em>
             </h1>
 
             <p style={{
               fontFamily: 'var(--font-sans)', fontWeight: 400,
               fontSize: 17, lineHeight: 1.55,
               color: 'var(--fg2)', margin: '0 auto 24px',
-              maxWidth: 680, textWrap: 'pretty',
+              maxWidth: 720, textWrap: 'pretty',
             }}>
-              beava turns live events into fresh features for fraud, recommendations,
-              and guardrails — no Kafka, no Flink, no feature store.
+              beava turns live events into fresh decision features, so your app can
+              pause runaway agents, route models, throttle spend, and personalize the next
+              screen — no Kafka, no Flink, no feature store.
             </p>
 
             <div style={{ display: 'inline-flex', gap: 18, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>

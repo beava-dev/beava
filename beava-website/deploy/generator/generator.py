@@ -5,10 +5,10 @@ What this does
 1. Connects to the beava-website-beava container at http://beava:8080.
 2. Owns the FULL registry for the beava.dev instance and registers it
    on startup with force=true:
-     - PageView       -> SiteMetrics   (real visitor page-view counter)
-     - LoginAttempt   -> UserSignals   (failed_logins_10m, attempts_1h)
-     - ProductClick   -> UserAffinity  (recent_clicks_30m, top_categories_1h)
-     - LLMRequest     -> OrgBudget     (tokens_used_24h, requests_1m)
+     - PageView    -> SiteMetrics       (real visitor page-view counter)
+     - AgentStep   -> AgentGuardrails   (repeated_action_30s)
+     - ModelCall   -> OrgBudget         (token_burn_rate_1m)
+     - UserIntent  -> UserAffinity      (intent_now)
 
    Wholesale ownership matters: beava /register with force=true REPLACES
    the registry. If two services both register with force=true but
@@ -51,7 +51,8 @@ FEED_LEN = int(os.environ.get("FEED_LEN", "3"))
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# Pipelines — same shape as the three homepage tabs, plus PageView for
+# Pipelines — three "live product reflex" categories: agent safety,
+# model-cost routing, and user-intent personalization. Plus PageView for
 # the site's own visitor analytics. Keep all four here; the generator's
 # register call is the registry's single source of truth.
 # ─────────────────────────────────────────────────────────────────────────
@@ -75,47 +76,54 @@ def SiteMetrics(e: PageView):
     )
 
 
+# Agent safety reflex — an AgentStep is one tool call / one action the
+# agent took. AgentGuardrails surfaces "how busy this agent has been in
+# the last 30s" as `repeated_action_30s`; the app pauses the agent when
+# the count crosses the threshold.
 @bv.event
-class LoginAttempt:
-    user_id: str
-    success: bool
+class AgentStep:
+    agent_id: str
+    action: str
 
 
-@bv.table(key="user_id")
-def UserSignals(e: LoginAttempt):
-    return e.group_by("user_id").agg(
-        failed_logins_10m=bv.count(window="10m", where=bv.col("success") == False),  # noqa: E712
-        attempts_1h=bv.count(window="1h"),
+@bv.table(key="agent_id")
+def AgentGuardrails(e: AgentStep):
+    return e.group_by("agent_id").agg(
+        repeated_action_30s=bv.count(window="30s"),
     )
 
 
+# Model-cost reflex — every model API call is a ModelCall with a token
+# count. OrgBudget surfaces `token_burn_rate_1m` (sum of tokens per
+# minute per org); when it crosses 100k/min, the app routes to a
+# cheaper model.
 @bv.event
-class ProductClick:
-    user_id: str
-    product_id: str
-    category: str
-
-
-@bv.table(key="user_id")
-def UserAffinity(e: ProductClick):
-    return e.group_by("user_id").agg(
-        recent_clicks_30m=bv.count(window="30m"),
-        top_categories_1h=bv.top_k("category", k=3, window="1h"),
-    )
-
-
-@bv.event
-class LLMRequest:
+class ModelCall:
     org_id: str
     tokens: int
     model: str
 
 
 @bv.table(key="org_id")
-def OrgBudget(e: LLMRequest):
+def OrgBudget(e: ModelCall):
     return e.group_by("org_id").agg(
-        tokens_used_24h=bv.sum("tokens", window="24h"),
-        requests_1m=bv.count(window="1m"),
+        token_burn_rate_1m=bv.sum("tokens", window="1m"),
+    )
+
+
+# Personalization reflex — UserIntent is an inferred-or-declared intent
+# for the current session. UserAffinity exposes `intent_now` (last seen
+# intent) so the app can render the right next screen.
+@bv.event
+class UserIntent:
+    user_id: str
+    intent: str
+
+
+@bv.table(key="user_id")
+def UserAffinity(e: UserIntent):
+    return e.group_by("user_id").agg(
+        intent_now=bv.last("intent"),
     )
 
 
@@ -124,59 +132,72 @@ def OrgBudget(e: LLMRequest):
 # ─────────────────────────────────────────────────────────────────────────
 
 
+# Tight agent pool — small set so each agent reliably exceeds the
+# repeated_action_30s threshold under the 1.4s push cadence.
+_AGENT_POOL = ("agent_42", "agent_77", "agent_91")
+_ORG_POOL = ("org_acme", "org_globex", "org_umbra", "org_soylent")
+_AGENT_ACTIONS = ("http_get", "shell_exec", "code_run", "search", "file_read")
+_INTENTS = ("compare plans", "browse docs", "see api reference", "ask sales")
+
+
 def _random_user() -> str:
     return f"user_{1000 + random.randint(0, 899)}"
 
 
-def _random_org() -> str:
-    return f"org_{random.choice(['acme', 'globex', 'umbra', 'soylent'])}"
-
-
-# One scenario per pipeline tab — keep this in sync with the homepage's
-# FEED_TEMPLATES order. Bias toward fraud (clearest read for new visitors).
+# One scenario per pipeline. Bias toward agent-safety because that's the
+# most striking visual story for a new visitor.
 SCENARIOS = [
-    "login_failed",
-    "login_failed",
-    "product_clicked",
-    "llm_request",
+    "agent_loop",
+    "agent_loop",
+    "agent_loop",
+    "model_cost",
+    "user_intent",
 ]
 
 
 def _make_event(scenario: str) -> tuple[str, dict, str]:
-    if scenario == "login_failed":
-        uid = _random_user()
-        return "LoginAttempt", {"user_id": uid, "success": False}, uid
-    if scenario == "product_clicked":
-        uid = _random_user()
-        return "ProductClick", {
-            "user_id": uid,
-            "product_id": f"p_{random.randint(100, 999)}",
-            "category": random.choice(["shoes", "books", "kitchen", "tools", "garden"]),
-        }, uid
-    if scenario == "llm_request":
-        oid = _random_org()
-        return "LLMRequest", {
+    if scenario == "agent_loop":
+        aid = random.choice(_AGENT_POOL)
+        return "AgentStep", {"agent_id": aid, "action": random.choice(_AGENT_ACTIONS)}, aid
+    if scenario == "model_cost":
+        oid = random.choice(_ORG_POOL)
+        # Per-call tokens chosen so token_burn_rate_1m (sum over 1m) tends
+        # to clear the 100k threshold for the routing decision.
+        return "ModelCall", {
             "org_id": oid,
-            "tokens": random.randint(120, 4500),
-            "model": random.choice(["gpt-5", "haiku-4-5", "sonnet-4-6"]),
+            "tokens": random.randint(18_000, 35_000),
+            "model": random.choice(["gpt-5", "claude-opus-4-7", "sonnet-4-6"]),
         }, oid
+    if scenario == "user_intent":
+        uid = _random_user()
+        return "UserIntent", {"user_id": uid, "intent": random.choice(_INTENTS)}, uid
     raise KeyError(scenario)
 
 
 def _decide(scenario: str, feature_value) -> str:
-    if scenario == "login_failed":
-        return "require verification" if (feature_value or 0) >= 5 else "increase risk score"
-    if scenario == "product_clicked":
-        return "refresh recommendations"
-    if scenario == "llm_request":
+    if scenario == "agent_loop":
+        return "pause runaway agent" if (feature_value or 0) >= 5 else "continue monitoring"
+    if scenario == "model_cost":
         kilo = (feature_value or 0) / 1000.0
-        return "throttle expensive model" if kilo >= 90 else "route to cheap model"
+        return "switch to cheaper model" if kilo >= 100 else "route to default model"
+    if scenario == "user_intent":
+        if feature_value == "compare plans":
+            return "show pricing assistant"
+        if feature_value == "ask sales":
+            return "escalate to human"
+        return "personalize next screen"
     return ""
 
 
 def _format_value(scenario: str, value):
-    if scenario == "llm_request" and value is not None:
-        return f"{int((value or 0) / 1000)}k"
+    if scenario == "model_cost" and value is not None:
+        # Sum is in raw tokens; surface a per-minute rate (same value,
+        # since the window is exactly 1m) with a /min suffix.
+        return f"{int(value / 1000)}k/min"
+    if scenario == "user_intent" and value is not None:
+        # Quoted string so the row reads naturally:
+        # `user_1094.intent_now = "compare plans"`
+        return f'"{value}"'
     return value
 
 
@@ -190,19 +211,18 @@ _feed_lock = threading.Lock()
 _latency_ms: float = 0.0
 
 
+# Maps scenario -> (table_name, feature_key) used by /get + display.
+_SCENARIO_TARGETS = {
+    "agent_loop":  ("AgentGuardrails", "repeated_action_30s"),
+    "model_cost":  ("OrgBudget",       "token_burn_rate_1m"),
+    "user_intent": ("UserAffinity",    "intent_now"),
+}
+
+
 def _push_one(app: bv.App, scenario: str) -> None:
     global _latency_ms
     event_name, fields, entity = _make_event(scenario)
-    table = {
-        "LoginAttempt": "UserSignals",
-        "ProductClick": "UserAffinity",
-        "LLMRequest": "OrgBudget",
-    }[event_name]
-    feature_key = {
-        "login_failed": "failed_logins_10m",
-        "product_clicked": "recent_clicks_30m",
-        "llm_request": "tokens_used_24h",
-    }[scenario]
+    table, feature_key = _SCENARIO_TARGETS[scenario]
     t0 = time.perf_counter()
     app.push(event_name, fields)
     row = app.get(table, key=entity)
@@ -223,7 +243,7 @@ def _push_one(app: bv.App, scenario: str) -> None:
 
 def warm_start(app: bv.App) -> None:
     """Seed the feed before the HTTP server starts serving so /feed is never empty."""
-    for s in ("login_failed", "product_clicked", "llm_request"):
+    for s in ("agent_loop", "model_cost", "user_intent"):
         _push_one(app, s)
 
 
@@ -280,12 +300,12 @@ def main() -> None:
         try:
             app.register(
                 PageView, SiteMetrics,
-                LoginAttempt, UserSignals,
-                ProductClick, UserAffinity,
-                LLMRequest, OrgBudget,
+                AgentStep, AgentGuardrails,
+                ModelCall, OrgBudget,
+                UserIntent, UserAffinity,
                 force=True,
             )
-            print("[generator] pipelines registered (4: SiteMetrics + 3 demo)", file=sys.stderr)
+            print("[generator] pipelines registered (4: SiteMetrics + 3 reflex demos)", file=sys.stderr)
             break
         except Exception as exc:
             sys.stderr.write(f"[generator] register attempt {attempt + 1} failed: {exc!r}\n")
