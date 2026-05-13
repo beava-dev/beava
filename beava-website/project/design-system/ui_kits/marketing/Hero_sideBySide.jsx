@@ -498,7 +498,7 @@ const Hero = () => {
             fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--fg3)',
             lineHeight: 1.5,
           }}>
-            ~14 MB <span style={{ color: 'var(--border-strong)' }}>·</span> macOS, Linux, Windows
+            ~4 MB <span style={{ color: 'var(--border-strong)' }}>·</span> macOS, Linux, Windows
             <span style={{ color: 'var(--border-strong)' }}> · </span> runs on 1 GB RAM
             <span style={{ color: 'var(--border-strong)' }}> · </span> scales to one big box
           </div>

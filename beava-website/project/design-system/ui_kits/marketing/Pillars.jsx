@@ -14,7 +14,7 @@ const PILLARS = [
     kicker: '02',
     title: 'No streaming stack',
     body: 'No Kafka, no Flink, no Schema Registry. One Go binary, one HTTP port.',
-    foot: '~14 MB · single binary',
+    foot: '~4 MB · single binary',
   },
   {
     kicker: '03',

@@ -400,7 +400,7 @@
               fontFamily: 'var(--font-sans)', fontSize: 12.5, color: 'var(--fg3)',
               lineHeight: 1.5,
             }}>
-              ~14 MB <span style={{ color: 'var(--border-strong)' }}>·</span> macOS, Linux, Windows
+              ~4 MB <span style={{ color: 'var(--border-strong)' }}>·</span> macOS, Linux, Windows
               <span style={{ color: 'var(--border-strong)' }}> · </span> runs on 1 GB RAM
               <span style={{ color: 'var(--border-strong)' }}> · </span> scales to one big box
             </div>
@@ -768,7 +768,7 @@
 
     const PILLARS = [
       { kicker: '01', title: 'Replaces Redis + Lua',  body: 'No more 200-line Lua scripts maintaining counters. beava is the table.', foot: 'redis-cli → bv.get(...)' },
-      { kicker: '02', title: 'No streaming stack',    body: 'No Kafka, no Flink, no Schema Registry. One Rust binary, one HTTP port.', foot: '~14 MB · single binary' },
+      { kicker: '02', title: 'No streaming stack',    body: 'No Kafka, no Flink, no Schema Registry. One Rust binary, one HTTP port.', foot: '~4 MB · single binary' },
       { kicker: '03', title: 'Crash-safe by default', body: 'WAL on every write. Restart mid-flight; tables come back exactly where they were.', foot: 'fsync configurable, default sane' },
       { kicker: '04', title: 'Apache 2.0, forever',   body: 'No source-available rug-pull. No usage limits. The same binary in the cloud you self-host.', foot: 'github.com/beava-dev/beava', footHref: 'https://github.com/beava-dev/beava' },
     ];
