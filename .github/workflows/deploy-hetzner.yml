@@ -51,6 +51,17 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -t ed25519,rsa 178.104.164.100 >> ~/.ssh/known_hosts 2>/dev/null
 
+      - name: rsync beava-website/deploy/ to /srv/beava-website/deploy/
+        # Caddyfile, docker-compose.prod.yml, generator/, beava.yaml,
+        # register_pipeline.py. Without this, edits to compose / caddy /
+        # generator silently no-op until someone SSHes and rsyncs by hand.
+        # Runs BEFORE the beava pull so a new compose file is in place
+        # before `docker compose pull beava` reads it.
+        run: |
+          rsync -av --no-perms --no-owner --no-group \
+            beava-website/deploy/ \
+            root@178.104.164.100:/srv/beava-website/deploy/
+
       - name: Pull latest beava image + restart container
         # Without this step the box stays on whatever beava image was
         # running at last manual upgrade — even if publish-edge built a
@@ -75,6 +86,32 @@ jobs:
             done
             echo "beava failed to come up ready within 20s" >&2
             docker logs --tail 40 beava-website-beava >&2
+            exit 1
+          REMOTE
+
+      - name: Rebuild generator + recreate caddy
+        # The synced deploy/ has the latest Dockerfile / Caddyfile /
+        # docker-compose.prod.yml. Build the generator image, then up -d
+        # both services with --force-recreate so a new Caddyfile or
+        # generator image takes effect. --no-deps to leave beava alone
+        # (already handled above).
+        run: |
+          ssh -o StrictHostKeyChecking=no root@178.104.164.100 bash <<'REMOTE'
+            set -euo pipefail
+            cd /srv/beava-website/deploy
+            docker compose -f docker-compose.prod.yml build generator
+            docker compose -f docker-compose.prod.yml up -d --force-recreate --no-deps generator caddy
+            # Wait briefly for generator to come up.
+            for _ in $(seq 1 20); do
+              if docker run --rm --network beava-website-net curlimages/curl:latest \
+                  -sf --max-time 2 http://generator:8090/health >/dev/null 2>&1; then
+                echo "generator ready"
+                exit 0
+              fi
+              sleep 1
+            done
+            echo "generator failed to come up within 20s" >&2
+            docker logs --tail 40 beava-website-generator >&2
             exit 1
           REMOTE
 
@@ -115,16 +152,15 @@ jobs:
           echo "── payload preview (first 800 bytes) ──"
           head -c 800 /tmp/register-payload.json; echo
 
-      - name: Re-register pipeline against live beava
+      - name: Re-register SiteMetrics pipeline against live beava
         # Always-run, idempotent: POST the freshly-generated payload to
         # /register on the internal beava (port 8080, docker network).
         # `force=true` (set inside the payload by --dump) allows
         # schema-changing updates to land without a manual override.
+        # The generator container re-registers its own three pipelines
+        # (UserSignals / UserAffinity / OrgBudget) on every container
+        # start, so this step only ships SiteMetrics.
         run: |
-          # Ship the canonical Python source + the generated payload to the box.
-          rsync -av --no-perms --no-owner --no-group \
-            beava-website/deploy/register_pipeline.py \
-            root@178.104.164.100:/srv/beava-website/deploy/register_pipeline.py
           rsync -av --no-perms --no-owner --no-group \
             /tmp/register-payload.json \
             root@178.104.164.100:/tmp/register-payload.json
@@ -141,10 +177,10 @@ jobs:
           REMOTE
 
       - name: Smoke test live origin
-        # Hit the internal caddy on 127.0.0.1:8082 over SSH — verifies the
-        # static site responds 200, plus that the SiteMetrics row reads
-        # back. Runs after rsync + register so we catch any deploy that
-        # broke either layer.
+        # Hit the internal caddy on 127.0.0.1:8082 over SSH. Verifies the
+        # static site responds 200, the SiteMetrics row reads back, and
+        # the decision feed has rows. Runs last so we catch any deploy
+        # that broke a layer.
         run: |
           ssh -o StrictHostKeyChecking=no root@178.104.164.100 \
             'curl -sf --max-time 5 -o /dev/null -w "homepage HTTP %{http_code}\n" http://127.0.0.1:8082/ && \
@@ -152,7 +188,11 @@ jobs:
              curl -sf --max-time 5 -X POST http://127.0.0.1:8082/api/get \
                  -H "Content-Type: application/json" \
                  -d "{\"table\":\"SiteMetrics\",\"key\":\"\"}" \
-                 -w "SiteMetrics row HTTP %{http_code}\n"'
+                 -w "SiteMetrics row HTTP %{http_code}\n" && \
+             curl -sf --max-time 5 http://127.0.0.1:8082/api/feed \
+                 -o /tmp/feed.json -w "feed HTTP %{http_code}\n" && \
+             test "$(jq ".rows | length" < /tmp/feed.json)" -ge 1 && \
+                 echo "feed has rows: $(jq -c ".rows | length, .latency_ms" < /tmp/feed.json)"'
 
       - name: Job summary
         if: always()
