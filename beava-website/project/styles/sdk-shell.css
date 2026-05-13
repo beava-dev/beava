@@ -580,3 +580,77 @@
   font-style: normal;
   letter-spacing: 0;
 }
+
+/* ===== RESPONSIVE (matches docs-kit .bv-docs-shell @ 1000px) ===== */
+@media (max-width: 1000px) {
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 0 16px;
+    gap: 0;
+  }
+  /* Nav first, article, then in-page TOC (DOM is sidebar / main / toc). */
+  .shell > aside.sidebar { order: -1; min-width: 0; }
+  .shell > main.content { order: 0; min-width: 0; }
+  .shell > aside.toc { order: 1; min-width: 0; }
+
+  .sidebar {
+    position: static;
+    height: auto;
+    max-height: none;
+    overflow: visible;
+    padding: 20px 0 22px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .content {
+    padding: 24px 0 72px;
+    border-left: none;
+    max-width: none;
+  }
+
+  .toc {
+    position: static;
+    top: auto;
+    max-height: none;
+    overflow: visible;
+    padding: 20px 0 32px;
+    border-top: 1px solid var(--border);
+  }
+}
+
+@media (max-width: 720px) {
+  .card-grid { grid-template-columns: 1fr; }
+  .pager { grid-template-columns: 1fr; }
+  .pager a.next { text-align: left; }
+
+  .param {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 14px 0;
+  }
+
+  .content h2 {
+    font-size: 26px;
+    margin: 48px 0 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .content h3 { font-size: 16px; }
+
+  .tabs-strip {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  /* Shared reference hero (per-page <style>); scale down long titles. */
+  .ref-hero h1 { font-size: 30px; line-height: 1.12; }
+  .ref-hero .lede { font-size: 17px; }
+
+  /* Server page env table (inline in sdk/server/index.html). */
+  .env-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
