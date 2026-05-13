@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>beava — GitHub README banner</title>
+  <link rel="stylesheet" href="../colors_and_type.css">
+  <style>
+    html, body { margin: 0; padding: 0; background: #0d1117; color: #e6edf3; font-family: var(--font-sans); }
+    .page { padding: 40px 24px 80px; max-width: 1280px; margin: 0 auto; }
+    .label { font-family: var(--font-sans); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: #8b949e; margin: 28px 0 10px; }
+    .specimen { border: 1px solid #30363d; border-radius: 12px; overflow: hidden; }
+
+    /* Banner — black variant (matches reference) */
+    .banner-dark {
+      background: #000;
+      width: 100%;
+      aspect-ratio: 1200 / 360;
+      display: flex; align-items: center; justify-content: center;
+      gap: 44px;
+      padding: 0 8%;
+      box-sizing: border-box;
+    }
+    .banner-dark .mascot { width: 22%; max-width: 240px; }
+    .banner-dark .mascot img { width: 100%; height: auto; display: block; }
+    .banner-dark .word {
+      font-family: var(--font-serif);
+      font-weight: 600;
+      font-style: italic;
+      font-size: clamp(64px, 13vw, 168px);
+      letter-spacing: -0.025em;
+      color: #fff;
+      line-height: 0.95;
+    }
+    .banner-dark .word .accent { color: #fff; font-style: italic; }
+
+    /* Cream variant — matches site */
+    .banner-cream {
+      background: var(--bg);
+      width: 100%;
+      aspect-ratio: 1200 / 360;
+      display: flex; align-items: center; justify-content: center;
+      gap: 36px;
+      padding: 0 8%;
+      box-sizing: border-box;
+    }
+    .banner-cream .mascot { width: 22%; max-width: 220px; }
+    .banner-cream .mascot img { width: 100%; height: auto; display: block; }
+    .banner-cream .word {
+      font-family: var(--font-serif);
+      font-weight: 600;
+      font-style: italic;
+      font-size: clamp(64px, 13vw, 168px);
+      letter-spacing: -0.025em;
+      color: var(--fg1);
+      line-height: 0.95;
+    }
+    .banner-cream .word .accent { color: var(--fg1); }
+
+    /* Badges row — matches reference */
+    .badges {
+      display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px;
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 12.5px;
+    }
+    .badge {
+      display: inline-flex; align-items: stretch; border-radius: 4px; overflow: hidden;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.05);
+    }
+    .badge .k, .badge .v {
+      padding: 4px 8px; line-height: 1.4; display: inline-flex; align-items: center;
+    }
+    .badge .k { background: #555; color: #fff; }
+    .badge .v { color: #fff; font-weight: 600; }
+
+    .b-orange .v { background: #d97757; }
+    .b-green  .v { background: #7ca84a; }
+    .b-blue   .v { background: #3a6a8a; }
+    .b-red    .v { background: #c2462b; }
+    .b-deep   .v { background: #2c6e3f; }
+    .b-warn   .v { background: #d9a04a; }
+
+    /* Square avatar variant — for org icon */
+    .avatar {
+      width: 280px; height: 280px;
+      background: #000;
+      border-radius: 24px;
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden;
+    }
+    .avatar img { width: 70%; height: auto; }
+
+    /* Wide horizontal lockup, no bg padding */
+    .lockup {
+      display: inline-flex; align-items: center; gap: 18px;
+      padding: 24px 32px;
+    }
+    .lockup img { width: 96px; height: auto; }
+    .lockup .word { font-family: var(--font-serif); font-weight: 600; font-style: italic; font-size: 84px; letter-spacing: -0.025em; color: var(--fg1); line-height: 1; }
+    .lockup-dark { background: #000; }
+    .lockup-dark .word { color: #fff; }
+
+    h1 { font-family: var(--font-serif); font-weight: 600; font-size: 36px; letter-spacing: -0.02em; margin: 0 0 8px; color: #f0f6fc; }
+    .sub { color: #8b949e; font-size: 15px; line-height: 1.6; max-width: 720px; }
+
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px; }
+    @media (max-width: 720px) { .row { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>beava — GitHub README banner</h1>
+    <p class="sub">Geometric mascot mark + monospaced wordmark on a near-black canvas, modeled on the slatedb pattern. Includes a cream variant for light contexts, a square org avatar, and the badge row.</p>
+
+    <div class="label">Primary banner · dark · README hero</div>
+    <div class="specimen">
+      <div class="banner-dark" id="banner-dark">
+        <div class="mascot"><img src="../assets/mascot-mark-geometric-transparent.png" alt=""></div>
+        <div class="word">b<span class="accent">e</span>ava</div>
+      </div>
+    </div>
+
+    <div class="label">Badges (paste under the banner)</div>
+    <div class="badges">
+      <span class="badge b-orange"><span class="k">crates.io</span><span class="v">v0.9.4</span></span>
+      <span class="badge b-green"><span class="k">license</span><span class="v">Apache-2.0</span></span>
+      <span class="badge b-blue"><span class="k">site</span><span class="v">beava.dev</span></span>
+      <span class="badge b-green"><span class="k">discord</span><span class="v">412 online</span></span>
+      <span class="badge b-blue"><span class="k">docs</span><span class="v">beava.dev/docs</span></span>
+      <span class="badge b-red"><span class="k">build</span><span class="v">passing</span></span>
+      <span class="badge b-deep"><span class="k">sponsor</span><span class="v">github.com</span></span>
+    </div>
+
+    <div class="label">Cream variant · for light pages</div>
+    <div class="specimen">
+      <div class="banner-cream">
+        <div class="mascot"><img src="../assets/mascot-mark-geometric-transparent.png" alt=""></div>
+        <div class="word">b<span class="accent">e</span>ava</div>
+      </div>
+    </div>
+
+    <div class="label">Square org avatar (280×280)</div>
+    <div class="specimen" style="display: inline-block;">
+      <div class="avatar"><img src="../assets/mascot-mark-geometric-transparent.png" alt=""></div>
+    </div>
+
+    <div class="label">Compact lockups</div>
+    <div class="row">
+      <div class="specimen" style="background: var(--bg);">
+        <div class="lockup">
+          <img src="../assets/mascot-mark-geometric-transparent.png" alt="">
+          <div class="word">beava</div>
+        </div>
+      </div>
+      <div class="specimen">
+        <div class="lockup lockup-dark">
+          <img src="../assets/mascot-mark-geometric-transparent.png" alt="">
+          <div class="word">beava</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

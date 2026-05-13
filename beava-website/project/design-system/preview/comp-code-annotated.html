@@ -9,7 +9,7 @@
     color: var(--fg1); overflow-x: auto;
   }
   .cmt { color: var(--fg3); }
-  .kw  { color: #7a3e8a; font-weight: 500; }   /* purple for keywords like @bv.event, class, def, import */
+  .kw  { color: #7a3e8a; font-weight: 500; }   /* purple for keywords like @bv.stream, class, def, import */
   .fn  { color: #2563a3; }                     /* blue for function calls */
   .str { color: var(--beava-success); }        /* green for strings */
   .num { color: var(--accent); }
@@ -35,7 +35,7 @@
   <pre class="code"><span class="cmt"># a per-customer analytics dashboard</span>
 <span class="kw">import</span> beava <span class="kw">as</span> bv
 
-<span class="fn">@bv.event</span>
+<span class="fn">@bv.stream</span>
 <span class="kw">class</span> <span class="t">PageView</span>:
     user_id:  <span class="t">str</span>
     path:     <span class="t">str</span>

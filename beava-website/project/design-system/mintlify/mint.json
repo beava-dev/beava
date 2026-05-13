@@ -1,0 +1,162 @@
+{
+  "$schema": "https://mintlify.com/schema.json",
+  "name": "beava SDK reference",
+  "logo": {
+    "light": "/logo/beava-mark.svg",
+    "dark":  "/logo/beava-mark-dark.svg",
+    "href":  "https://beava.dev"
+  },
+  "favicon": "/favicon.png",
+  "colors": {
+    "primary": "#b85c20",
+    "light":   "#d97a3e",
+    "dark":    "#a04e16",
+    "anchors": { "from": "#b85c20", "to": "#d97a3e" },
+    "background": { "light": "#fdfaf4", "dark": "#1a1714" }
+  },
+  "theme": "venus",
+  "modeToggle": { "default": "light" },
+  "font": {
+    "headings": { "family": "Alegreya", "weight": 600 },
+    "body":     { "family": "Inter Tight" }
+  },
+  "topbarCtaButton": {
+    "name": "beava.dev",
+    "url":  "https://beava.dev"
+  },
+  "topbarLinks": [
+    { "name": "Learn",   "url": "https://beava.dev/learn" },
+    { "name": "GitHub",  "url": "https://github.com/beava/beava" },
+    { "name": "Discord", "url": "https://discord.gg/beava" }
+  ],
+  "tabs": [
+    { "name": "SDKs",          "url": "sdks"   },
+    { "name": "HTTP API",      "url": "http"   },
+    { "name": "CLI",           "url": "cli"    },
+    { "name": "Configuration", "url": "config" }
+  ],
+  "anchors": [
+    { "name": "Playground", "icon": "play",     "url": "https://play.beava.dev" },
+    { "name": "Status",     "icon": "signal",   "url": "https://status.beava.dev" },
+    { "name": "Marketing site", "icon": "house","url": "https://beava.dev" }
+  ],
+  "navigation": [
+    {
+      "group": "Start here",
+      "pages": [
+        "start/install",
+        "start/quickstart",
+        "start/authentication",
+        "start/errors-and-retries"
+      ]
+    },
+    {
+      "group": "TypeScript SDK",
+      "pages": [
+        "sdks/typescript/install",
+        "sdks/typescript/client",
+        "sdks/typescript/push",
+        "sdks/typescript/query",
+        "sdks/typescript/pipelines",
+        "sdks/typescript/streaming",
+        "sdks/typescript/types"
+      ]
+    },
+    {
+      "group": "Python SDK",
+      "pages": [
+        "sdks/python/install",
+        "sdks/python/client",
+        "sdks/python/push",
+        "sdks/python/query",
+        "sdks/python/pipelines",
+        "sdks/python/asyncio"
+      ]
+    },
+    {
+      "group": "Go SDK",
+      "pages": [
+        "sdks/go/install",
+        "sdks/go/client",
+        "sdks/go/push",
+        "sdks/go/query",
+        "sdks/go/pipelines"
+      ]
+    },
+    {
+      "group": "Rust SDK",
+      "pages": [
+        "sdks/rust/install",
+        "sdks/rust/client",
+        "sdks/rust/push",
+        "sdks/rust/query"
+      ]
+    },
+    {
+      "group": "HTTP API · Events",
+      "pages": [
+        "http/push",
+        "http/push-batch",
+        "http/ack-stream"
+      ]
+    },
+    {
+      "group": "HTTP API · Query",
+      "pages": [
+        "http/q-counter",
+        "http/q-velocity",
+        "http/q-topk",
+        "http/q-last-n",
+        "http/q-budget"
+      ]
+    },
+    {
+      "group": "HTTP API · Admin",
+      "pages": [
+        "http/pipelines-list",
+        "http/pipelines-apply",
+        "http/pipelines-drop",
+        "http/snapshots",
+        "http/health"
+      ]
+    },
+    {
+      "group": "CLI",
+      "pages": [
+        "cli/overview",
+        "cli/serve",
+        "cli/apply",
+        "cli/drop",
+        "cli/q",
+        "cli/snapshot",
+        "cli/version"
+      ]
+    },
+    {
+      "group": "Configuration",
+      "pages": [
+        "config/server-toml",
+        "config/pipeline-toml",
+        "config/operators",
+        "config/retention",
+        "config/storage",
+        "config/auth",
+        "config/observability"
+      ]
+    }
+  ],
+  "footerSocials": {
+    "github":  "https://github.com/beava/beava",
+    "discord": "https://discord.gg/beava",
+    "twitter": "https://twitter.com/beavadev"
+  },
+  "feedback": { "thumbsRating": true, "suggestEdit": true, "raiseIssue": true },
+  "search": { "prompt": "Search SDK reference · ⌘K" },
+  "redirects": [
+    { "source": "/introduction", "destination": "https://beava.dev/learn/why-beava" },
+    { "source": "/concepts",     "destination": "https://beava.dev/learn/concepts"  },
+    { "source": "/rfcs/:slug",   "destination": "https://github.com/beava/beava/tree/main/rfcs/:slug" },
+    { "source": "/recipes/:slug","destination": "https://beava.dev/learn/recipes/:slug" }
+  ],
+  "metadata": { "og:image": "https://docs.beava.dev/og.png" }
+}

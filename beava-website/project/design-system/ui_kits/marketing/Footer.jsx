@@ -11,8 +11,8 @@ const Footer = () => (
       <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 1fr', gap: 40, marginBottom: 48 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-            <img src="../../assets/logo-mark.png" width={36} height={36}/>
-            <span style={{ fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 19, color: 'var(--fg1)' }}>beava</span>
+            <img src="../../assets/mascot-mark-geometric-transparent.png" width={36} height={36} style={{ display: 'block' }}/>
+            <span style={{ fontFamily: 'var(--font-serif)', fontWeight: 600, fontStyle: 'italic', fontSize: 26, letterSpacing: '-0.025em', lineHeight: 1, color: 'var(--fg1)' }}>beava</span>
           </div>
           <p style={{ fontFamily: 'var(--font-sans)', fontSize: 14, lineHeight: 1.55, color: 'var(--fg3)', margin: '0 0 14px', maxWidth: 280 }}>
             Open-source feature server for real-time features. One binary. No Kafka.

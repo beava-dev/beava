@@ -237,7 +237,7 @@
     <div class="v-a">
       <div class="body">
         <div class="title-stamp">You built this</div>
-        <p>That grid above? That's <strong>live beava state</strong> rendered as a real dashboard — every event updates a user's card atomically, and the query re-fetches every 1.5s.</p>
+        <p>That grid above? That's <strong>live beava state</strong> rendered as a real dashboard — every event updates a user's card atomically, and the query re-fetches every 1.5s. The real server does the same thing at <strong>~3M events/sec/core</strong>.</p>
       </div>
       <div class="mascot"></div>
     </div>
@@ -256,7 +256,7 @@
           <div class="stat"><div class="n">4</div><div class="l">metrics maintained per user</div></div>
           <div class="stat"><div class="n">22</div><div class="l">lines of pipeline code</div></div>
           <div class="stat"><div class="n">1.5s</div><div class="l">UI refresh cadence</div></div>
-          <div class="stat"><div class="n">~100k/s</div><div class="l">events per core, on a typical workload</div></div>
+          <div class="stat"><div class="n">3M/s</div><div class="l">events per core, in prod</div></div>
         </div>
         <p class="foot">Every event you push updates a single user's card, <strong>atomically</strong>. The query above re-fetches every 1.5s so the UI stays fresh. Same binary, same code shape, in production.</p>
       </div>
@@ -269,7 +269,7 @@
       <div>
         <span class="scribble">← you shipped it</span>
         <h3>Nice work. You just built a <em>live feature store</em>.</h3>
-        <p class="sub">Four metrics, per-user, maintained atomically, Same code runs in prod. You didn't mock a thing.</p>
+        <p class="sub">Four metrics, per-user, maintained atomically, served over HTTP at <strong>~3M events/sec/core</strong>. Same code runs in prod. You didn't mock a thing.</p>
         <div class="next">
           <a href="#" class="cta">Deploy this <span>→</span></a>
           <a href="#" class="cta-ghost">What's next?</a>

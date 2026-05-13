@@ -1,0 +1,1079 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Quickstart · beava SDK reference</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="icon" href="../assets/mascot-mark-geometric.png">
+<style>
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--fg1); font-family: var(--font-sans); }
+
+  /* ===================================================
+     TOP NAV — quiet, sticky, generous
+     =================================================== */
+  .topnav {
+    position: sticky; top: 0; z-index: 30;
+    height: 64px;
+    display: grid; grid-template-columns: 268px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 32px;
+    padding: 0 32px;
+    background: rgba(253,250,244,0.88);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  .brand {
+    display: flex; align-items: center; gap: 10px;
+    font-family: var(--font-serif); font-weight: 700;
+    font-size: 22px; letter-spacing: -0.01em;
+    color: var(--fg1); text-decoration: none;
+  }
+  .brand img { width: 26px; height: 26px; }
+  .brand .v {
+    font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+    color: var(--accent); background: var(--beava-orange-wash);
+    padding: 2px 7px; border-radius: 999px; margin-left: 4px;
+    transform: translateY(-1px);
+  }
+  .search {
+    width: 100%; max-width: 520px;
+    display: flex; align-items: center; gap: 10px;
+    height: 36px; padding: 0 12px;
+    background: #fff; border: 1px solid var(--border); border-radius: 10px;
+    color: var(--fg3); font-size: 13.5px;
+    cursor: text;
+    transition: border-color 150ms var(--ease-out);
+  }
+  .search:hover { border-color: var(--border-strong); }
+  .search .placeholder { flex: 1; }
+  .search .kbd {
+    font-family: var(--font-mono); font-size: 11px;
+    color: var(--fg3); background: var(--beava-paper);
+    border: 1px solid var(--border); border-radius: 5px;
+    padding: 1px 6px;
+  }
+  .nav-links { display: flex; gap: 26px; align-items: center; }
+  .nav-links a {
+    font-size: 14px; color: var(--fg2); text-decoration: none; font-weight: 500;
+  }
+  .nav-links a:hover { color: var(--accent); }
+  .nav-links a.active { color: var(--fg1); font-weight: 600; }
+  .nav-links .gh {
+    color: var(--fg2);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+
+  /* ===================================================
+     LAYOUT SHELL
+     =================================================== */
+  .shell {
+    display: grid;
+    grid-template-columns: 268px minmax(0, 1fr) 232px;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 32px;
+    align-items: start;
+  }
+
+  /* ===================================================
+     SIDEBAR — quiet typography, no colored pills
+     =================================================== */
+  .sidebar {
+    position: sticky; top: 64px;
+    align-self: start;
+    height: calc(100vh - 64px);
+    overflow-y: auto;
+    padding: 32px 28px 40px 0;
+  }
+  .sidebar .product-switcher {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px;
+    margin: 0 0 20px;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 13px; color: var(--fg1);
+    cursor: pointer;
+    transition: border-color 150ms var(--ease-out);
+  }
+  .sidebar .product-switcher:hover { border-color: var(--border-strong); }
+  .sidebar .product-switcher .swatch {
+    width: 22px; height: 22px; border-radius: 6px;
+    background: var(--beava-orange-wash);
+    color: var(--accent);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-family: var(--font-serif); font-weight: 700; font-size: 13px;
+  }
+  .sidebar .product-switcher .label { flex: 1; font-weight: 600; }
+  .sidebar .product-switcher .sub { color: var(--fg3); font-size: 11.5px; }
+  .sidebar .product-switcher .chev { color: var(--fg3); }
+
+  .sidebar h4 {
+    font-family: var(--font-sans); font-weight: 600;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--fg3);
+    margin: 22px 0 8px 10px;
+  }
+  .sidebar h4:first-of-type { margin-top: 4px; }
+  .sidebar ul { list-style: none; padding: 0; margin: 0; }
+  .sidebar li a {
+    display: block;
+    padding: 6px 12px;
+    font-size: 13.5px; color: var(--fg2);
+    text-decoration: none; font-weight: 500;
+    border-radius: 7px;
+    transition: color 120ms var(--ease-out), background 120ms var(--ease-out);
+  }
+  .sidebar li a:hover { color: var(--fg1); background: var(--beava-paper); }
+  .sidebar li.active a {
+    color: var(--accent); font-weight: 600;
+    background: transparent;
+    box-shadow: inset 2px 0 0 var(--accent);
+    border-radius: 0 7px 7px 0;
+  }
+
+  /* ===================================================
+     MAIN CONTENT
+     =================================================== */
+  .content {
+    padding: 40px 56px 140px 32px;
+    max-width: 760px;
+    border-left: 1px solid var(--border);
+    min-height: calc(100vh - 64px);
+  }
+
+  .crumbs {
+    font-size: 12.5px; color: var(--fg3);
+    margin: 0 0 28px;
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  }
+  .crumbs a { color: var(--fg3); text-decoration: none; }
+  .crumbs a:hover { color: var(--accent); }
+  .crumbs .sep { color: var(--border-strong); }
+  .crumbs .cur { color: var(--fg1); font-weight: 500; }
+
+  /* HERO — editorial, mascot integrated, lots of air */
+  .hero {
+    display: grid; grid-template-columns: minmax(0, 1fr) 168px;
+    gap: 24px; align-items: end;
+    margin: 0 0 44px;
+    padding-bottom: 36px;
+    border-bottom: 1px solid var(--border);
+  }
+  .hero .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--font-sans); font-weight: 600; font-size: 12px;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--accent);
+    margin-bottom: 14px;
+  }
+  .hero .eyebrow .num {
+    font-family: var(--font-accent); font-weight: 700;
+    text-transform: none; letter-spacing: 0;
+    font-size: 18px; line-height: 1;
+    transform: rotate(-3deg);
+    display: inline-block;
+  }
+  .hero h1 {
+    font-family: var(--font-serif); font-weight: 700;
+    font-size: 56px; line-height: 1.02; letter-spacing: -0.025em;
+    color: var(--fg1);
+    margin: 0 0 16px;
+  }
+  .hero h1 em {
+    font-style: italic;
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .hero .lede {
+    font-family: var(--font-serif);
+    font-size: 21px; line-height: 1.45;
+    color: var(--fg2);
+    font-weight: 400;
+    margin: 0;
+    max-width: 30ch;
+  }
+  .hero .mascot { width: 168px; height: auto; display: block; }
+  @media (max-width: 720px) {
+    .hero { grid-template-columns: 1fr; }
+    .hero .mascot { width: 120px; justify-self: end; }
+    .hero h1 { font-size: 42px; }
+  }
+
+  /* ===================================================
+     PROSE
+     =================================================== */
+  .content h2 {
+    font-family: var(--font-serif); font-weight: 600;
+    font-size: 32px; line-height: 1.15; letter-spacing: -0.02em;
+    margin: 64px 0 16px; color: var(--fg1);
+    scroll-margin-top: 88px;
+    display: flex; align-items: baseline; gap: 14px;
+  }
+  .content h2 .step-num {
+    font-family: var(--font-mono); font-weight: 500;
+    font-size: 14px; color: var(--fg3);
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+  }
+  .content h3 {
+    font-family: var(--font-sans); font-weight: 600;
+    font-size: 17px; margin: 32px 0 8px; color: var(--fg1);
+    scroll-margin-top: 88px;
+  }
+  .content p, .content li {
+    font-size: 15.5px; line-height: 1.7;
+    color: var(--fg1); margin: 0 0 14px; text-wrap: pretty;
+  }
+  .content ul, .content ol { padding-left: 22px; margin: 0 0 18px; }
+  .content li { margin: 0 0 6px; }
+  .content li::marker { color: var(--fg3); }
+  .content a { color: var(--accent); text-decoration: underline;
+    text-decoration-color: color-mix(in oklab, var(--accent) 30%, transparent);
+    text-underline-offset: 3px; }
+  .content a:hover { text-decoration-color: currentColor; }
+  .content :is(p, li, td) code {
+    font-family: var(--font-mono); font-size: 0.88em;
+    background: var(--beava-paper); border: 1px solid var(--border-inset);
+    padding: 1px 5px; border-radius: 4px; color: var(--fg1);
+  }
+  .content strong { color: var(--fg1); font-weight: 700; }
+
+  /* ===================================================
+     CARDS — editorial, hand-crafted feel
+     =================================================== */
+  .card-grid {
+    display: grid; gap: 12px;
+    grid-template-columns: 1fr 1fr;
+    margin: 12px 0 28px;
+  }
+  .card {
+    display: flex; flex-direction: column;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 22px 22px;
+    text-decoration: none;
+    color: var(--fg1);
+    transition: border-color 200ms var(--ease-out),
+                box-shadow 200ms var(--ease-out),
+                transform 200ms var(--ease-out);
+    position: relative;
+    min-height: 120px;
+  }
+  .card:hover {
+    border-color: var(--accent);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+  }
+  .card .ttl {
+    font-family: var(--font-serif); font-weight: 600; font-size: 19px;
+    line-height: 1.2; margin: 0 0 6px;
+    color: var(--fg1);
+    letter-spacing: -0.01em;
+  }
+  .card .desc {
+    font-size: 13.5px; line-height: 1.55;
+    color: var(--fg3); margin: 0 0 14px;
+    flex: 1;
+  }
+  .card .go {
+    font-family: var(--font-mono); font-size: 12px;
+    color: var(--accent); font-weight: 600;
+    display: inline-flex; align-items: center; gap: 6px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .card .go .arrow { transition: transform 200ms var(--ease-out); }
+  .card:hover .go .arrow { transform: translateX(3px); }
+
+  /* ===================================================
+     CALLOUTS
+     =================================================== */
+  .callout {
+    border-radius: 12px;
+    padding: 14px 18px 14px 50px;
+    margin: 0 0 24px;
+    font-size: 14.5px; line-height: 1.6;
+    position: relative;
+    border: 1px solid;
+    border-left-width: 3px;
+  }
+  .callout .ic {
+    position: absolute; left: 18px; top: 14px;
+    width: 20px; height: 20px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .callout strong { font-weight: 700; }
+  .callout p { margin: 0; font-size: inherit; line-height: inherit; }
+  .callout p + p { margin-top: 6px; }
+  .callout.note    { background: var(--beava-info-wash);    border-color: #cadae4; color: #2c4f66; border-left-color: var(--beava-info); }
+  .callout.note strong, .callout.note .ic { color: var(--beava-info); }
+  .callout.tip     { background: var(--beava-success-wash); border-color: #cddabe; color: #355a28; border-left-color: var(--beava-success); }
+  .callout.tip strong, .callout.tip .ic { color: var(--beava-success); }
+  .callout.warn    { background: var(--beava-warn-wash);    border-color: #f0d99f; color: #6e4a14; border-left-color: #b88512; }
+  .callout.warn strong, .callout.warn .ic { color: #a3760e; }
+
+  /* ===================================================
+     CODE BLOCKS — paper-feel, warm
+     =================================================== */
+  .codeblock {
+    margin: 0 0 22px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--code-bg);
+  }
+  .codeblock-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 9px 14px;
+    background: #f8efd9;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--font-mono); font-size: 12px;
+    color: var(--fg3);
+  }
+  .codeblock-head .filename {
+    color: var(--fg2); font-weight: 600;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .codeblock-head .filename::before {
+    content: ""; width: 6px; height: 6px; border-radius: 999px;
+    background: var(--accent);
+  }
+  .codeblock-head .meta {
+    color: var(--fg3); font-size: 11.5px;
+  }
+  .copy-btn {
+    appearance: none; background: transparent; border: 0;
+    font-family: var(--font-mono); font-size: 11.5px;
+    color: var(--fg3); cursor: pointer;
+    padding: 4px 8px; border-radius: 6px;
+    transition: color 120ms var(--ease-out), background 120ms var(--ease-out);
+  }
+  .copy-btn:hover { color: var(--fg1); background: var(--beava-cream-deep); }
+  .codeblock pre {
+    margin: 0; border: 0; border-radius: 0; box-shadow: none;
+    padding: 16px 18px;
+    background: var(--code-bg);
+    font-size: 13.5px;
+    line-height: 1.7;
+  }
+
+  .tk-c   { color: var(--code-comment); font-style: italic; }
+  .tk-k   { color: var(--code-keyword); }
+  .tk-s   { color: var(--code-string); }
+  .tk-n   { color: var(--code-number); }
+  .tk-fn  { color: var(--code-fn); }
+  .tk-t   { color: var(--code-type); }
+  .tk-p   { color: var(--code-punctuation); }
+
+  /* ===================================================
+     TABS
+     =================================================== */
+  .tabs {
+    margin: 0 0 22px;
+  }
+  .tabs-strip {
+    display: flex; gap: 4px;
+    border-bottom: 1px solid var(--border);
+    padding: 0 2px;
+    margin-bottom: -1px;
+  }
+  .tabs-strip button {
+    appearance: none; border: 0; background: transparent;
+    font-family: var(--font-mono); font-size: 12.5px; font-weight: 600;
+    color: var(--fg3);
+    padding: 9px 14px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 120ms var(--ease-out), border-color 120ms var(--ease-out);
+    margin-bottom: -1px;
+  }
+  .tabs-strip button:hover { color: var(--fg1); }
+  .tabs-strip button.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+  .tabs-panel { display: none; }
+  .tabs-panel.active { display: block; }
+
+  /* ===================================================
+     PARAMETER LIST
+     =================================================== */
+  .params {
+    margin: 0 0 24px;
+    border-top: 1px solid var(--border);
+  }
+  .param {
+    display: grid; grid-template-columns: 220px 1fr;
+    gap: 24px;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .param-head {
+    display: flex; flex-direction: column; gap: 7px;
+    align-items: flex-start;
+  }
+  .param-name {
+    font-family: var(--font-mono); font-size: 14px; font-weight: 600;
+    color: var(--fg1);
+  }
+  .param-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+  .param-tag {
+    font-family: var(--font-mono); font-size: 10.5px; font-weight: 600;
+    padding: 2px 7px; border-radius: 4px;
+    color: var(--fg3);
+    text-transform: lowercase; letter-spacing: 0;
+  }
+  .param-tag.req {
+    color: var(--beava-danger);
+    background: var(--beava-danger-wash);
+  }
+  .param-tag.type {
+    color: var(--code-type);
+    background: var(--beava-paper);
+    border: 1px solid var(--border-inset);
+  }
+  .param-body {
+    font-size: 14.5px; line-height: 1.6; color: var(--fg2);
+  }
+  .param-body p { margin: 0 0 6px; font-size: inherit; line-height: inherit; }
+  .param-body .default {
+    font-family: var(--font-mono); font-size: 12.5px; color: var(--fg3);
+    margin-top: 6px;
+  }
+
+  /* ===================================================
+     ACCORDION
+     =================================================== */
+  .accordion {
+    border-top: 1px solid var(--border);
+    margin: 0 0 24px;
+  }
+  .accordion details {
+    border-bottom: 1px solid var(--border);
+  }
+  .accordion summary {
+    list-style: none;
+    padding: 16px 4px 16px 32px;
+    cursor: pointer;
+    font-family: var(--font-serif); font-weight: 600; font-size: 18px;
+    color: var(--fg1);
+    position: relative;
+    transition: color 150ms var(--ease-out);
+    letter-spacing: -0.01em;
+  }
+  .accordion summary::-webkit-details-marker { display: none; }
+  .accordion summary::before {
+    content: "+";
+    position: absolute; left: 4px; top: 14px;
+    font-family: var(--font-mono); font-weight: 400; font-size: 22px;
+    color: var(--accent);
+    transition: transform 200ms var(--ease-out);
+    line-height: 1;
+  }
+  .accordion details[open] summary::before { content: "−"; }
+  .accordion summary:hover { color: var(--accent); }
+  .accordion .acc-body {
+    padding: 0 4px 18px 32px;
+    font-size: 14.5px; line-height: 1.7; color: var(--fg2);
+  }
+  .accordion .acc-body p { font-size: inherit; line-height: inherit; margin: 0 0 8px; }
+  .accordion .acc-body :last-child { margin-bottom: 0; }
+
+  /* ===================================================
+     REQUEST / RESPONSE
+     =================================================== */
+  .reqres {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    margin: 0 0 22px;
+  }
+  @media (max-width: 900px) { .reqres { grid-template-columns: 1fr; } }
+
+  /* ===================================================
+     FEEDBACK + PAGER (footer)
+     =================================================== */
+  .footer-area { margin-top: 72px; padding-top: 32px; border-top: 1px solid var(--border); }
+  .feedback {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap;
+    margin: 0 0 32px;
+  }
+  .feedback .ask {
+    font-family: var(--font-serif); font-weight: 600; font-size: 18px;
+    color: var(--fg1);
+  }
+  .feedback-btns { display: flex; gap: 8px; }
+  .feedback-btns button {
+    appearance: none; cursor: pointer;
+    border: 1px solid var(--border); background: #fff;
+    border-radius: 999px;
+    padding: 7px 16px;
+    font-family: var(--font-sans); font-size: 13px; font-weight: 600;
+    color: var(--fg2);
+    display: inline-flex; align-items: center; gap: 7px;
+    transition: all 150ms var(--ease-out);
+  }
+  .feedback-btns button:hover { border-color: var(--accent); color: var(--accent); }
+
+  .pager {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+  }
+  .pager a {
+    display: block; padding: 18px 22px;
+    background: #fff; border: 1px solid var(--border); border-radius: 14px;
+    text-decoration: none;
+    transition: border-color 200ms var(--ease-out), box-shadow 200ms var(--ease-out);
+  }
+  .pager a:hover { border-color: var(--accent); box-shadow: var(--shadow-sm); }
+  .pager .dir {
+    font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--fg3); margin-bottom: 6px;
+  }
+  .pager .ttl {
+    font-family: var(--font-serif); font-weight: 600; font-size: 18px;
+    color: var(--fg1); letter-spacing: -0.01em;
+  }
+  .pager a.next { text-align: right; }
+
+  /* ===================================================
+     RIGHT TOC
+     =================================================== */
+  .toc {
+    position: sticky; top: 96px;
+    align-self: start;
+    padding: 40px 0 40px 28px;
+    max-height: calc(100vh - 96px);
+    overflow-y: auto;
+  }
+  .toc .kicker {
+    font-family: var(--font-sans); font-weight: 600; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--fg3); margin: 0 0 14px;
+  }
+  .toc ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 1px; }
+  .toc li a {
+    display: block;
+    padding: 5px 0 5px 12px;
+    font-size: 13px; color: var(--fg3); text-decoration: none;
+    border-left: 2px solid transparent;
+    transition: color 120ms var(--ease-out), border-color 120ms var(--ease-out);
+  }
+  .toc li a:hover { color: var(--fg1); }
+  .toc li.active a {
+    color: var(--accent); font-weight: 600;
+    border-left-color: var(--accent);
+  }
+  .toc .footer-links {
+    margin-top: 24px; padding-top: 18px;
+    border-top: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 9px;
+    font-size: 12.5px;
+  }
+  .toc .footer-links a {
+    color: var(--fg3); text-decoration: none;
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  .toc .footer-links a:hover { color: var(--accent); }
+</style>
+</head>
+<body class="beava">
+
+  <!-- ============ TOP NAV ============ -->
+  <nav class="topnav">
+    <a class="brand" href="../">
+      <img src="../assets/mascot-mark-geometric.png" alt="">
+      <span>beava</span>
+      <span class="v">v0.14</span>
+    </a>
+
+    <div class="search" tabindex="0">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+      <span class="placeholder">Search the docs · ask anything</span>
+      <span class="kbd">⌘K</span>
+    </div>
+
+    <div class="nav-links">
+      <a href="#" class="active">Docs</a>
+      <a href="#">Learn</a>
+      <a href="#">API</a>
+      <a href="#">Changelog</a>
+      <a href="#" class="gh">GitHub <span style="opacity:.6">↗</span></a>
+    </div>
+  </nav>
+
+  <!-- ============ SHELL ============ -->
+  <div class="shell">
+
+    <!-- ============ SIDEBAR ============ -->
+    <aside class="sidebar">
+      <div class="product-switcher">
+        <div class="swatch">b</div>
+        <div class="label">SDK reference <span class="sub">· v0.14</span></div>
+        <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+
+      <h4>Start here</h4>
+      <ul>
+        <li><a href="#">Install</a></li>
+        <li class="active"><a href="#">Quickstart</a></li>
+        <li><a href="#">Authentication</a></li>
+        <li><a href="#">Errors &amp; retries</a></li>
+      </ul>
+
+      <h4>TypeScript SDK</h4>
+      <ul>
+        <li><a href="#">Install</a></li>
+        <li><a href="#">Client</a></li>
+        <li><a href="#">push()</a></li>
+        <li><a href="#">query.*</a></li>
+        <li><a href="#">Streaming</a></li>
+        <li><a href="#">Types</a></li>
+      </ul>
+
+      <h4>Python SDK</h4>
+      <ul>
+        <li><a href="#">Install</a></li>
+        <li><a href="#">Client</a></li>
+        <li><a href="#">push()</a></li>
+        <li><a href="#">asyncio</a></li>
+      </ul>
+
+      <h4>Go SDK</h4>
+      <ul>
+        <li><a href="#">Install</a></li>
+        <li><a href="#">Client</a></li>
+        <li><a href="#">Push / Query</a></li>
+      </ul>
+
+      <h4>HTTP API</h4>
+      <ul>
+        <li><a href="#">POST /push</a></li>
+        <li><a href="#">GET /q/&lt;pipeline&gt;</a></li>
+        <li><a href="#">Pipelines</a></li>
+        <li><a href="#">Snapshots</a></li>
+      </ul>
+
+      <h4>CLI &amp; config</h4>
+      <ul>
+        <li><a href="#">CLI commands</a></li>
+        <li><a href="#">server.toml</a></li>
+        <li><a href="#">pipeline.toml</a></li>
+      </ul>
+    </aside>
+
+    <!-- ============ MAIN CONTENT ============ -->
+    <main class="content">
+
+      <div class="crumbs">
+        <a href="#">Docs</a><span class="sep">/</span>
+        <a href="#">Get started</a><span class="sep">/</span>
+        <span class="cur">Quickstart</span>
+      </div>
+
+      <header class="hero">
+        <div>
+          <div class="eyebrow"><span class="num">v0.14</span> SDK reference · 5 min</div>
+          <h1>Install. Push. <em>Query.</em></h1>
+          <p class="lede">Install an SDK, point it at a beava server, and make your first push and query — in five minutes, in any language.</p>
+        </div>
+        <img class="mascot" src="../assets/mascot-work-pose.svg" alt="">
+      </header>
+
+      <!-- =============== JUMP IN =============== -->
+      <h2 id="jump-in">Pick a path</h2>
+      <p>Most readers want the install + curl path below; if you'd rather poke at a hosted instance, the playground takes you there in one click.</p>
+
+      <div class="card-grid">
+        <a class="card" href="#">
+          <div class="ttl">Install &amp; run locally</div>
+          <p class="desc">One brew tap or one docker run. The whole thing fits in your terminal history.</p>
+          <span class="go">Five minutes <span class="arrow">→</span></span>
+        </a>
+        <a class="card" href="#">
+          <div class="ttl">Try the playground</div>
+          <p class="desc">A hosted beava in your browser. Push synthetic events, read counters, no install.</p>
+          <span class="go">Open playground <span class="arrow">→</span></span>
+        </a>
+      </div>
+
+      <div class="callout note">
+        <span class="ic">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        </span>
+        <p><strong>Heads up.</strong> The playground is a shared instance — use it to learn, not to load-test. For anything past 100 RPS, run beava locally; you'll see the same behavior at 50× the throughput.</p>
+      </div>
+
+      <!-- =============== INSTALL =============== -->
+      <h2 id="install"><span class="step-num">01</span> Install beava</h2>
+      <p>Pick whichever you have closest to hand. All three give you the same single binary on your <code>$PATH</code>.</p>
+
+      <div class="tabs" data-tabs="install">
+        <div class="tabs-strip">
+          <button class="active" data-target="t-brew">brew</button>
+          <button data-target="t-docker">docker</button>
+          <button data-target="t-curl">curl</button>
+          <button data-target="t-go">go install</button>
+        </div>
+
+        <div class="tabs-panel active" id="t-brew">
+          <div class="codeblock">
+            <div class="codeblock-head">
+              <span class="filename">terminal</span>
+              <button class="copy-btn">Copy</button>
+            </div>
+<pre><span class="tk-c"># tap once, install once</span>
+<span class="tk-k">brew</span> tap beava/beava
+<span class="tk-k">brew</span> install beava
+
+<span class="tk-c"># now you have `beava` on your PATH</span>
+<span class="tk-k">beava</span> --version
+<span class="tk-c"># → beava 0.14.2 (darwin/arm64)</span></pre>
+          </div>
+        </div>
+
+        <div class="tabs-panel" id="t-docker">
+          <div class="codeblock">
+            <div class="codeblock-head">
+              <span class="filename">terminal</span>
+              <button class="copy-btn">Copy</button>
+            </div>
+<pre><span class="tk-c"># persistent volume keeps your aggregates across restarts</span>
+<span class="tk-k">docker</span> run -d --name beava \
+  -p <span class="tk-n">7421</span>:<span class="tk-n">7421</span> \
+  -v beava-data:/var/lib/beava \
+  ghcr.io/beava/beava:<span class="tk-n">0.14</span></pre>
+          </div>
+        </div>
+
+        <div class="tabs-panel" id="t-curl">
+          <div class="codeblock">
+            <div class="codeblock-head">
+              <span class="filename">terminal</span>
+              <button class="copy-btn">Copy</button>
+            </div>
+<pre><span class="tk-c"># one-line install for linux + macOS</span>
+<span class="tk-k">curl</span> -fsSL https://get.beava.dev | sh</pre>
+          </div>
+        </div>
+
+        <div class="tabs-panel" id="t-go">
+          <div class="codeblock">
+            <div class="codeblock-head">
+              <span class="filename">terminal</span>
+              <button class="copy-btn">Copy</button>
+            </div>
+<pre><span class="tk-k">go</span> install github.com/beava/beava/cmd/beava@latest</pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout tip">
+        <span class="ic">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        </span>
+        <p><strong>Tip.</strong> beava ships static. There's no JVM to size, no broker to configure, no schema registry to register against. If <code>beava --version</code> prints, you're done.</p>
+      </div>
+
+      <!-- =============== DEFINE =============== -->
+      <h2 id="define"><span class="step-num">02</span> Define your first counter</h2>
+      <p>Pipelines in beava are declared in TOML and registered over HTTP. Here's a 24-hour rolling counter of <code>page_view</code> events, keyed by user.</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">pipelines/page_views.toml</span>
+          <span class="meta">12 lines</span>
+        </div>
+<pre><span class="tk-p">[</span><span class="tk-t">pipeline</span><span class="tk-p">]</span>
+<span class="tk-fn">name</span>      = <span class="tk-s">"user_page_views"</span>
+<span class="tk-fn">key</span>       = <span class="tk-s">"user_id"</span>
+<span class="tk-fn">window</span>    = <span class="tk-s">"24h"</span>     <span class="tk-c"># rolling, not calendar</span>
+<span class="tk-fn">operator</span>  = <span class="tk-s">"counter"</span>
+
+<span class="tk-p">[</span><span class="tk-t">pipeline.match</span><span class="tk-p">]</span>
+<span class="tk-fn">event</span>     = <span class="tk-s">"page_view"</span>
+<span class="tk-fn">where</span>     = <span class="tk-s">"path != '/healthz'"</span>
+
+<span class="tk-p">[</span><span class="tk-t">pipeline.retention</span><span class="tk-p">]</span>
+<span class="tk-fn">tick</span>      = <span class="tk-s">"60s"</span>
+<span class="tk-fn">memory</span>    = <span class="tk-s">"adaptive"</span></pre>
+      </div>
+
+      <p>Register it once. beava picks it up live — no restart.</p>
+
+      <div class="codeblock">
+        <div class="codeblock-head">
+          <span class="filename">terminal</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+<pre><span class="tk-k">beava</span> apply pipelines/page_views.toml
+<span class="tk-c"># ✓ pipeline 'user_page_views' registered (rev 1)</span></pre>
+      </div>
+
+      <!-- =============== PUSH AND READ =============== -->
+      <h2 id="push-read"><span class="step-num">03</span> Push events, read the counter</h2>
+      <p>beava speaks HTTP — every operation is a single request. Open two terminals, or just one if you're feeling brave.</p>
+
+      <div class="reqres">
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">request · push event</span>
+            <button class="copy-btn">Copy</button>
+          </div>
+<pre><span class="tk-k">curl</span> -X POST \
+  http://localhost:7421/push \
+  -H <span class="tk-s">"content-type: application/json"</span> \
+  -d <span class="tk-s">'{
+    "event": "page_view",
+    "user_id": "u_001",
+    "path": "/pricing",
+    "ts": "2026-05-07T14:30:01Z"
+  }'</span></pre>
+        </div>
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">response · 6 ms</span>
+            <span class="meta">200 OK</span>
+          </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"ok"</span>: <span class="tk-k">true</span>,
+  <span class="tk-fn">"accepted"</span>: <span class="tk-n">1</span>,
+  <span class="tk-fn">"pipelines"</span>: <span class="tk-p">[</span>
+    <span class="tk-s">"user_page_views"</span>
+  <span class="tk-p">]</span>,
+  <span class="tk-fn">"latency_ms"</span>: <span class="tk-n">5.8</span>
+<span class="tk-p">}</span></pre>
+        </div>
+      </div>
+
+      <p>Now ask beava for the running aggregate:</p>
+
+      <div class="reqres">
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">request · read counter</span>
+            <button class="copy-btn">Copy</button>
+          </div>
+<pre><span class="tk-k">curl</span> http://localhost:7421\
+  /q/user_page_views\
+  ?key=u_001</pre>
+        </div>
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="filename">response · 0.9 ms</span>
+            <span class="meta">200 OK</span>
+          </div>
+<pre><span class="tk-p">{</span>
+  <span class="tk-fn">"key"</span>:    <span class="tk-s">"u_001"</span>,
+  <span class="tk-fn">"value"</span>:  <span class="tk-n">14</span>,
+  <span class="tk-fn">"window"</span>: <span class="tk-s">"24h"</span>,
+  <span class="tk-fn">"asof"</span>:   <span class="tk-s">"2026-05-07T14:30:02Z"</span>
+<span class="tk-p">}</span></pre>
+        </div>
+      </div>
+
+      <!-- =============== PARAMETERS =============== -->
+      <h2 id="parameters">Pipeline parameters</h2>
+      <p>Every operator shares the same shape. Here are the fields you'll touch in your first week.</p>
+
+      <div class="params">
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">name</span>
+            <span class="param-tags">
+              <span class="param-tag req">required</span>
+              <span class="param-tag type">string</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>Stable identifier for the pipeline. Used in the query path: <code>/q/&lt;name&gt;</code>. Lowercase, underscores, no slashes.</p>
+          </div>
+        </div>
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">key</span>
+            <span class="param-tags">
+              <span class="param-tag req">required</span>
+              <span class="param-tag type">string</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>Field on the event used as the rollup key. Common values: <code>user_id</code>, <code>tenant_id</code>, <code>ip</code>. Composite keys use a dotted path.</p>
+          </div>
+        </div>
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">window</span>
+            <span class="param-tags">
+              <span class="param-tag type">duration</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>Length of the rolling time window. Accepts Go duration strings — <code>30s</code>, <code>15m</code>, <code>1h</code>, <code>24h</code>, <code>7d</code>. Maximum 30 days.</p>
+            <p class="default">default <code>1h</code></p>
+          </div>
+        </div>
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">operator</span>
+            <span class="param-tags">
+              <span class="param-tag type">enum</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>One of <code>counter</code>, <code>velocity</code>, <code>last_n</code>, <code>topk</code>, <code>budget</code>. See the <a href="#">operator reference</a>.</p>
+            <p class="default">default <code>counter</code></p>
+          </div>
+        </div>
+        <div class="param">
+          <div class="param-head">
+            <span class="param-name">tick</span>
+            <span class="param-tags">
+              <span class="param-tag type">duration</span>
+            </span>
+          </div>
+          <div class="param-body">
+            <p>Bucket resolution. Smaller ticks give smoother aggregates and cost more memory. The default is sane for most workloads.</p>
+            <p class="default">default <code>60s</code></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- =============== TROUBLESHOOTING =============== -->
+      <h2 id="troubleshooting">Common questions</h2>
+
+      <div class="accordion">
+        <details open>
+          <summary>Where does beava store its state?</summary>
+          <div class="acc-body">
+            <p>Aggregates live in memory and snapshot to disk on a tick. Default location is <code>/var/lib/beava</code>. You can change it with <code>--data-dir</code> or by setting <code>BEAVA_DATA</code> in your env.</p>
+            <p>beava does <em>not</em> persist your raw events — it persists the aggregates over them. If you need replay, keep your events somewhere else (S3, your warehouse).</p>
+          </div>
+        </details>
+        <details>
+          <summary>What happens if beava restarts mid-window?</summary>
+          <div class="acc-body">
+            <p>It re-reads the most recent snapshot and resumes. You'll lose at most one tick of un-flushed events; for a 60-second tick that's a maximum of one minute of in-flight data. Tune the tick down if your application can't tolerate that.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Can I run beava in HA?</summary>
+          <div class="acc-body">
+            <p>Yes — run two replicas behind a sticky-by-key load balancer. There's a longer write-up in <a href="#">Operations · High availability</a>. For most workloads a single beava on a t3.small handles tens of thousands of events per second.</p>
+          </div>
+        </details>
+        <details>
+          <summary>How does beava compare to Redis?</summary>
+          <div class="acc-body">
+            <p>Redis is a key-value store you can <em>build</em> rolling counters on top of (with Lua + ZSETs + a lot of care). beava is a server that already <em>is</em> rolling counters — and velocities, leaderboards, last-N-seen — without you assembling the primitives.</p>
+          </div>
+        </details>
+      </div>
+
+      <!-- =============== NEXT =============== -->
+      <h2 id="next">Where to go next</h2>
+      <p>You've got beava running and a counter ticking. Two reasonable next stops:</p>
+
+      <div class="card-grid">
+        <a class="card" href="#">
+          <div class="ttl">All operators</div>
+          <p class="desc">Velocities, last-N-seen, leaderboards, rate-limit budgets — same TOML shape, different math.</p>
+          <span class="go">Read the reference <span class="arrow">→</span></span>
+        </a>
+        <a class="card" href="#">
+          <div class="ttl">Cost &amp; capacity</div>
+          <p class="desc">Estimate memory, RPS, and AWS fit for your workload before you ship it.</p>
+          <span class="go">Plan capacity <span class="arrow">→</span></span>
+        </a>
+      </div>
+
+      <!-- =============== FOOTER AREA =============== -->
+      <div class="footer-area">
+        <div class="feedback">
+          <div class="ask">Was this page useful?</div>
+          <div class="feedback-btns">
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3z"/><line x1="7" y1="22" x2="7" y2="11"/></svg>
+              Yes
+            </button>
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3z"/><line x1="17" y1="2" x2="17" y2="13"/></svg>
+              Not really
+            </button>
+            <button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              Suggest an edit
+            </button>
+          </div>
+        </div>
+
+        <div class="pager">
+          <a href="#" class="prev">
+            <div class="dir">← Previous</div>
+            <div class="ttl">Install in 60 seconds</div>
+          </a>
+          <a href="#" class="next">
+            <div class="dir">Next →</div>
+            <div class="ttl">Rolling counters</div>
+          </a>
+        </div>
+      </div>
+    </main>
+
+    <!-- ============ RIGHT TOC ============ -->
+    <aside class="toc">
+      <div class="kicker">On this page</div>
+      <ul>
+        <li class="active"><a href="#jump-in">Pick a path</a></li>
+        <li><a href="#install">01 · Install</a></li>
+        <li><a href="#define">02 · Define a counter</a></li>
+        <li><a href="#push-read">03 · Push and read</a></li>
+        <li><a href="#parameters">Pipeline parameters</a></li>
+        <li><a href="#troubleshooting">Common questions</a></li>
+        <li><a href="#next">Where to go next</a></li>
+      </ul>
+      <div class="footer-links">
+        <a href="#">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Edit on GitHub
+        </a>
+        <a href="#">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+          Ask in Discord
+        </a>
+        <a href="#">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.8 5.8 21 7 14 2 9.3 9 8.5 12 2"/></svg>
+          Open playground
+        </a>
+      </div>
+    </aside>
+
+  </div>
+
+  <script>
+    // tabs
+    document.querySelectorAll('.tabs').forEach(tabRoot => {
+      const buttons = tabRoot.querySelectorAll('.tabs-strip button');
+      const panels  = tabRoot.querySelectorAll('.tabs-panel');
+      buttons.forEach(btn => {
+        btn.addEventListener('click', () => {
+          buttons.forEach(b => b.classList.remove('active'));
+          panels.forEach(p => p.classList.remove('active'));
+          btn.classList.add('active');
+          const target = tabRoot.querySelector('#' + btn.dataset.target);
+          if (target) target.classList.add('active');
+        });
+      });
+    });
+    // copy buttons
+    document.querySelectorAll('.copy-btn').forEach(b => {
+      b.addEventListener('click', () => {
+        const orig = b.textContent;
+        b.textContent = '✓ Copied';
+        setTimeout(() => { b.textContent = orig; }, 1100);
+      });
+    });
+  </script>
+</body>
+</html>

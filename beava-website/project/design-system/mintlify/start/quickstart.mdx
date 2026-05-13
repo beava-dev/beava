@@ -1,0 +1,248 @@
+---
+title: "Quickstart"
+sidebarTitle: "Quickstart"
+description: "Install an SDK, point it at a beava server, and make your first push + query in under five minutes."
+icon: "rocket"
+---
+
+import { Card, CardGroup, Tabs, Tab, CodeGroup, Steps, Step, Note, Tip, ParamField } from "/snippets/mintlify";
+
+The beava SDKs are thin clients over the HTTP API. Pick your language; everything below has the same shape — `client.push(event)` and `client.query(pipeline, key)` are the only two methods you'll use 90% of the time.
+
+<Note>
+  This site is the **SDK reference** — language clients, HTTP endpoints, CLI, and TOML config. For the *why* (vision, concepts, recipes, blog), head to [beava.dev/learn](https://beava.dev/learn).
+</Note>
+
+## 1. Install the SDK
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```bash
+    npm install @beava/sdk
+    # or: pnpm add @beava/sdk · yarn add @beava/sdk · bun add @beava/sdk
+    ```
+    Requires Node 18+, or any runtime with `fetch`. Works in Bun, Deno, and Cloudflare Workers without changes.
+  </Tab>
+  <Tab title="Python">
+    ```bash
+    pip install beava
+    # or: uv pip install beava · poetry add beava
+    ```
+    Requires Python 3.9+. The async client is in `beava.aio`.
+  </Tab>
+  <Tab title="Go">
+    ```bash
+    go get github.com/beava/beava-go
+    ```
+    Requires Go 1.21+. The package is import-as `beava`.
+  </Tab>
+  <Tab title="Rust">
+    ```bash
+    cargo add beava
+    ```
+    Requires Rust 1.74+. Async-first, built on `reqwest` + `tokio`.
+  </Tab>
+  <Tab title="curl">
+    No SDK needed — beava speaks HTTP. The curl path mirrors what every SDK does internally and is the fastest way to learn the API.
+  </Tab>
+</Tabs>
+
+## 2. Point a client at your server
+
+The SDKs default to `http://localhost:7421` and read `BEAVA_TOKEN` from the environment. Pass either explicitly to override.
+
+<CodeGroup>
+```ts TypeScript
+import { Beava } from "@beava/sdk";
+
+const beava = new Beava({
+  url:   "http://localhost:7421",
+  token: process.env.BEAVA_TOKEN, // optional in dev
+});
+```
+
+```py Python
+from beava import Beava
+
+beava = Beava(
+    url="http://localhost:7421",
+    token=None,  # set BEAVA_TOKEN in env, or pass it here
+)
+```
+
+```go Go
+import "github.com/beava/beava-go"
+
+client := beava.New(beava.Config{
+    URL:   "http://localhost:7421",
+    Token: os.Getenv("BEAVA_TOKEN"),
+})
+```
+
+```rust Rust
+use beava::Client;
+
+let client = Client::builder()
+    .url("http://localhost:7421")
+    .token(std::env::var("BEAVA_TOKEN").ok())
+    .build()?;
+```
+
+```bash curl
+export BEAVA_URL="http://localhost:7421"
+# optional: export BEAVA_TOKEN="..."
+```
+</CodeGroup>
+
+<Tip>
+  In production, set `BEAVA_TOKEN` and **don't** hard-code the URL — point clients at a stable DNS name behind a sticky-by-key load balancer. See [HTTP API · Authentication](/start/authentication).
+</Tip>
+
+## 3. Push your first event
+
+Every event is a JSON object with at minimum an `event` name, a key field, and a timestamp. beava is opinionated about timestamps: it wants RFC 3339 in UTC.
+
+<CodeGroup>
+```ts TypeScript
+await beava.push({
+  event:   "page_view",
+  user_id: "u_001",
+  path:    "/pricing",
+  ts:      new Date().toISOString(),
+});
+```
+
+```py Python
+beava.push({
+    "event":   "page_view",
+    "user_id": "u_001",
+    "path":    "/pricing",
+    "ts":      datetime.now(timezone.utc).isoformat(),
+})
+```
+
+```go Go
+_, err := client.Push(ctx, beava.Event{
+    Name: "page_view",
+    Fields: map[string]any{
+        "user_id": "u_001",
+        "path":    "/pricing",
+    },
+})
+```
+
+```rust Rust
+client.push(json!({
+    "event":   "page_view",
+    "user_id": "u_001",
+    "path":    "/pricing",
+})).await?;
+```
+
+```bash curl
+curl -X POST $BEAVA_URL/push \
+  -H "content-type: application/json" \
+  -d '{
+    "event":   "page_view",
+    "user_id": "u_001",
+    "path":    "/pricing",
+    "ts":      "2026-05-07T14:30:01Z"
+  }'
+```
+</CodeGroup>
+
+The server returns the pipelines that matched and the per-event accept latency:
+
+```json response · 200 OK
+{
+  "ok":         true,
+  "accepted":   1,
+  "pipelines":  ["user_page_views"],
+  "latency_ms": 5.8
+}
+```
+
+## 4. Query a counter
+
+Every operator type has a typed query method on the SDK. For a `counter` pipeline you ask for one key at a time, or a batch.
+
+<CodeGroup>
+```ts TypeScript
+const result = await beava.query.counter("user_page_views", {
+  key: "u_001",
+});
+// → { key: "u_001", value: 14, window: "24h", asof: "..." }
+```
+
+```py Python
+result = beava.query.counter("user_page_views", key="u_001")
+# → CounterResult(key="u_001", value=14, window="24h", asof=...)
+```
+
+```go Go
+result, err := client.Query.Counter(ctx, "user_page_views",
+    beava.Key("u_001"))
+// result.Value == 14
+```
+
+```rust Rust
+let result = client.query()
+    .counter("user_page_views")
+    .key("u_001")
+    .send().await?;
+```
+
+```bash curl
+curl "$BEAVA_URL/q/user_page_views?key=u_001"
+```
+</CodeGroup>
+
+```json response · 200 OK · 0.9 ms
+{
+  "key":    "u_001",
+  "value":  14,
+  "window": "24h",
+  "asof":   "2026-05-07T14:30:02Z"
+}
+```
+
+## Common client options
+
+Every SDK accepts the same shape of config. Pass an explicit object, or rely on env vars (`BEAVA_URL`, `BEAVA_TOKEN`, `BEAVA_TIMEOUT_MS`).
+
+<ParamField path="url" type="string" default="http://localhost:7421">
+  Base URL of the beava server. The SDK appends `/push`, `/q/<pipeline>`, etc.
+</ParamField>
+
+<ParamField path="token" type="string">
+  Bearer token sent as `Authorization: Bearer <token>`. Required when the server is configured with `auth.mode = "token"`.
+</ParamField>
+
+<ParamField path="timeoutMs" type="number" default="2000">
+  Per-request timeout. The SDK retries idempotent calls with exponential backoff up to `maxRetries`.
+</ParamField>
+
+<ParamField path="maxRetries" type="number" default="3">
+  Number of retries on transient errors (5xx, network, 429). Set to `0` to disable.
+</ParamField>
+
+<ParamField path="userAgent" type="string">
+  Extra UA suffix, appended to the SDK default. Useful for tagging traffic in beava server logs.
+</ParamField>
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="SDK reference · TypeScript" icon="square-js" href="/sdks/typescript/client">
+    Full method list, types, streaming, error shape.
+  </Card>
+  <Card title="HTTP API · Push" icon="bolt" href="/http/push">
+    The exact wire format, all error codes, batching semantics.
+  </Card>
+  <Card title="CLI · apply" icon="terminal" href="/cli/apply">
+    Register, version, and roll back pipelines from a TOML file.
+  </Card>
+  <Card title="Configuration · pipeline.toml" icon="sliders" href="/config/pipeline-toml">
+    The full schema for the file the CLI consumes.
+  </Card>
+</CardGroup>

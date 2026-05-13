@@ -1,441 +1,581 @@
 // ui_kits/marketing/Hero.jsx
-// Hero redesign — locked decisions 2026-05-04.
-// Left: words. Right: LiveMetrics dashboard panel (replaces FeedBeaver).
+//
+// Centered hero — 2026-05-12.
+//   - One heading, one subhead, two CTAs, all centered.
+//   - Live decision feed (event → fresh feature → decision) sits below the
+//     fold-line as a single wide panel, not a side-by-side split.
+//   - Repositioned around "AI products that react to live events".
+//
+// Tweaks expose:
+//   - headlineEm   ('react'  | 'just-happened' | 'none')
+//   - demoMode     ('auto'   — events tick in on a slow loop
+//                   'send'   — auto + a row of send-test-event buttons)
+//   - decisionTone ('orange' | 'green')
+//   - showEyebrow  (boolean)
 
-const useTickingNumber = (target, { duration = 1100, decimals = 0 } = {}) => {
-  const [val, setVal] = React.useState(target);
-  const fromRef = React.useRef(target);
+// ─────────────────────────────────────────────────────────────────────────────
+// Decision feed — the demo that replaces the side panel
+// ─────────────────────────────────────────────────────────────────────────────
+
+const FEED_TEMPLATES = {
+  login_failed: {
+    event: 'login_failed',
+    entity: () => `user_${1000 + Math.floor(Math.random() * 900)}`,
+    feature: (n) => ({ key: 'failed_logins_10m', value: n }),
+    valueOf: (prev) => (prev ? prev + 1 : 3 + Math.floor(Math.random() * 5)),
+    decision: (v) => v >= 5 ? 'require verification' : 'increase risk score',
+  },
+  card_added: {
+    event: 'card_added',
+    entity: () => `device_${10 + Math.floor(Math.random() * 90)}`,
+    feature: (n) => ({ key: 'cards_per_device_1h', value: n }),
+    valueOf: (prev) => (prev ? prev + 1 : 2 + Math.floor(Math.random() * 3)),
+    decision: (v) => v >= 4 ? 'flag for review' : 'increase risk score',
+  },
+  product_clicked: {
+    event: 'product_clicked',
+    entity: () => `user_${1000 + Math.floor(Math.random() * 900)}`,
+    feature: () => ({ key: 'recent_clicks_30m', value: `${2 + Math.floor(Math.random() * 5)} items` }),
+    decision: () => 'refresh recommendations',
+  },
+  llm_request: {
+    event: 'llm_request',
+    entity: () => `org_${['acme','globex','umbra','soylent'][Math.floor(Math.random()*4)]}`,
+    feature: (n) => ({ key: 'tokens_used_24h', value: `${n}k` }),
+    valueOf: (prev) => prev ? prev + 4 + Math.floor(Math.random()*8) : 60 + Math.floor(Math.random() * 40),
+    decision: (v) => v >= 90 ? 'throttle expensive model' : 'route to cheap model',
+  },
+  payment_attempt: {
+    event: 'payment_attempt',
+    entity: () => `card_${10 + Math.floor(Math.random() * 90)}`,
+    feature: (n) => ({ key: 'cvc_fails_1h', value: n }),
+    valueOf: (prev) => prev ? prev + 1 : 1 + Math.floor(Math.random() * 3),
+    decision: (v) => v >= 3 ? 'block transaction' : 'allow',
+  },
+  search_query: {
+    event: 'search_query',
+    entity: () => `user_${1000 + Math.floor(Math.random() * 900)}`,
+    feature: () => ({ key: 'searches_5m', value: 4 + Math.floor(Math.random() * 10) }),
+    decision: () => 'boost ranking signals',
+  },
+};
+
+const ORDER = ['login_failed', 'card_added', 'product_clicked', 'llm_request', 'payment_attempt', 'search_query'];
+
+const seed = () => {
+  // Pre-fill with 4 rows so the feed isn't empty on first paint.
+  const initial = ['login_failed', 'product_clicked', 'llm_request'];
+  return initial.map((name, i) => mintRow(name, i, Date.now() - (initial.length - i) * 1800));
+};
+
+const mintRow = (name, idx, ts) => {
+  const t = FEED_TEMPLATES[name];
+  const entity = t.entity();
+  const rawVal = t.valueOf ? t.valueOf() : null;
+  const feat = t.feature(rawVal);
+  const decision = t.decision(rawVal ?? feat.value);
+  return {
+    id: `${ts}-${idx}-${Math.random().toString(36).slice(2,6)}`,
+    ts,
+    event: t.event,
+    entity,
+    feature: feat,
+    decision,
+    age: 0,
+    isNew: true,
+  };
+};
+
+const useDecisionFeed = (auto = true) => {
+  const [rows, setRows] = React.useState(seed);
+  const [tickMs, setTickMs] = React.useState(0);
+
+  // Append a new row
+  const pushRow = React.useCallback((eventName) => {
+    setRows(prev => {
+      const ts = Date.now();
+      const row = mintRow(eventName, prev.length, ts);
+      const next = [row, ...prev.map(r => ({ ...r, isNew: false }))].slice(0, 3);
+      return next;
+    });
+  }, []);
+
+  // Auto-stream
   React.useEffect(() => {
-    const from = fromRef.current;
-    const to = target;
-    if (from === to) return;
-    const start = performance.now();
-    let raf;
-    const step = (now) => {
-      const t = Math.min(1, (now - start) / duration);
-      const eased = 1 - Math.pow(1 - t, 3);
-      const v = from + (to - from) * eased;
-      setVal(v);
-      if (t < 1) raf = requestAnimationFrame(step);
-      else fromRef.current = to;
-    };
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
-  }, [target, duration]);
-  return decimals === 0 ? Math.round(val) : Number(val.toFixed(decimals));
-};
+    if (!auto) return;
+    let i = 0;
+    const id = setInterval(() => {
+      const name = ORDER[Math.floor(Math.random() * ORDER.length)];
+      pushRow(name);
+      i++;
+    }, 2400);
+    return () => clearInterval(id);
+  }, [auto, pushRow]);
 
-const Sparkline = ({ data, color = 'var(--accent)', w = 140, h = 36 }) => {
-  if (!data || data.length < 2) return null;
-  const min = Math.min(...data);
-  const max = Math.max(...data);
-  const span = max - min || 1;
-  const stepX = w / (data.length - 1);
-  const pts = data.map((v, i) => [i * stepX, h - ((v - min) / span) * (h - 4) - 2]);
-  const d = pts.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-  const area = `${d} L${w},${h} L0,${h} Z`;
-  const last = pts[pts.length - 1];
-  return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ display: 'block', overflow: 'visible' }}>
-      <path d={area} fill={color} fillOpacity="0.10"/>
-      <path d={d} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-      <circle cx={last[0]} cy={last[1]} r="2.75" fill={color}/>
-      <circle cx={last[0]} cy={last[1]} r="5" fill={color} fillOpacity="0.18"/>
-    </svg>
-  );
-};
-
-const formatDuration = (ms) => {
-  const totalS = Math.max(0, Math.round(ms / 1000));
-  if (totalS < 60) return [`${totalS}s`, ''];
-  const m = Math.floor(totalS / 60);
-  const s = totalS % 60;
-  if (m < 60) return [`${m}m ${String(s).padStart(2, '0')}s`, ''];
-  return [`${(m / 60).toFixed(1)}h`, ''];
-};
-
-const formatCount = (n) => {
-  if (n < 10_000) return [n.toLocaleString('en-US'), ''];
-  if (n < 1_000_000) return [(n / 1000).toFixed(1), 'k'];
-  return [(n / 1_000_000).toFixed(2), 'M'];
-};
-
-const seedSeries = (n, base, jitter) =>
-  Array.from({ length: n }, (_, i) => {
-    const drift = Math.sin(i / 2.3) * jitter * 0.5;
-    const noise = (Math.random() - 0.5) * jitter;
-    return Math.max(0, base + drift + noise);
-  });
-
-const MetricCard = ({ label, value, unit, subline, sparkData, sparkColor, big, mascot }) => (
-  <div style={{
-    background: '#fff',
-    border: '1px solid var(--border)',
-    borderRadius: 14,
-    padding: '18px 20px 18px',
-    boxShadow: 'var(--shadow-sm)',
-    display: 'flex', flexDirection: 'column', gap: 14,
-    position: 'relative', overflow: 'hidden',
-  }}>
-    {mascot && (
-      <img
-        src={mascot.src}
-        alt=""
-        width={mascot.size || 44}
-        height={mascot.size || 44}
-        style={{
-          position: 'absolute',
-          top: mascot.top ?? 10,
-          right: mascot.right ?? 12,
-          opacity: mascot.opacity ?? 0.85,
-          transform: mascot.rotate ? `rotate(${mascot.rotate}deg)` : 'none',
-          pointerEvents: 'none',
-        }}
-      />
-    )}
-    <div style={{
-      fontFamily: 'var(--font-sans)', fontSize: 11.5, fontWeight: 600,
-      textTransform: 'uppercase', letterSpacing: '0.1em',
-      color: 'var(--fg3)', lineHeight: 1.3,
-      paddingRight: mascot ? 56 : 0,
-    }}>{label}</div>
-    <div style={{
-      fontFamily: 'var(--font-serif)', fontWeight: 600,
-      fontSize: 44, lineHeight: 1.05, letterSpacing: '-0.02em',
-      color: 'var(--fg1)',
-      display: 'flex', alignItems: 'baseline', gap: 6,
-      ...(big ? {
-        fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 600,
-        letterSpacing: 0, lineHeight: 1.4,
-        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-        display: 'block',
-      } : null),
-    }}>
-      {value}
-      {unit && <span style={{ fontSize: '0.5em', color: 'var(--fg3)', fontWeight: 500, fontFamily: 'var(--font-sans)' }}>{unit}</span>}
-    </div>
-    {subline && (
-      <div style={{
-        fontFamily: 'var(--font-sans)', fontSize: 12.5,
-        color: 'var(--fg3)', lineHeight: 1.4, marginTop: -4,
-      }}>{subline}</div>
-    )}
-    {sparkData && (
-      <Sparkline data={sparkData} color={sparkColor} w={300} h={28}/>
-    )}
-  </div>
-);
-
-const TOP_PAGES = [
-  '/docs/get-started/quickstart/',
-  '/docs/rolling-counters/',
-  '/learn/chapter-1/',
-  '/docs/get-started/',
-  '/learn/fraud-rules/',
-];
-
-const LiveMetrics = () => {
-  const [dwellMs, setDwellMs] = React.useState(134_000);   // ~2m 14s
-  const [pageViews, setPageViews] = React.useState(1_247);
-  const [topPageIdx, setTopPageIdx] = React.useState(0);
-  const [topPageHits, setTopPageHits] = React.useState(382);
-
-  // 60 points · 1 per minute over the last hour
-  const [dwellSeries, setDwellSeries] = React.useState(() => seedSeries(60, 130_000, 25_000));
-  // 24 points · 1 per hour over the last 24 hours
-  const [pvSeries, setPvSeries] = React.useState(() => seedSeries(24, 50, 18));
-
+  // Age ticker — updates "Xs ago" labels without rerendering the array
   React.useEffect(() => {
-    const tick = () => {
-      setDwellMs(v => Math.max(40_000, v + (Math.random() - 0.45) * 14_000));
-      setPageViews(v => v + Math.floor(1 + Math.random() * 4));
-      setTopPageHits(v => Math.max(80, v + Math.floor((Math.random() - 0.4) * 12)));
-      if (Math.random() < 0.15) setTopPageIdx(i => (i + 1) % TOP_PAGES.length);
-      setDwellSeries(s => [...s.slice(1), Math.max(40_000, s[s.length - 1] + (Math.random() - 0.5) * 18_000)]);
-      setPvSeries(s => [...s.slice(1), Math.max(0, s[s.length - 1] + (Math.random() - 0.3) * 12)]);
-    };
-    const id = setInterval(tick, 5000);
+    const id = setInterval(() => setTickMs(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
 
-  const dwellTickedMs = useTickingNumber(dwellMs, { duration: 900 });
-  const pvTicked = useTickingNumber(pageViews, { duration: 700 });
-  const hitsTicked = useTickingNumber(topPageHits, { duration: 700 });
+  return { rows, pushRow, tickMs };
+};
 
-  const [dwellNum, dwellUnit] = formatDuration(dwellTickedMs);
-  const [pvNum, pvUnit] = formatCount(pvTicked);
+const ageLabel = (ts, now) => {
+  const sec = Math.max(0, Math.floor((now - ts) / 1000));
+  if (sec < 1) return 'just now';
+  if (sec < 60) return `${sec}s ago`;
+  return `${Math.floor(sec / 60)}m ago`;
+};
+
+// Column 1: event tag
+const EventTag = ({ name }) => (
+  <span style={{
+    fontFamily: 'var(--font-mono)', fontSize: 12.5, fontWeight: 600,
+    color: 'var(--fg2)',
+    background: 'var(--beava-paper)',
+    border: '1px solid var(--border)',
+    borderRadius: 6, padding: '3px 8px',
+    letterSpacing: 0, whiteSpace: 'nowrap',
+  }}>{name}</span>
+);
+
+// Column 2: entity[feature] = value
+const FeatureCell = ({ row }) => (
+  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13.5, color: 'var(--fg2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+    <span style={{ color: 'var(--fg3)' }}>{row.entity}</span>
+    <span style={{ color: 'var(--fg3)' }}>.</span>
+    <span style={{ color: 'var(--code-keyword)' }}>{row.feature.key}</span>
+    <span style={{ color: 'var(--fg3)' }}> = </span>
+    <span style={{ color: 'var(--fg1)', fontWeight: 600 }}>{row.feature.value}</span>
+  </span>
+);
+
+// Column 3: decision
+const DecisionCell = ({ text, tone }) => {
+  const isGreen = tone === 'green';
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 8,
+      fontFamily: 'var(--font-sans)', fontSize: 14, fontWeight: 600,
+      color: isGreen ? 'var(--beava-success)' : 'var(--accent)',
+    }}>
+      <span aria-hidden style={{ fontFamily: 'var(--font-mono)', opacity: 0.65 }}>→</span>
+      {text}
+    </span>
+  );
+};
+
+const FeedRow = ({ row, now, tone, columnWidths }) => (
+  <div
+    style={{
+      display: 'grid',
+      gridTemplateColumns: columnWidths,
+      alignItems: 'center', columnGap: 24,
+      padding: '11px 22px',
+      borderTop: '1px solid var(--border)',
+      animation: row.isNew ? 'beava-row-in 420ms var(--ease-out)' : 'none',
+      background: row.isNew ? 'var(--beava-orange-wash)' : 'transparent',
+      transition: 'background 1200ms var(--ease-out)',
+    }}
+  >
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+      <EventTag name={row.event}/>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--fg3)', whiteSpace: 'nowrap' }}>
+        {ageLabel(row.ts, now)}
+      </span>
+    </div>
+    <div style={{ minWidth: 0 }}><FeatureCell row={row}/></div>
+    <div style={{ minWidth: 0 }}><DecisionCell text={row.decision} tone={tone}/></div>
+  </div>
+);
+
+const ColumnHeader = ({ children }) => (
+  <div style={{
+    fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: 11,
+    textTransform: 'uppercase', letterSpacing: '0.1em',
+    color: 'var(--fg3)',
+  }}>{children}</div>
+);
+
+const SEND_BUTTONS = [
+  { key: 'login_failed',    label: 'login_failed' },
+  { key: 'product_clicked', label: 'product_clicked' },
+  { key: 'llm_request',     label: 'llm_request' },
+  { key: 'payment_attempt', label: 'payment_attempt' },
+];
+
+const DecisionFeed = ({ tone = 'orange', mode = 'auto', showHeaders = true }) => {
+  const { rows, pushRow, tickMs } = useDecisionFeed(true);
+  // 3-column grid, same template across header and body so columns align.
+  const columnWidths = 'minmax(240px, 1.05fr) minmax(280px, 1.55fr) minmax(220px, 1.2fr)';
 
   return (
-    <div style={{ position: 'relative' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 14 }}>
-        <MetricCard
-          label="Avg time on /docs/ · Last hour"
-          value={dwellNum}
-          unit={dwellUnit}
-          sparkData={dwellSeries}
-          sparkColor="var(--accent)"
-          mascot={{ src: '../../assets/mascot-work-pose.svg', size: 48, top: 8, right: 10, rotate: -4 }}
-        />
-        <MetricCard
-          label="Pages viewed · Last 24h"
-          value={pvNum}
-          unit={pvUnit}
-          sparkData={pvSeries}
-          sparkColor="var(--beava-info)"
-          mascot={{ src: '../../assets/mascot-pose-2.svg', size: 48, top: 8, right: 10, rotate: 4 }}
-        />
-        <MetricCard
-          big
-          label="Top page · Last hour"
-          mascot={{ src: '../../assets/mascot-pose-3.svg', size: 44, top: 10, right: 12, rotate: -2 }}
-          value={
-            <span key={topPageIdx} style={{
-              fontFamily: 'var(--font-mono)', fontSize: 17, fontWeight: 600,
-              color: 'var(--fg1)', letterSpacing: 0,
-              animation: 'beava-fade-up 360ms var(--ease-out)',
-              display: 'block',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              maxWidth: '100%',
-            }}>
-              {TOP_PAGES[topPageIdx]}
-            </span>
-          }
-          subline={<><span style={{ fontFamily: 'var(--font-mono)', color: 'var(--fg2)' }}>{hitsTicked}</span> views</>}
-        />
+    <div style={{
+      maxWidth: 1040, margin: '0 auto',
+      background: '#fff',
+      border: '1px solid var(--border)',
+      borderRadius: 20,
+      boxShadow: 'var(--shadow-md)',
+      overflow: 'hidden',
+    }}>
+      {/* Top strip — title + live dot + endpoint */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '10px 22px',
+        background: 'var(--beava-cream-deep)',
+        borderBottom: '1px solid var(--border)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{
+            fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 700,
+            color: 'var(--fg1)', textTransform: 'uppercase', letterSpacing: '0.12em',
+          }}>Live decision feed</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span style={{
+              width: 7, height: 7, borderRadius: 999, background: 'var(--beava-success)',
+              boxShadow: '0 0 0 3px rgba(74,122,58,0.20)',
+              animation: 'beava-pulse 2s var(--ease-in-out) infinite',
+            }}/>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--beava-success)', fontWeight: 600 }}>live · connected</span>
+          </span>
+        </div>
+        <a href="https://demo.beava.dev" target="_blank" rel="noopener" style={{
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+          fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--fg2)',
+          textDecoration: 'none',
+          padding: '3px 9px',
+          background: '#fff',
+          border: '1px solid var(--border)', borderRadius: 999,
+          transition: 'all 160ms var(--ease-out)',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--fg2)'; }}
+        >
+          <span aria-hidden style={{ color: 'var(--fg3)' }}>›_</span>
+          <span>demo.beava.dev</span>
+          <span style={{ color: 'var(--fg3)' }}>↗</span>
+        </a>
       </div>
 
-      <p style={{
-        margin: '16px 4px 0',
-        fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--fg3)',
-        fontStyle: 'italic', lineHeight: 1.5,
+      {/* Column headers */}
+      {showHeaders && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: columnWidths,
+          columnGap: 24, padding: '8px 22px 6px',
+        }}>
+          <ColumnHeader>Event</ColumnHeader>
+          <ColumnHeader>Fresh feature</ColumnHeader>
+          <ColumnHeader>Decision</ColumnHeader>
+        </div>
+      )}
+
+      {/* Rows */}
+      <div>
+        {rows.map((row) => (
+          <FeedRow key={row.id} row={row} now={tickMs || Date.now()} tone={tone} columnWidths={columnWidths}/>
+        ))}
+      </div>
+
+      {/* Footer — latency strip, and optional send-event buttons */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: 16, flexWrap: 'wrap',
+        padding: '9px 22px',
+        borderTop: '1px solid var(--border)',
+        background: 'var(--beava-paper)',
       }}>
-        Three real beava queries. <a href="#pipeline" style={{
-          color: 'var(--accent)', textDecoration: 'none',
-          borderBottom: '1px solid color-mix(in oklab, var(--accent) 35%, transparent)',
-          fontStyle: 'normal', fontWeight: 500,
-        }}>The pipeline is below ↓</a>
-      </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--fg3)' }}>
+          <span>fresh values</span>
+          <span style={{ color: 'var(--border-strong)' }}>·</span>
+          <span>updated <span style={{ color: 'var(--fg2)' }}>14ms ago</span></span>
+          <span style={{ color: 'var(--border-strong)' }}>·</span>
+          <span>no batch lag</span>
+        </div>
+
+        {mode === 'send' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontFamily: 'var(--font-sans)', fontStyle: 'italic', fontSize: 12.5, color: 'var(--fg3)' }}>
+              send a test event:
+            </span>
+            {SEND_BUTTONS.map(b => (
+              <button
+                key={b.key}
+                onClick={() => pushRow(b.key)}
+                style={{
+                  fontFamily: 'var(--font-mono)', fontSize: 11.5, fontWeight: 600,
+                  background: '#fff', color: 'var(--fg1)',
+                  border: '1px solid var(--border)', borderRadius: 999,
+                  padding: '4px 10px', cursor: 'pointer',
+                  transition: 'all 160ms var(--ease-out)',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--fg1)'; }}
+              >
+                {b.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
 
-// ----- InstallTabs -----
-const INSTALL_TABS = [
-  { id: 'brew',   label: 'brew',   cmd: 'brew install beava' },
-  { id: 'pip', label: 'pip', cmd: 'pip install beava' },
-  { id: 'docker', label: 'docker', cmd: 'docker run -p 6400:6400 beava/beava:latest' },
-];
+// ─────────────────────────────────────────────────────────────────────────────
+// Hero mascot — animated gif that plays once, then freezes on a canvas snap.
+// 180 frames @ ~33ms ≈ 6s per loop. We snap at 5.9s so the freeze lands on
+// the last frame before the loop restarts.
+// ─────────────────────────────────────────────────────────────────────────────
 
-const InstallTabs = () => {
-  const [tabId, setTabId] = React.useState('brew');
-  const [copied, setCopied] = React.useState(false);
-  const tab = INSTALL_TABS.find(t => t.id === tabId);
+const HeroMascot = () => {
+  const imgRef = React.useRef(null);
+  const canvasRef = React.useRef(null);
+  const [frozen, setFrozen] = React.useState(false);
 
-  const copy = () => {
-    navigator.clipboard?.writeText(tab.cmd);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1400);
+  React.useEffect(() => {
+    const id = setTimeout(() => {
+      const img = imgRef.current;
+      const canvas = canvasRef.current;
+      if (!img || !canvas || !img.complete) return;
+      try {
+        canvas.width = img.naturalWidth || 1000;
+        canvas.height = img.naturalHeight || 1000;
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        setFrozen(true);
+      } catch (e) { /* tainted canvas — keep animating */ }
+    }, 5900);
+    return () => clearTimeout(id);
+  }, []);
+
+  const wrapStyle = {
+    position: 'absolute',
+    left: -18, top: -90,
+    width: 130, height: 130,
+    transform: 'rotate(-8deg)',
+    filter: 'drop-shadow(0 12px 24px rgba(26,23,20,0.12))',
+    pointerEvents: 'none', zIndex: 3,
   };
 
   return (
-    <div style={{ marginBottom: 18 }}>
-      <div style={{
-        fontFamily: 'var(--font-sans)', fontSize: 13.5, color: 'var(--fg2)',
-        fontWeight: 500, marginBottom: 10, paddingLeft: 4,
-      }}>
-        Run it locally.
-      </div>
-      <div style={{ display: 'flex', gap: 2, marginBottom: 0, paddingLeft: 4 }}>
-        {INSTALL_TABS.map(t => {
-          const active = t.id === tabId;
-          return (
-            <button
-              key={t.id}
-              onClick={() => setTabId(t.id)}
-              style={{
-                fontFamily: 'var(--font-mono)', fontSize: 12.5,
-                padding: '6px 12px 8px',
-                background: active ? 'var(--code-bg)' : 'transparent',
-                color: active ? 'var(--fg1)' : 'var(--fg3)',
-                border: '1px solid',
-                borderColor: active ? 'var(--border)' : 'transparent',
-                borderBottom: active ? '1px solid var(--code-bg)' : '1px solid var(--border)',
-                borderRadius: '8px 8px 0 0',
-                cursor: 'pointer', fontWeight: active ? 600 : 500,
-                position: 'relative', top: 1,
-                transition: 'color 200ms',
-              }}>
-              {t.label}
-            </button>
-          );
-        })}
-        <div style={{ flex: 1, borderBottom: '1px solid var(--border)' }}/>
-      </div>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 12,
-        background: 'var(--code-bg)', border: '1px solid var(--border)', borderTop: 'none',
-        borderRadius: '0 10px 10px 10px',
-        padding: '12px 14px',
-        boxShadow: 'var(--shadow-inset)',
-      }}>
-        <span style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 14, userSelect: 'none' }}>$</span>
-        <code style={{
-          fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--code-fg)',
-          background: 'transparent', border: 0, padding: 0, flex: 1,
-        }}>{tab.cmd}</code>
-        <button onClick={copy} title="Copy" style={{
-          fontFamily: 'var(--font-mono)', fontSize: 12,
-          padding: '4px 10px',
-          background: copied ? 'var(--beava-success-wash)' : '#fff',
-          color: copied ? 'var(--beava-success)' : 'var(--fg2)',
-          border: '1px solid',
-          borderColor: copied ? '#cdd9b6' : 'var(--border)',
-          borderRadius: 6, cursor: 'pointer', fontWeight: 600,
-          display: 'inline-flex', alignItems: 'center', gap: 5,
-          transition: 'all 200ms',
-        }}>
-          {copied ? <><Icon name="check" size={11}/> copied</> : <><Icon name="copy" size={11}/> copy</>}
-        </button>
-      </div>
-      <div style={{
-        marginTop: 12, paddingLeft: 4,
-        fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--fg3)',
-        lineHeight: 1.5,
-      }}>
-        ~14 MB <span style={{ color: 'var(--border-strong)' }}>·</span> macOS, Linux, Windows <span style={{ color: 'var(--border-strong)' }}>·</span> runs on 1 GB RAM <span style={{ color: 'var(--border-strong)' }}>·</span> scales to one big box
-      </div>
-      <div style={{
-        marginTop: 14, paddingLeft: 4,
-        fontFamily: 'var(--font-sans)', fontSize: 14.5, color: 'var(--fg2)',
-        lineHeight: 1.5, fontWeight: 500,
-      }}>
-        Push events <span style={{ color: 'var(--border-strong)', margin: '0 4px' }}>·</span>
-        Maintain tables <span style={{ color: 'var(--border-strong)', margin: '0 4px' }}>·</span>
-        Query by key.
-      </div>
+    <div className="beava-hero-mascot beava-hero-mascot--gif" style={wrapStyle}>
+      <img
+        ref={imgRef}
+        src="../../assets/mascot-floating.gif"
+        alt=""
+        crossOrigin="anonymous"
+        style={{
+          position: 'absolute', inset: 0, width: '100%', height: '100%',
+          opacity: frozen ? 0 : 1,
+          transition: 'opacity 200ms var(--ease-out)',
+        }}
+      />
+      <canvas
+        ref={canvasRef}
+        style={{
+          position: 'absolute', inset: 0, width: '100%', height: '100%',
+          opacity: frozen ? 1 : 0,
+        }}
+      />
     </div>
   );
 };
+window.HeroMascot = HeroMascot;
+
+const HERO_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "headlineEm": "just-happened",
+  "demoMode": "auto",
+  "decisionTone": "orange",
+  "showEyebrow": true,
+  "showMascots": true
+}/*EDITMODE-END*/;
 
 const Hero = () => {
-  return (
-    <section style={{ padding: '56px 24px 88px', position: 'relative' }}>
-      <div style={{
-        maxWidth: 1200, margin: '0 auto',
-        display: 'grid', gridTemplateColumns: '1.15fr 1fr', gap: 72, alignItems: 'center',
-      }} className="beava-hero-grid">
-        <div>
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 10,
-            padding: '5px 12px 5px 10px', borderRadius: 999,
-            background: 'var(--beava-orange-wash)', border: '1px solid #f1d8c2',
-            color: 'var(--accent)', fontSize: 12.5, fontWeight: 600,
-            marginBottom: 24, fontFamily: 'var(--font-sans)',
-            whiteSpace: 'nowrap', flexWrap: 'nowrap',
-          }}>
-            <span style={{
-              width: 6, height: 6, background: 'var(--accent)', borderRadius: 999,
-              boxShadow: '0 0 0 3px rgba(184,92,32,0.18)',
-            }}/>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>v0.9.4</span>
-            <span style={{ color: '#d8b594' }}>·</span>
-            <span>Apache 2.0</span>
-            <span style={{ color: '#d8b594' }}>·</span>
-            <span>single binary</span>
-          </div>
+  const [t, setTweak] = useTweaks(HERO_DEFAULTS);
 
-          <div style={{ marginBottom: 12 }}>
-            <span style={{
-              fontFamily: 'var(--font-accent)', fontWeight: 700,
-              fontSize: 24, lineHeight: 1, color: 'var(--accent)',
-              transform: 'rotate(-2deg)', transformOrigin: 'left center',
-              display: 'inline-block',
+  // Italicize+orange one fragment of the heading per brand convention.
+  const renderHeadline = () => {
+    if (t.headlineEm === 'react') {
+      return <>Make your AI product <em style={{ color: 'var(--accent)', fontStyle: 'italic' }}>react</em> to what just happened.</>;
+    }
+    if (t.headlineEm === 'just-happened') {
+      return <>Make your AI product react to <em style={{ color: 'var(--accent)', fontStyle: 'italic' }}>what just happened.</em></>;
+    }
+    return <>Make your AI product react to what just happened.</>;
+  };
+
+  return (
+    <section style={{ padding: '36px 24px 40px', position: 'relative', overflow: 'hidden' }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto', position: 'relative' }}>
+
+        {/* Corner mascot — top-right of the hero section, slow-mo gif */}
+        {t.showMascots && (
+          <img
+            src="../../assets/mascot-floating-slow.gif"
+            alt=""
+            className="beava-hero-mascot"
+            style={{
+              position: 'absolute',
+              top: -8, right: 0,
+              width: 140, height: 140,
+              transform: 'rotate(8deg)',
+              filter: 'drop-shadow(0 10px 22px rgba(26,23,20,0.12))',
+              pointerEvents: 'none', userSelect: 'none',
+              zIndex: 1,
+            }}
+          />
+        )}
+
+        {/* Floating mascot — moved next to demo card (see below) */}
+
+        {/* Centered words */}
+        <div style={{ textAlign: 'center', maxWidth: 820, margin: '0 auto 32px', position: 'relative', zIndex: 2 }}>
+          {t.showEyebrow && (
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 10,
+              padding: '5px 12px 5px 10px', borderRadius: 999,
+              background: 'var(--beava-orange-wash)', border: '1px solid #f1d8c2',
+              color: 'var(--accent)', fontSize: 12, fontWeight: 600,
+              marginBottom: 16, fontFamily: 'var(--font-sans)',
+              whiteSpace: 'nowrap',
             }}>
-              Dam good at streams.
-            </span>
-          </div>
+              <span style={{
+                width: 6, height: 6, background: 'var(--accent)', borderRadius: 999,
+                boxShadow: '0 0 0 3px rgba(184,92,32,0.18)',
+              }}/>
+              <span>Apache 2.0</span>
+              <span style={{ color: '#d8b594' }}>·</span>
+              <span>single binary</span>
+              <span style={{ color: '#d8b594' }}>·</span>
+              <span>HTTP in, HTTP out</span>
+            </div>
+          )}
 
           <h1 style={{
             fontFamily: 'var(--font-serif)', fontWeight: 600,
-            fontSize: 'clamp(36px, 4.6vw, 60px)',
-            lineHeight: 1.2, letterSpacing: '-0.02em',
-            color: 'var(--fg1)', margin: '0 0 44px',
-            maxWidth: 600, textWrap: 'balance',
+            fontSize: 'clamp(28px, 3.4vw, 42px)',
+            lineHeight: 1.18, letterSpacing: '-0.02em',
+            color: 'var(--fg1)',
+            margin: '0 auto 20px',
+            maxWidth: '100%',
+            textWrap: 'balance',
           }}>
-            Real-time features without heavy infrastructure.
+            {renderHeadline()}
           </h1>
 
           <p style={{
             fontFamily: 'var(--font-sans)', fontWeight: 400,
-            fontSize: 17, lineHeight: 1.55,
-            color: 'var(--fg2)', margin: '0 0 18px',
-            maxWidth: 560, textWrap: 'pretty',
+            fontSize: 16.5, lineHeight: 1.55,
+            color: 'var(--fg2)',
+            margin: '0 auto 22px',
+            maxWidth: 680,
+            textWrap: 'pretty',
           }}>
-            If your last &lsquo;simple&rsquo; feature ate a sprint to deploy, you know why we built this.
+            beava turns live events into fresh features for fraud, recommendations,
+            and guardrails — no Kafka, no Flink, no feature store.
           </p>
 
-          <p style={{
-            fontFamily: 'var(--font-serif)', fontStyle: 'italic',
-            fontWeight: 400, fontSize: 22, lineHeight: 1.45,
-            color: 'var(--fg1)', margin: '0 0 36px',
-            maxWidth: 560, textWrap: 'pretty',
-          }}>
-            Personalization, fraud rules, live dashboards &mdash; in hours, not quarters.
-          </p>
-
-          <InstallTabs/>
-
-          <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
-            <Button variant="primary" size="lg" icon={<Icon name="arrow" size={16}/>}>
-              Read the guide
+          <div style={{ display: 'inline-flex', gap: 14, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <Button variant="primary" size="md" icon={<Icon name="arrow" size={14}/>}>
+              Build a fraud feature
             </Button>
+            <a href="#docs" style={{
+              fontFamily: 'var(--font-sans)', fontSize: 15, fontWeight: 500,
+              color: 'var(--fg2)', textDecoration: 'none',
+              borderBottom: '1px solid color-mix(in oklab, var(--fg3) 35%, transparent)',
+              paddingBottom: 1,
+            }}>
+              Read the docs →
+            </a>
+          </div>
+
+          <div style={{
+            marginTop: 12,
+            fontFamily: 'var(--font-sans)', fontSize: 12.5, color: 'var(--fg3)',
+            lineHeight: 1.5,
+          }}>
+            Build your first live feature in minutes with beava's LLM-ready SDK docs.
           </div>
         </div>
 
-        <div style={{ position: 'relative' }}>
-          {/* Mascot peeking from the top of the live-metrics panel */}
-          <img
-            src="../../assets/mascot-pose-2.svg"
-            alt=""
-            width={110}
-            height={110}
-            style={{
-              position: 'absolute',
-              top: -78, right: -10,
-              transform: 'rotate(8deg)',
-              filter: 'drop-shadow(0 6px 14px rgba(26,23,20,0.12))',
-              pointerEvents: 'none',
-              zIndex: 2,
-            }}
-            className="beava-hero-mascot"
-          />
-          <LiveMetrics/>
+        {/* Demo, centered below */}
+        <div style={{ position: 'relative', maxWidth: 1040, margin: '0 auto' }}>
+          <DecisionFeed tone={t.decisionTone} mode={t.demoMode} showHeaders={true}/>
         </div>
+
+        {/* Tiny caption under demo */}
+        <p style={{
+          marginTop: 12,
+          textAlign: 'center',
+          fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--fg3)',
+          fontStyle: 'italic',
+        }}>
+          Real events streaming from a public beava instance at{' '}
+          <a href="https://demo.beava.dev" target="_blank" rel="noopener" style={{
+            color: 'var(--accent)', textDecoration: 'none', fontFamily: 'var(--font-mono)',
+            fontStyle: 'normal', fontWeight: 500,
+            borderBottom: '1px solid color-mix(in oklab, var(--accent) 35%, transparent)',
+          }}>demo.beava.dev</a>
+          {' '}— not a mock.{' '}
+          <a href="#pipeline" style={{
+            color: 'var(--accent)', textDecoration: 'none',
+            borderBottom: '1px solid color-mix(in oklab, var(--accent) 35%, transparent)',
+            fontStyle: 'normal', fontWeight: 500,
+          }}>See the pipeline ↓</a>
+        </p>
       </div>
+
+      {/* Tweaks */}
+      <TweaksPanel>
+        <TweakSection label="Headline"/>
+        <TweakRadio
+          label="Italicize"
+          value={t.headlineEm}
+          options={['react', 'just-happened', 'none']}
+          onChange={(v) => setTweak('headlineEm', v)}
+        />
+        <TweakToggle
+          label="Show eyebrow pill"
+          value={t.showEyebrow}
+          onChange={(v) => setTweak('showEyebrow', v)}
+        />
+        <TweakToggle
+          label="Show mascots"
+          value={t.showMascots}
+          onChange={(v) => setTweak('showMascots', v)}
+        />
+        <TweakSection label="Demo"/>
+        <TweakRadio
+          label="Mode"
+          value={t.demoMode}
+          options={['auto', 'send']}
+          onChange={(v) => setTweak('demoMode', v)}
+        />
+        <TweakRadio
+          label="Decision tone"
+          value={t.decisionTone}
+          options={['orange', 'green']}
+          onChange={(v) => setTweak('decisionTone', v)}
+        />
+      </TweaksPanel>
 
       <style>{`
         @keyframes beava-pulse {
           0%, 100% { transform: scale(1); opacity: 1; }
           50%      { transform: scale(1.4); opacity: 0.55; }
         }
-        @keyframes beava-fade-up {
-          from { opacity: 0; transform: translateY(6px); }
+        @keyframes beava-row-in {
+          from { opacity: 0; transform: translateY(-6px); }
           to   { opacity: 1; transform: translateY(0); }
         }
-        @media (max-width: 960px) {
-          .beava-hero-grid {
-            grid-template-columns: 1fr !important;
-            gap: 48px !important;
-          }
-          .beava-hero-mascot {
-            display: none !important;
-          }
+        @media (max-width: 1100px) {
+          .beava-hero-mascot { display: none !important; }
         }
       `}</style>
     </section>
   );
 };
+
 window.Hero = Hero;
-window.LiveMetrics = LiveMetrics;
+window.DecisionFeed = DecisionFeed;

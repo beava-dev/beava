@@ -49,9 +49,9 @@ const SiteHeader = ({ active = null, search = false, maxWidth = 1200 }) => {
     }}>
       <div style={inner}>
         {/* brand */}
-        <a href="#" style={{ display: 'inline-flex', alignItems: 'center', gap: 9, textDecoration: 'none', color: 'var(--fg1)' }}>
-          <img src="../../assets/logo-mark.png" alt="" width={30} height={30}/>
-          <span style={{ fontFamily: 'var(--font-serif)', fontWeight: 700, fontSize: 22, letterSpacing: '-0.01em', lineHeight: 1 }}>beava</span>
+        <a href="#" style={{ display: 'inline-flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: 'var(--fg1)' }}>
+          <img src="../../assets/mascot-mark-geometric-transparent.png" alt="" width={32} height={32} style={{ display: 'block' }}/>
+          <span style={{ fontFamily: 'var(--font-serif)', fontWeight: 600, fontStyle: 'italic', fontSize: 26, letterSpacing: '-0.025em', lineHeight: 1 }}>beava</span>
           <span style={{
             fontFamily: 'var(--font-mono)', fontSize: 10.5, fontWeight: 600,
             color: 'var(--accent)', background: 'var(--beava-orange-wash)',
@@ -84,9 +84,9 @@ const SiteHeader = ({ active = null, search = false, maxWidth = 1200 }) => {
 
         {/* nav links */}
         <nav style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <Link id="guide" label="Guide"/>
+          <Link id="quickstart" label="Quickstart"/>
           <Link id="docs" label="Docs"/>
-          <Link id="community" label="Community"/>
+          <Link id="examples" label="Examples"/>
           <Link id="github" label="GitHub" external/>
         </nav>
 
