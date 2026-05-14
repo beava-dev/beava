@@ -11,7 +11,7 @@
 use beava_runtime_core::io_backend::MioBackend;
 use beava_runtime_core::io_thread_worker::{start_worker, WorkerConfig, WorkerHandle};
 use beava_runtime_core::work_ring::RingItem;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{self, AtomicBool};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -24,13 +24,13 @@ use std::time::Duration;
 #[allow(clippy::type_complexity)]
 fn spawn_n_workers_with_write(
     n: usize,
+    stop: &Arc<AtomicBool>,
 ) -> (
     Vec<WorkerHandle>,
     crossbeam_channel::Receiver<RingItem>,
     Vec<crossbeam_channel::Sender<(u64, beava_runtime_core::io_thread_worker::WriteEncoder)>>,
 ) {
     let (read_tx, read_rx) = crossbeam_channel::bounded::<RingItem>(16_384);
-    let stop = Arc::new(AtomicBool::new(false));
 
     let mut write_txs = Vec::with_capacity(n);
     let workers = (0..n)
@@ -44,7 +44,7 @@ fn spawn_n_workers_with_write(
                 read_tx: read_tx.clone(),
                 write_rx,
                 new_client_rx,
-                stop: Arc::clone(&stop),
+                stop: Arc::clone(stop),
                 apply_waker: None,
                 tcp_max_frame_bytes: 4 * 1024 * 1024,
             };
@@ -56,8 +56,11 @@ fn spawn_n_workers_with_write(
 }
 
 /// Convenience wrapper: create N workers, discard write_tx senders.
-fn spawn_n_workers(n: usize) -> (Vec<WorkerHandle>, crossbeam_channel::Receiver<RingItem>) {
-    let (workers, read_rx, _write_txs) = spawn_n_workers_with_write(n);
+fn spawn_n_workers(
+    n: usize,
+    stop: &Arc<AtomicBool>,
+) -> (Vec<WorkerHandle>, crossbeam_channel::Receiver<RingItem>) {
+    let (workers, read_rx, _write_txs) = spawn_n_workers_with_write(n, stop);
     (workers, read_rx)
 }
 
@@ -67,7 +70,8 @@ fn spawn_n_workers(n: usize) -> (Vec<WorkerHandle>, crossbeam_channel::Receiver<
 #[test]
 fn test_worker_owns_client_round_robin() {
     const N: usize = 5;
-    let (workers, _read_rx) = spawn_n_workers(N);
+    let stop = Arc::new(AtomicBool::new(false));
+    let (workers, _read_rx) = spawn_n_workers(N, &stop);
 
     // For each slot_idx, the owning worker must be slot_idx % N.
     for slot_idx in 0u64..20u64 {
@@ -80,9 +84,7 @@ fn test_worker_owns_client_round_robin() {
     }
 
     // Shutdown all workers cleanly.
-    for w in &workers {
-        w.stop();
-    }
+    stop.store(true, atomic::Ordering::Release);
     for w in workers {
         w.join();
     }
@@ -106,7 +108,8 @@ fn test_worker_loop_processes_continuously_no_join_all() {
     use std::io::Write;
 
     const N: usize = 3;
-    let (workers, read_rx) = spawn_n_workers(N);
+    let stop = Arc::new(AtomicBool::new(false));
+    let (workers, read_rx) = spawn_n_workers(N, &stop);
 
     // Bind a TCP listener and connect a client.
     let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
@@ -165,10 +168,7 @@ fn test_worker_loop_processes_continuously_no_join_all() {
         other => panic!("expected RingItem::Request, got {other:?}"),
     }
 
-    // Stop workers.
-    for w in &workers {
-        w.stop();
-    }
+    stop.store(true, atomic::Ordering::Release);
     client_t.join().expect("client thread join");
     for w in workers {
         w.join();
@@ -187,7 +187,8 @@ fn test_worker_loop_processes_continuously_no_join_all() {
 #[test]
 fn test_no_write_join_all_apply_doesnt_wait() {
     const N: usize = 3;
-    let (workers, _read_rx, write_txs) = spawn_n_workers_with_write(N);
+    let stop = Arc::new(AtomicBool::new(false));
+    let (workers, _read_rx, write_txs) = spawn_n_workers_with_write(N, &stop);
 
     // Send 1000 small response payloads to worker 0's write_tx.
     // Apply must not block — each send() just enqueues; worker drains later.
@@ -215,9 +216,7 @@ fn test_no_write_join_all_apply_doesnt_wait() {
         "1000 write_tx sends took {elapsed:?} — apply is blocking on write phase (join_all not removed)"
     );
 
-    for w in &workers {
-        w.stop();
-    }
+    stop.store(true, atomic::Ordering::Release);
     for w in workers {
         w.join();
     }

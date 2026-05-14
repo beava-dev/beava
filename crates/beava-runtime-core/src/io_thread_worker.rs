@@ -129,7 +129,6 @@ pub struct WorkerConfig {
 /// Handle to a running worker thread. Returned by `start_worker`.
 pub struct WorkerHandle {
     id: usize,
-    stop: Arc<AtomicBool>,
     new_client_tx: Sender<NewClient>,
     /// Waker to interrupt the worker's `backend.poll()` when new work arrives.
     waker: Arc<dyn WakerHandle>,
@@ -141,13 +140,6 @@ impl WorkerHandle {
     /// Return the numeric ID of this worker (0..N_workers).
     pub fn worker_id(&self) -> usize {
         self.id
-    }
-
-    /// Signal this worker to stop after the current iteration.
-    /// Also wakes the worker so it doesn't block in poll() for the full timeout.
-    pub fn stop(&self) {
-        self.stop.store(true, Ordering::Release);
-        let _ = self.waker.wake();
     }
 
     /// Join the worker OS thread. Consumes the handle.
@@ -209,7 +201,6 @@ pub fn start_worker<B: IoBackend>(
     _write_tx: Sender<(u64, WriteEncoder)>,
 ) -> WorkerHandle {
     let worker_id = cfg.worker_id;
-    let stop_clone = Arc::clone(&cfg.stop);
 
     // Create the backend *before* spawning — this lets us extract the waker
     // handle (which the apply thread needs to interrupt poll()) before the
@@ -230,7 +221,6 @@ pub fn start_worker<B: IoBackend>(
 
     WorkerHandle {
         id: worker_id,
-        stop: stop_clone,
         new_client_tx,
         waker: waker_for_handle,
         join: Some(join),
