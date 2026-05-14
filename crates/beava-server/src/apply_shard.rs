@@ -370,6 +370,26 @@ impl ApplyShard {
                 }
                 let (http_status, body, tcp_op) =
                     crate::register::register_outcome_to_glue(outcome);
+                // Refresh the shared admin-snapshot Arc so the tokio
+                // sidecar's `/registry` JSON and Prometheus gauges
+                // (`beava_registry_version`, `beava_node_count`) reflect
+                // the new registry shape on every successful register
+                // (200). Failure paths (e.g. 409 `force_required`)
+                // returned earlier and never reach this point.
+                //
+                // Lock-ordering: read `version()` / `node_count()` first
+                // (each drops the registry inner-RwLock before we touch
+                // the snapshot Arc), THEN take the snapshot's write lock.
+                if http_status == 200 {
+                    let new_version = state_clone.dev_agg.registry.version();
+                    let new_node_count = state_clone.dev_agg.registry.node_count();
+                    let mut snap = state_clone
+                        .admin_snapshot
+                        .write()
+                        .unwrap_or_else(|p| p.into_inner());
+                    snap.version = new_version;
+                    snap.node_count = new_node_count;
+                }
                 GlueResponse::Register {
                     http_status,
                     body,

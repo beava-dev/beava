@@ -231,6 +231,15 @@ impl Registry {
         self.inner.read().version
     }
 
+    /// Total number of registered descriptors across all kinds
+    /// (events + tables + derivations). Read by the admin `/registry`
+    /// snapshot in `beava-server` after every successful register so
+    /// observability reflects the current registry shape.
+    pub fn node_count(&self) -> usize {
+        let inner = self.inner.read();
+        inner.events.len() + inner.tables.len() + inner.derivations.len()
+    }
+
     /// Read the registry's monotonic `agg_id` counter. Server-side
     /// register handlers call this after `apply_registration` to resize
     /// `DevAggState.state_tables` (a `Vec<AggStateTable>`) so the apply

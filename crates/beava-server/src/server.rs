@@ -259,6 +259,12 @@ pub struct ServerV18 {
     // mio HTTP/TCP accept loops in `serve_with_dirs`.
     http_listener: std::net::TcpListener,
     tcp_listener: std::net::TcpListener,
+    /// Shared registry-snapshot Arc constructed once in `bind()`. Cloned
+    /// into `BoundAdminServer::bind` (read by `/registry` + Prometheus
+    /// gauges) and into `AppState.admin_snapshot` (written by the mio
+    /// register dispatch path on every successful register). Single Arc so
+    /// both ends see the same `RegistrySnapshot`.
+    admin_snapshot: crate::http_admin::SharedRegistrySnapshot,
     /// Pre-built runtime state populated by `bind_with_state` /
     /// `bind_with_config`. When `Some`, `serve_with_dirs` consumes this
     /// instead of rebuilding the AppState / Registry / WalSink / snapshot
@@ -360,16 +366,23 @@ impl ServerV18 {
             "TCP wire listener bound"
         );
 
-        // Bind admin (tokio/axum).
-        let snapshot = std::sync::Arc::new(std::sync::RwLock::new(
+        // Bind admin (tokio/axum). The snapshot Arc is also threaded into
+        // `AppState.admin_snapshot` in `build_runtime_state*` so the mio
+        // register dispatch path writes the new
+        // `RegistrySnapshot{version, node_count}` into the same Arc the
+        // admin handler reads.
+        let admin_snapshot = std::sync::Arc::new(std::sync::RwLock::new(
             crate::http_admin::RegistrySnapshot::default(),
         ));
-        let admin = crate::http_admin::BoundAdminServer::bind(admin_addr, snapshot)
-            .await
-            .map_err(|e| ServerError::Bind {
-                addr: admin_addr,
-                source: e,
-            })?;
+        let admin = crate::http_admin::BoundAdminServer::bind(
+            admin_addr,
+            std::sync::Arc::clone(&admin_snapshot),
+        )
+        .await
+        .map_err(|e| ServerError::Bind {
+            addr: admin_addr,
+            source: e,
+        })?;
 
         Ok(Self {
             http_addr: http_bound,
@@ -377,6 +390,7 @@ impl ServerV18 {
             admin,
             http_listener,
             tcp_listener,
+            admin_snapshot,
             prebuilt_state: None,
         })
     }
@@ -424,6 +438,7 @@ impl ServerV18 {
             },
             cfg.io_threads,
             cfg.memory_governance_enforce,
+            std::sync::Arc::clone(&sv18.admin_snapshot),
         )
         .await?;
         sv18.prebuilt_state = Some(state);
@@ -452,12 +467,14 @@ impl ServerV18 {
         tcp_max_frame_bytes: u32,
     ) -> Result<Self, ServerError> {
         let mut sv18 = Self::bind(http_addr, tcp_addr, admin_addr).await?;
+        let admin_snapshot = std::sync::Arc::clone(&sv18.admin_snapshot);
         let state = build_runtime_state(
             wal_dir,
             snapshot_dir,
             snapshot_interval_ms,
             wal_fsync_interval_ms,
             tcp_max_frame_bytes,
+            admin_snapshot,
         )
         .await?;
         sv18.prebuilt_state = Some(state);
@@ -510,6 +527,7 @@ impl ServerV18 {
             },
             cfg.io_threads,
             cfg.memory_governance_enforce,
+            std::sync::Arc::clone(&sv18.admin_snapshot),
         )
         .await?;
         sv18.prebuilt_state = Some(state);
@@ -627,7 +645,17 @@ impl ServerV18 {
     {
         let state = match self.prebuilt_state {
             Some(state) => state,
-            None => build_runtime_state(wal_dir, snapshot_dir, 60_000, 2, 4 * 1024 * 1024).await?,
+            None => {
+                build_runtime_state(
+                    wal_dir,
+                    snapshot_dir,
+                    60_000,
+                    2,
+                    4 * 1024 * 1024,
+                    std::sync::Arc::clone(&self.admin_snapshot),
+                )
+                .await?
+            }
         };
 
         run_serve_loop(
@@ -656,6 +684,7 @@ async fn build_runtime_state(
     snapshot_interval_ms: u64,
     wal_fsync_interval_ms: u64,
     tcp_max_frame_bytes: u32,
+    admin_snapshot: crate::http_admin::SharedRegistrySnapshot,
 ) -> Result<ServerV18State, ServerError> {
     // Production callers go through `bind_with_config` / `from_env()`;
     // this path is only used by tests that don't construct a config and
@@ -674,6 +703,7 @@ async fn build_runtime_state(
         crate::wal_config::WalConfigOverrides::default(),
         None,
         None,
+        admin_snapshot,
     )
     .await
 }
@@ -705,6 +735,7 @@ async fn build_runtime_state_with_persistence(
     wal_overrides: crate::wal_config::WalConfigOverrides,
     io_threads_override: Option<usize>,
     memory_governance_enforce: Option<bool>,
+    admin_snapshot: crate::http_admin::SharedRegistrySnapshot,
 ) -> Result<ServerV18State, ServerError> {
     use beava_runtime_core::wal_buffer::WalBufferRing;
     use beava_runtime_core::wal_lsn::WalLsn;
@@ -820,6 +851,11 @@ async fn build_runtime_state_with_persistence(
     // hatch (`BEAVA_MEMORY_GOV_ENFORCE=0` /
     // `.memory_governance_enforce(false)`).
     app_state_inner.memory_governance_enforce = memory_governance_enforce.unwrap_or(true);
+    // Replace the default snapshot Arc that `AppState::new` created with
+    // the shared one constructed in `ServerV18::bind`, so the mio register
+    // dispatch path writes into the same Arc the tokio admin sidecar
+    // reads (otherwise `/registry` + Prometheus gauges stay at 0/0).
+    app_state_inner.admin_snapshot = admin_snapshot;
     let app_state = Arc::new(app_state_inner);
     if effective_test_mode {
         tracing::warn!(

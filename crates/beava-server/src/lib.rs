@@ -27,10 +27,11 @@ pub mod testing;
 pub use beava_core::config::{self, Config, ConfigError};
 pub use server::{ServerError, ServerV18};
 
+use crate::http_admin::{RegistrySnapshot, SharedRegistrySnapshot};
 use crate::idem_cache::IdemCache;
 use crate::registry_debug::DevAggState;
 use beava_persistence::WalSink;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 /// Shared per-process state: registry + state tables + event-id counters
 /// (`DevAggState`), WAL sink, and idempotency cache. Cloned by reference
@@ -54,6 +55,12 @@ pub struct AppState {
     /// `.memory_governance_enforce(false)` opts out. Read on the cold
     /// register path (never re-read on the hot path).
     pub memory_governance_enforce: bool,
+    /// Shared registry-snapshot Arc read by the tokio admin sidecar
+    /// (`/registry` JSON + Prometheus gauges) and written by the mio
+    /// register dispatch path on every successful register. Single Arc
+    /// constructed at `ServerV18::bind` time and threaded into both the
+    /// admin server and `AppState`.
+    pub admin_snapshot: SharedRegistrySnapshot,
 }
 
 impl AppState {
@@ -65,6 +72,7 @@ impl AppState {
             dev_endpoints: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             effective_test_mode: false,
             memory_governance_enforce: true,
+            admin_snapshot: Arc::new(RwLock::new(RegistrySnapshot::default())),
         }
     }
 
