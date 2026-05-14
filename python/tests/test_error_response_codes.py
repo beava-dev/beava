@@ -370,34 +370,25 @@ def test_feature_not_found_via_get_with_unknown_feature_name(
     transport_kind: str,
 ) -> None:
     """Get with an unknown feature in ``features=[...]`` surfaces a server
-    error — but the wire shape DIFFERS across transports (PR #117).
+    error with a SYMMETRIC envelope across both transports.
 
     Server path (``runtime_core_glue::dispatch_get_single_verb_style_sync``):
     when any name in ``features`` is absent from the registered descriptor,
     the call returns ``GlueResponse::InternalError`` with reason
-    ``"feature_not_found: missing=[...] table=..."``. The two encoders
-    handle that variant differently:
+    ``"feature_not_found: missing=[...] table=..."``. Both encoders now
+    emit the same structured body:
 
       HTTP (``encode_glue_response_http``):
-        status=500, body=``{"error":{"code":"internal_error", "reason":<msg>}}``
-        — the ``reason`` carries the ``feature_not_found`` substring and the
-        offending feature names.
+        status=500, body=``{"error":{"code":"internal_error", "reason":<msg>}}``.
 
       TCP (``encode_glue_response_tcp``):
-        falls through to the catch-all arm — body=``{"code":"unsupported"}``
-        (NOT nested under ``"error"``). Both the structured nesting AND the
-        ``feature_not_found`` reason text are dropped on the TCP wire.
+        ``OP_ERROR_RESPONSE`` (0xFFFF) frame, CT_JSON payload, body
+        ``{"error":{"code":"internal_error", "reason":<msg>}}`` — the same
+        envelope as HTTP. The prior asymmetry (catch-all
+        ``{"code":"unsupported"}``) is FIXED: encoders agree.
 
-    This asymmetry is a real bug — the TCP encoder ought to mirror the HTTP
-    encoder's structured shape — but it's the current observed behaviour
-    and PR #117 explicitly chose to lock it in place rather than fix it,
-    pending a separate alignment plan. The test asserts only what is true
-    today AND the cross-transport invariant that the SDK surfaces an
-    error (it does NOT fabricate a row).
-
-    Once the encoder is fixed, this test MUST be updated — the asymmetry
-    block below will start failing; that is the intended signal to revisit
-    the catch-all arm in ``server.rs::encode_glue_response_tcp``.
+    The ``reason`` carries the ``feature_not_found`` substring and the
+    offending feature names on both wires.
     """
     http_url, tcp_url = beava_server
 
@@ -475,17 +466,27 @@ def test_feature_not_found_via_get_with_unknown_feature_name(
             assert frame.op == OP_ERROR_RESPONSE, (
                 f"expected OP_ERROR_RESPONSE on TCP; got op={frame.op:#06x}"
             )
-            # PR #117 lock-down: TCP collapses to the catch-all arm — body
-            # is ``{"code":"unsupported"}`` (no nested ``"error"`` envelope,
-            # no ``feature_not_found`` reason, no offending name). This is
-            # the asymmetry; documented here, NOT fixed in this PR.
+            # TCP now mirrors HTTP: structured ``{"error": {"code":
+            # "internal_error", "reason": <msg>}}`` envelope with the
+            # ``feature_not_found`` substring and offending feature name
+            # preserved on the wire.
             body = json.loads(frame.payload.decode("utf-8"))
-            assert body == {"code": "unsupported"}, (
-                f"TCP feature_not_found currently collapses to the catch-all "
-                f"{{'code': 'unsupported'}} body per "
-                f"server.rs::encode_glue_response_tcp; got {body!r}. "
-                f"If this asymmetry has been fixed, update this test and the "
-                f"corresponding HTTP arm above."
+            assert "error" in body, (
+                f"TCP body missing 'error' envelope: {body!r}"
+            )
+            assert body["error"]["code"] == "internal_error", (
+                f"TCP feature_not_found must surface as internal_error per "
+                f"server.rs::encode_glue_response_tcp; got "
+                f"{body['error'].get('code')!r}"
+            )
+            reason = body["error"].get("reason", "")
+            assert "feature_not_found" in reason, (
+                f"TCP error.reason must mention feature_not_found; "
+                f"got reason={reason!r}"
+            )
+            assert "definitely_not_a_real_feature" in reason, (
+                f"TCP error.reason must mention offending name; "
+                f"got reason={reason!r}"
             )
             _assert_tcp_connection_still_usable(sock)
         finally:
