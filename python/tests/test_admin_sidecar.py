@@ -224,7 +224,7 @@ def test_registry_endpoint_returns_current_descriptors(
 
     Pins the contract surfaced by ``http_admin::registry_handler``: a JSON
     object with ``version`` and ``node_count`` integer fields.  See
-    :func:`test_registry_endpoint_reflects_registrations_xfail` for the
+    :func:`test_registry_endpoint_reflects_registrations` for the
     post-register update behaviour.
     """
     _http_url, admin_url, _port = admin_server
@@ -243,22 +243,17 @@ def test_registry_endpoint_returns_current_descriptors(
     )
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason=(
-        "Audit gap surfaced 2026-05-14: the admin sidecar's "
-        "SharedRegistrySnapshot is constructed with default() in "
-        "ServerV18::bind and never updated by the register / apply path, "
-        "so /registry permanently reports version=0 / node_count=0 even "
-        "after a successful POST /register. Fix is to plumb the snapshot "
-        "into the registry-update site in apply_shard.rs / register.rs."
-    ),
-)
-def test_registry_endpoint_reflects_registrations_xfail(
+def test_registry_endpoint_reflects_registrations(
     admin_server: tuple[str, str, int],
 ) -> None:
-    """``/registry`` SHOULD advance ``version`` + ``node_count`` after a
-    register; today it does not (xfail until the snapshot is wired up)."""
+    """``/registry`` advances ``version`` + ``node_count`` after a successful
+    register call.
+
+    Fixed 2026-05-14: the admin sidecar's ``SharedRegistrySnapshot`` is now
+    threaded into the mio register dispatch path so successful registers
+    write the new ``RegistrySnapshot{version, node_count}`` into the Arc
+    that the admin handler reads.
+    """
     http_url, admin_url, _port = admin_server
 
     cold = httpx.get(f"{admin_url}/registry", timeout=2.0).json()
