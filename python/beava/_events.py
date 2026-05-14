@@ -46,10 +46,15 @@ class _ChainMixin:
         return _make_derivation(self, {"op": "filter", "expr": expr.to_expr_string()})
 
     def select(self, *cols: str) -> "EventDerivation":
-        return _make_derivation(self, {"op": "select", "cols": list(cols)})
+        # Server-side OpNode::Select / OpNode::Drop deserialise from
+        # `"fields"` (crates/beava-core/src/op_node.rs:43,46); emitting
+        # `"cols"` caused the register call to fail with
+        # `invalid_registration: missing field 'fields'`. Tests survived
+        # because no SDK test rode the chain into a real server.
+        return _make_derivation(self, {"op": "select", "fields": list(cols)})
 
     def drop(self, *cols: str) -> "EventDerivation":
-        return _make_derivation(self, {"op": "drop", "cols": list(cols)})
+        return _make_derivation(self, {"op": "drop", "fields": list(cols)})
 
     def rename(self, **mapping: str) -> "EventDerivation":
         return _make_derivation(

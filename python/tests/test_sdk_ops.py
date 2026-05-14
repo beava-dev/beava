@@ -61,7 +61,7 @@ def test_select_returns_new_derivation() -> None:
     d1 = Transaction.select("amount", "ts")
     assert d1 is not Transaction
     assert isinstance(d1, EventDerivation)
-    assert d1.ops == [{"op": "select", "fields": ["amount", "ts"]}]
+    assert d1._chain == [{"op": "select", "fields": ["amount", "ts"]}]
 
 
 # ---------------------------------------------------------------------------
@@ -73,7 +73,7 @@ def test_drop_returns_new_derivation() -> None:
     d1 = Transaction.drop("amount")
     assert d1 is not Transaction
     assert isinstance(d1, EventDerivation)
-    assert d1.ops == [{"op": "drop", "fields": ["amount"]}]
+    assert d1._chain == [{"op": "drop", "fields": ["amount"]}]
 
 
 # ---------------------------------------------------------------------------
