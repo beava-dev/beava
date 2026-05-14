@@ -2477,6 +2477,18 @@ fn encode_glue_response_tcp(
             let b = serde_json::to_vec(&body).unwrap_or_default();
             encode_tcp_frame_bytes(OP_ERROR_RESPONSE, CT_JSON, &b, buf);
         }
+        // Structured server-side error. Mirrors the HTTP 500 body shape
+        // verbatim — `{"error": {"code": "internal_error", "reason":
+        // <msg>}}` — so callers see the same `feature_not_found: ...`
+        // diagnostic on both wires. Frame opcode is `OP_ERROR_RESPONSE`
+        // (0xFFFF) with `CT_JSON` content type.
+        GlueResponse::InternalError { reason } => {
+            let body = serde_json::json!({
+                "error": {"code": "internal_error", "reason": reason},
+            });
+            let b = serde_json::to_vec(&body).unwrap_or_default();
+            encode_tcp_frame_bytes(OP_ERROR_RESPONSE, CT_JSON, &b, buf);
+        }
         _ => {
             encode_tcp_frame_bytes(
                 OP_ERROR_RESPONSE,
