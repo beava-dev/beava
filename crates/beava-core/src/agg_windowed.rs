@@ -233,6 +233,7 @@ impl WindowedOp {
     #[allow(clippy::too_many_arguments)]
     pub fn update_at(
         &mut self,
+        pre_val: Option<&crate::row::Value>,
         extracted: &crate::agg_op::ExtractedFields<'_>,
         field_idx: u8,
         lat_idx: u8,
@@ -240,13 +241,15 @@ impl WindowedOp {
         now_ms: i64,
         where_matched: bool,
     ) {
-        // Pull pre-extracted Value once at the outer level (no per-bucket
-        // recompute). FIELD_IDX_NONE sentinel = fieldless inner op.
-        let pre_val: Option<&crate::row::Value> = if field_idx != crate::agg_op::FIELD_IDX_NONE {
-            extracted.get(field_idx as usize).copied().flatten()
-        } else {
-            None
-        };
+        // `pre_val` is supplied by the outer dispatcher
+        // (`AggOp::update_with_extracted_no_where`) which resolves it via the
+        // agg-local → union-index remap
+        // (`feat.descriptor.field_idx_into_event_extracted`). The `field_idx`
+        // we still receive is agg-local; `extracted` is indexed by the
+        // source-wide union — the two index spaces only coincide by
+        // accident. Re-extracting `extracted[field_idx]` here would silently
+        // read the wrong slot for any windowed field-bearing op whose
+        // agg-local index differs from its union index.
         // Synthetic empty row for arms that take `&Row` for type-signature
         // reasons but ignore content for windowable kinds (Count/Ratio etc.).
         let empty_row = crate::row::Row::new();
@@ -1257,6 +1260,7 @@ mod tests {
         let extracted: crate::agg_op::ExtractedFields<'_> = smallvec::smallvec![None];
         // 2 events in epoch 0
         op.update_at(
+            None,
             &extracted,
             FIELD_IDX_NONE,
             FIELD_IDX_NONE,
@@ -1265,6 +1269,7 @@ mod tests {
             true,
         );
         op.update_at(
+            None,
             &extracted,
             FIELD_IDX_NONE,
             FIELD_IDX_NONE,
@@ -1274,6 +1279,7 @@ mod tests {
         );
         // 2 events in epoch 1
         op.update_at(
+            None,
             &extracted,
             FIELD_IDX_NONE,
             FIELD_IDX_NONE,
@@ -1282,6 +1288,7 @@ mod tests {
             true,
         );
         op.update_at(
+            None,
             &extracted,
             FIELD_IDX_NONE,
             FIELD_IDX_NONE,
@@ -1291,6 +1298,7 @@ mod tests {
         );
         // 1 event in epoch 2
         op.update_at(
+            None,
             &extracted,
             FIELD_IDX_NONE,
             FIELD_IDX_NONE,
@@ -1306,7 +1314,7 @@ mod tests {
 
     /// Pre-extracted Value is the source of truth. The row's field at the
     /// same name has a DIFFERENT value; `update_at` must use the
-    /// pre-extracted Value, not consult the row.
+    /// caller-provided pre_val, not consult the row.
     #[test]
     fn windowed_update_at_bypasses_row_get() {
         let window_ms: u64 = 64_000;
@@ -1315,6 +1323,7 @@ mod tests {
         let pre = Value::F64(42.0);
         let extracted: crate::agg_op::ExtractedFields<'_> = smallvec::smallvec![Some(&pre)];
         op.update_at(
+            Some(&pre),
             &extracted,
             0_u8,
             crate::agg_op::FIELD_IDX_NONE,
@@ -1343,6 +1352,7 @@ mod tests {
         let extracted: crate::agg_op::ExtractedFields<'_> = smallvec::smallvec![None];
         // where_matched = false: bucket may be created but count must remain 0.
         op.update_at(
+            None,
             &extracted,
             FIELD_IDX_NONE,
             FIELD_IDX_NONE,
@@ -1351,6 +1361,7 @@ mod tests {
             false,
         );
         op.update_at(
+            None,
             &extracted,
             FIELD_IDX_NONE,
             FIELD_IDX_NONE,

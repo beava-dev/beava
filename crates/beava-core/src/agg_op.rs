@@ -926,8 +926,12 @@ impl AggOp {
         match self {
             // Windowed dispatches to update_at (NOT update_with_row): the
             // pre-extraction protocol crosses the WindowedOp wrapper boundary.
+            // pre_val is threaded through (already resolved by the outer
+            // apply-loop via the agg-local → union-index remap); the windowed
+            // arm must NOT re-extract using field_idx, which is agg-local.
             AggOp::Windowed(w) => {
                 w.update_at(
+                    pre_val,
                     extracted,
                     field_idx,
                     lat_idx,
