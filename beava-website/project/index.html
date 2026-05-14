@@ -95,6 +95,13 @@
     // launch. The live /api/feed served by deploy/generator/generator.py
     // registers the matching pipelines so the same shapes appear whether
     // the row was synthetic or real.
+    // valueOf ranges intentionally straddle the threshold so the synthetic
+    // stream produces a roughly even mix of action-needed (orange) and
+    // passive (green) decisions. If every row were above-threshold the
+    // panel would read as "constantly firing", which isn't the product
+    // claim — beava lets you check the feature, then decide whether to
+    // act, and a meaningful share of the time the decision is to do
+    // nothing.
     const FEED_TEMPLATES = {
       // AI agents ─────────────────────────────────────────────────────────
       // AgentStep → AgentReflexes(steps_30s)
@@ -102,7 +109,7 @@
         event: 'AgentStep',
         entity: () => `agent_${[42, 77, 91][Math.floor(Math.random() * 3)]}`,
         feature: (n) => ({ key: 'repeated_action_30s', value: n }),
-        valueOf: () => 6 + Math.floor(Math.random() * 4),  // 6–9, above pause threshold
+        valueOf: () => 2 + Math.floor(Math.random() * 8),  // 2–9, threshold 6
         decision: (v) => v >= 6 ? 'pause runaway agent' : 'continue monitoring',
         dollars: (v) => v >= 6 ? '+ $84 saved' : '+ $6 saved',
       },
@@ -111,7 +118,7 @@
         event: 'ToolCall',
         entity: () => `session_${[12, 44, 81][Math.floor(Math.random() * 3)]}`,
         feature: (n) => ({ key: 'risky_tools_10m', value: n }),
-        valueOf: () => 2 + Math.floor(Math.random() * 2),  // 2–3, above approval threshold
+        valueOf: () => Math.floor(Math.random() * 4),  // 0–3, threshold 2
         decision: (v) => v >= 2 ? 'require human approval' : 'allow',
         dollars: (v) => v >= 2 ? '+ $250 risk avoided' : '+ $18 saved',
       },
@@ -122,7 +129,7 @@
         event: 'AddToCart',
         entity: () => `sku_${[882, 113, 547, 209][Math.floor(Math.random() * 4)]}`,
         feature: (n) => ({ key: 'carts_5m', value: n }),
-        valueOf: () => 80 + Math.floor(Math.random() * 30),  // 80–109 carts in 5m
+        valueOf: () => 20 + Math.floor(Math.random() * 80),  // 20–99, threshold 50
         decision: (v) => v >= 50 ? 'boost trending item' : 'keep default ranking',
         dollars: () => `+ $${(0.8 + Math.random() * 1.6).toFixed(2)} GMV`,
       },
@@ -131,7 +138,7 @@
         event: 'ProductView',
         entity: () => `user_${1000 + Math.floor(Math.random() * 1500)}`,
         feature: (n) => ({ key: 'avg_view_price_30m', value: `$${n}` }),
-        valueOf: () => 200 + Math.floor(Math.random() * 80),  // $200–$279
+        valueOf: () => 150 + Math.floor(Math.random() * 130),  // $150–$279, threshold $200
         decision: (v) => v >= 200 ? 'sort by premium picks' : 'keep value picks',
         dollars: () => `+ $${(2.4 + Math.random() * 2.6).toFixed(2)} GMV`,
       },
@@ -143,18 +150,18 @@
         event: 'ApiError',
         entity: () => `user_${1000 + Math.floor(Math.random() * 1500)}`,
         feature: (n) => ({ key: 'error_velocity_5m', value: `+${n.toFixed(1)}` }),
-        valueOf: () => 0.6 + Math.random() * 2.2,  // 0.6–2.8 errors/sec slope
-        decision: () => 'launch setup rescue',
-        dollars: () => '+ $29 LTV',
+        valueOf: () => Math.random() * 2.8,  // 0.0–2.8 errors/sec slope, threshold 0.5
+        decision: (v) => v >= 0.5 ? 'launch setup rescue' : 'continue monitoring',
+        dollars: (v) => v >= 0.5 ? '+ $29 LTV' : '+ $4 saved',
       },
       // LimitHit → OrgExpansionSignals(limit_hits_24h)
       limit_hits: {
         event: 'LimitHit',
         entity: () => `org_${['acme','globex','umbra','soylent'][Math.floor(Math.random() * 4)]}`,
         feature: (n) => ({ key: 'limit_hits_24h', value: n }),
-        valueOf: () => 8 + Math.floor(Math.random() * 8),  // 8–15
-        decision: (v) => v >= 10 ? 'show team upgrade path' : 'send usage tip',
-        dollars: (v) => v >= 10 ? '+ $99 MRR' : '+ $9 saved',
+        valueOf: () => 4 + Math.floor(Math.random() * 12),  // 4–15, threshold 10
+        decision: (v) => v >= 10 ? 'show team upgrade path' : 'continue monitoring',
+        dollars: (v) => v >= 10 ? '+ $99 MRR' : '+ $4 saved',
       },
     };
 
@@ -193,16 +200,16 @@
       return `${Math.floor(sec / 60)}m ago`;
     };
 
-    // useDecisionFeed — polls /feed (served by beava-website/scripts/dev-demo.py
-    // when it's running) for real rows produced by a beava server. Falls back
-    // to the synthetic generator above if /feed returns anything but a valid
-    // payload, so the marketing site keeps animating even when there's no
-    // backend (e.g. static-hosted on Cloudflare).
+    // useDecisionFeed — synthetic-only. The panel is a marketing surface;
+    // wiring it to a live server adds operational complexity (dev-demo
+    // orchestrator + warm-start race) for no narrative gain since the
+    // shape of what the reader sees is identical either way. The synthetic
+    // templates above are tuned so threshold-above and threshold-below
+    // outcomes appear in roughly equal numbers, which is the only way the
+    // green/orange decision colouring reads as a real product signal.
     const useDecisionFeed = () => {
       const [rows, setRows] = React.useState(seedRows);
       const [tickMs, setTickMs] = React.useState(0);
-      const [isLive, setIsLive] = React.useState(false);
-      const [serverLatency, setServerLatency] = React.useState(null);
 
       const pushSynthetic = React.useCallback((eventName) => {
         setRows(prev => {
@@ -213,78 +220,11 @@
       }, []);
 
       React.useEffect(() => {
-        let cancelled = false;
-        let synthId = null;
-        let prevIds = '';
-
-        const tryLive = async () => {
-          try {
-            const r = await fetch('/api/feed', { cache: 'no-store' });
-            if (!r.ok) return false;
-            const j = await r.json();
-            if (cancelled || !j || !Array.isArray(j.rows) || j.rows.length === 0) return false;
-            // Mark each row "new" only if it wasn't in the prior list — this
-            // gives the wash-in highlight on actual fresh rows, not on every poll.
-            const ids = j.rows.map(r => r.id).join('|');
-            const fresh = ids !== prevIds;
-            const newestId = j.rows[0]?.id;
-            const next = j.rows.slice(0, 3).map(r => ({ ...r, isNew: fresh && r.id === newestId }));
-            prevIds = ids;
-            setRows(next);
-            setIsLive(true);
-            if (typeof j.latency_ms === 'number') setServerLatency(j.latency_ms);
-            return true;
-          } catch (_) {
-            return false;
-          }
-        };
-
-        // Two independent loops:
-        //   1. Synthetic ticker — primes the panel instantly so the first
-        //      paint is never empty, and carries the panel if /feed is down.
-        //   2. /feed probe — runs every 700ms. As soon as /feed returns
-        //      non-empty rows, we flip to live and silence the synthetic
-        //      ticker. If /feed starts failing, the synthetic ticker comes
-        //      back so the panel keeps animating.
-        //
-        // This replaces the prior probe-once-then-fall-back-forever logic,
-        // which got stuck in synthetic mode if the very first /feed probe
-        // hit the dev-demo orchestrator before its warm-start finished.
-        let synthInterval = null;
-        let probeInterval = null;
-
-        const startSynthetic = () => {
-          if (synthInterval) return;
-          setIsLive(false);
-          synthInterval = setInterval(() => {
-            const name = ORDER[Math.floor(Math.random() * ORDER.length)];
-            pushSynthetic(name);
-          }, 2400);
-        };
-        const stopSynthetic = () => {
-          if (synthInterval) { clearInterval(synthInterval); synthInterval = null; }
-        };
-
-        // Prime the panel immediately.
-        startSynthetic();
-
-        // Probe /feed once on mount (snappy flip if it's already up) and
-        // every 700ms after. tryLive flips isLive when it succeeds.
-        const probeOnce = async () => {
-          if (cancelled) return;
-          const live = await tryLive();
-          if (cancelled) return;
-          if (live) stopSynthetic();
-          else startSynthetic();
-        };
-        probeOnce();
-        probeInterval = setInterval(probeOnce, 700);
-
-        return () => {
-          cancelled = true;
-          stopSynthetic();
-          if (probeInterval) clearInterval(probeInterval);
-        };
+        const synthInterval = setInterval(() => {
+          const name = ORDER[Math.floor(Math.random() * ORDER.length)];
+          pushSynthetic(name);
+        }, 2400);
+        return () => clearInterval(synthInterval);
       }, [pushSynthetic]);
 
       React.useEffect(() => {
@@ -292,7 +232,7 @@
         return () => clearInterval(id);
       }, []);
 
-      return { rows, tickMs, isLive, serverLatency };
+      return { rows, tickMs, isLive: false, serverLatency: null };
     };
 
     const EventTag = ({ name }) => (
@@ -366,19 +306,15 @@
     );
 
     const DecisionFeed = () => {
-      const { rows, tickMs, isLive, serverLatency } = useDecisionFeed();
-      // When /feed is up, show the real RTT we just measured server-side.
-      // When falling back to the synthetic stream, jitter a plausible number
-      // so the footer doesn't read as a frozen string.
-      const [synthLatencyMs, setSynthLatencyMs] = React.useState(() => 8 + Math.floor(Math.random() * 14));
+      const { rows, tickMs } = useDecisionFeed();
+      // Jittered latency string so the footer doesn't read as a frozen
+      // value. Numeric range mirrors a healthy beava round-trip on a
+      // single-box deployment (~6–22ms HTTP/JSON loopback).
+      const [latencyMs, setLatencyMs] = React.useState(() => 8 + Math.floor(Math.random() * 14));
       React.useEffect(() => {
-        if (isLive) return;
-        const id = setInterval(() => setSynthLatencyMs(6 + Math.floor(Math.random() * 16)), 1100);
+        const id = setInterval(() => setLatencyMs(6 + Math.floor(Math.random() * 16)), 1100);
         return () => clearInterval(id);
-      }, [isLive]);
-      const latencyMs = isLive && typeof serverLatency === 'number'
-        ? (serverLatency < 10 ? serverLatency.toFixed(1) : Math.round(serverLatency))
-        : synthLatencyMs;
+      }, []);
       const columnWidths = 'minmax(240px, 1.05fr) minmax(280px, 1.55fr) minmax(220px, 1.2fr)';
       return (
         <div style={{
@@ -402,8 +338,8 @@
                   boxShadow: '0 0 0 3px rgba(74,122,58,0.20)',
                   animation: 'beava-pulse 2s cubic-bezier(0.65,0,0.35,1) infinite',
                 }}/>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: isLive ? 'var(--beava-success)' : 'var(--fg3)', fontWeight: 600 }}>
-                  {isLive ? 'live · connected' : 'simulated events · real features'}
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg3)', fontWeight: 600 }}>
+                  simulated events
                 </span>
               </span>
             </div>
