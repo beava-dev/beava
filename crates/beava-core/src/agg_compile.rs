@@ -386,10 +386,19 @@ fn agg_kind_rejects_window(kind: AggKind) -> bool {
 ///
 /// Called from `register_validate::validate_payload` after rules 1-10 pass.
 ///
+/// `propagated_schemas` is the per-derivation post-chain schema produced by
+/// Rule 10 (`validate_expressions` → `OpChain::compile`). For an in-payload
+/// derivation upstream, the entry here reflects the narrowed/renamed schema
+/// after the chain (`select` / `drop` / `rename` / `with_columns` / `cast` /
+/// `fillna`) — used by `resolve_upstream_schema_for_agg` so downstream
+/// `agg(field=…)` field references are validated against the actual
+/// post-chain schema, not the client-supplied carry-forward.
+///
 /// # SDK-AGG-05, SDK-AGG-06
 pub fn compile_aggregations_from_nodes(
     nodes: &[PayloadNode],
     registry: &RegistryInner,
+    propagated_schemas: &[(String, crate::schema::DerivedSchema)],
 ) -> (
     Vec<(String, Arc<AggregationDescriptor>)>,
     Vec<ValidationError>,
@@ -467,15 +476,73 @@ pub fn compile_aggregations_from_nodes(
             }
 
             // Resolve upstream schema.
-            let upstream_schema =
-                match resolve_upstream_schema_for_agg(upstream_name, nodes, registry) {
+            //
+            // If the agg derivation has its OWN prefix ops
+            // (`select`/`drop`/`rename`/`with_columns`/`cast`/`fillna`)
+            // BEFORE the GroupBy, walk them on top of the bare upstream
+            // schema so the GroupBy validation sees the schema the chain
+            // prefix actually produces. In that case we deliberately bypass
+            // the sibling-derivation union — the prefix ops describe the
+            // exact transformation this aggregation applies, and unioning
+            // in sibling-derivation fields would (a) cause spurious
+            // RenameCollision on common patterns like
+            // `tx.rename(amount='value')` where a sibling already added
+            // 'value' to the union, and (b) let agg fields reference
+            // sibling-derivation outputs that the prefix has not produced.
+            //
+            // Required because the SDK flattens chain prefixes from
+            // intermediate `@bv.event def`s into the agg derivation's own
+            // ops while keeping the upstream pointing at the root event —
+            // a chain like `Tx → Narrowed.select(...) → Stats.group_by(...)`
+            // arrives on the wire as `Stats { upstreams: [Tx], ops: [Select,
+            // GroupBy] }`. Without the prefix walk here, `agg(field=…)`
+            // would be validated against the wider Tx ∪ siblings union
+            // and a reference to a Select-narrowed-away field would slip
+            // through.
+            let prefix_ops: Vec<crate::op_node::OpNode> = deriv.ops[..op_idx]
+                .iter()
+                .filter(|op| !matches!(op, crate::op_node::OpNode::GroupBy { .. }))
+                .cloned()
+                .collect();
+
+            let upstream_schema = if prefix_ops.is_empty() {
+                // No prefix ops — preserve the long-standing
+                // sibling-derivation union behaviour (a separate-named
+                // sibling adds fields the agg can reference).
+                match resolve_upstream_schema_for_agg(
+                    upstream_name,
+                    nodes,
+                    registry,
+                    propagated_schemas,
+                ) {
                     Some(s) => s,
-                    None => {
-                        // Unknown upstream; structural Rule 5 should have caught this.
-                        // Skip Rule 11 for this derivation (defensive).
+                    None => continue,
+                }
+            } else {
+                // Prefix ops present — walk them against the bare upstream
+                // schema (no sibling union). Each prefix op precisely
+                // describes the row transform; the post-walk schema is
+                // what the GroupBy sees at runtime.
+                let bare = match resolve_bare_upstream_schema(
+                    upstream_name,
+                    nodes,
+                    registry,
+                    propagated_schemas,
+                ) {
+                    Some(s) => s,
+                    None => continue,
+                };
+                match crate::schema_propagate::propagate_schema(&bare, &prefix_ops) {
+                    Ok((final_schema, _)) => final_schema,
+                    Err(_) => {
+                        // Schema-propagation errors on the prefix are
+                        // already reported by Rule 10. Skip Rule 11 for
+                        // this derivation (fail-soft); the user fixes
+                        // Rule 10 first.
                         continue;
                     }
-                };
+                }
+            };
 
             let mut deriv_errors = false;
             let mut features: Vec<NamedAggOp> = Vec::new();
@@ -973,10 +1040,57 @@ pub fn compile_aggregations_from_nodes(
 
 // ─── Schema resolution helper ─────────────────────────────────────────────────
 
+/// Resolve `upstream_name` to its bare (non-unioned) schema.
+///
+/// Like `resolve_upstream_schema_for_agg` but WITHOUT the sibling-derivation
+/// union for event upstreams. Used by `compile_aggregations_from_nodes` when
+/// the agg derivation has its own prefix ops: the prefix ops describe the
+/// exact transformation, so we walk them on the bare upstream schema rather
+/// than the wider sibling union.
+fn resolve_bare_upstream_schema(
+    upstream_name: &str,
+    nodes: &[PayloadNode],
+    registry: &RegistryInner,
+    propagated_schemas: &[(String, crate::schema::DerivedSchema)],
+) -> Option<Schema> {
+    for node in nodes {
+        match node {
+            PayloadNode::Event(e) if e.name == upstream_name => {
+                return Some(Schema::from_event(&e.schema));
+            }
+            PayloadNode::Table(t) if t.name == upstream_name => {
+                return Some(Schema::from_table(&t.schema));
+            }
+            PayloadNode::Derivation(d) if d.name == upstream_name => {
+                if let Some(propagated) = propagated_schemas
+                    .iter()
+                    .find(|(name, _)| name == upstream_name)
+                    .map(|(_, s)| s)
+                {
+                    return Some(Schema::from_derived(propagated));
+                }
+                return Some(Schema::from_derived(&d.schema));
+            }
+            _ => {}
+        }
+    }
+    if let Some(e) = registry.events.get(upstream_name) {
+        return Some(Schema::from_event(&e.schema));
+    }
+    if let Some(t) = registry.tables.get(upstream_name) {
+        return Some(Schema::from_table(&t.schema));
+    }
+    if let Some(d) = registry.derivations.get(upstream_name) {
+        return Some(Schema::from_derived(&d.schema));
+    }
+    None
+}
+
 fn resolve_upstream_schema_for_agg(
     upstream_name: &str,
     nodes: &[PayloadNode],
     registry: &RegistryInner,
+    propagated_schemas: &[(String, crate::schema::DerivedSchema)],
 ) -> Option<Schema> {
     // Sibling-derivation schema union.
     //
@@ -1011,6 +1125,21 @@ fn resolve_upstream_schema_for_agg(
                 return Some(Schema::from_table(&t.schema));
             }
             PayloadNode::Derivation(d) if d.name == upstream_name => {
+                // Prefer the server-propagated (narrowed/renamed) schema from
+                // Rule 10 over the client-supplied carry-forward `d.schema`.
+                // Rule 10's `OpChain::compile` walks the chain ops
+                // (`select`/`drop`/`rename`/`with_columns`/`cast`/`fillna`)
+                // and records the post-chain schema in `propagated_schemas`;
+                // referencing a field that the chain narrowed away here must
+                // surface as `AggregationUnknownField`, not be papered over
+                // by the client's pre-chain schema view.
+                if let Some(propagated) = propagated_schemas
+                    .iter()
+                    .find(|(name, _)| name == upstream_name)
+                    .map(|(_, s)| s)
+                {
+                    return Some(Schema::from_derived(propagated));
+                }
                 return Some(Schema::from_derived(&d.schema));
             }
             _ => {}
@@ -1166,7 +1295,7 @@ mod tests {
                 }),
             ),
         ];
-        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(
             errors.is_empty(),
             "sibling-union must add 'source' from Tagged to upstream_schema \
@@ -1227,7 +1356,7 @@ mod tests {
                 registered_at_version: 0,
             }),
         ];
-        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(
             errors.is_empty(),
             "Chain-aware where-validator must apply with_columns before validating \
@@ -1248,7 +1377,7 @@ mod tests {
                 }),
             ),
         ];
-        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(
             errors
                 .iter()
@@ -1351,7 +1480,7 @@ mod tests {
                 }),
             ),
         ];
-        let (compiled, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (compiled, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(errors.is_empty(), "expected no errors, got: {errors:#?}");
         assert_eq!(compiled.len(), 1);
         assert_eq!(compiled[0].0, "UserStats");
@@ -1375,7 +1504,7 @@ mod tests {
                 }),
             ),
         ];
-        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(
             errors.iter().any(
                 |e| e.code == ErrorCode::AggregationUnknownField && e.path.contains("group_by")
@@ -1400,7 +1529,7 @@ mod tests {
                 }),
             ),
         ];
-        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(
             errors
                 .iter()
@@ -1425,7 +1554,7 @@ mod tests {
                 }),
             ),
         ];
-        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(
             errors
                 .iter()
@@ -1450,7 +1579,7 @@ mod tests {
                 }),
             ),
         ];
-        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(
             errors
                 .iter()
@@ -1472,7 +1601,7 @@ mod tests {
                 }),
             ),
         ];
-        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(
             errors
                 .iter()
@@ -1494,7 +1623,7 @@ mod tests {
                 }),
             ),
         ];
-        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(
             errors
                 .iter()
@@ -1516,7 +1645,7 @@ mod tests {
                 }),
             ),
         ];
-        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(
             errors
                 .iter()
@@ -1560,7 +1689,7 @@ mod tests {
         // BTreeMap naturally deduplicates, so "true" duplicate feature names can't happen
         // through normal JSON parsing (BTreeMap). However, the code guards against it.
         // This test validates the happy path (no duplicates) when schema is clean.
-        let (compiled, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (compiled, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(errors.is_empty(), "unexpected errors: {errors:#?}");
         assert_eq!(compiled.len(), 1);
     }
@@ -1578,7 +1707,7 @@ mod tests {
                 }),
             ),
         ];
-        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(
             errors
                 .iter()
@@ -1614,7 +1743,7 @@ mod tests {
                 serde_json::json!({"d": {"op": "n_unique", "params": {"field": "merchant_id", "window": "1h"}}}),
             ),
         ];
-        let (compiled, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (compiled, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(errors.is_empty(), "{:?}", errors);
         assert_eq!(compiled.len(), 1);
     }
@@ -1632,7 +1761,7 @@ mod tests {
                 serde_json::json!({"p": {"op": "quantile", "params": {"field": "amount", "q": 0.99}}}),
             ),
         ];
-        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(errors.is_empty(), "{:?}", errors);
     }
 
@@ -1649,7 +1778,7 @@ mod tests {
                 serde_json::json!({"p": {"op": "quantile", "params": {"field": "amount", "q": 1.5}}}),
             ),
         ];
-        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(
             errors
                 .iter()
@@ -1670,7 +1799,7 @@ mod tests {
                 serde_json::json!({"b": {"op": "bloom_member", "params": {"field": "device_id", "window": "1h"}}}),
             ),
         ];
-        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(
             errors
                 .iter()
@@ -1691,7 +1820,7 @@ mod tests {
                 serde_json::json!({"t": {"op": "top_k", "params": {"field": "merchant_id", "k": 5000}}}),
             ),
         ];
-        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(
             errors.iter().any(|e| e.code == ErrorCode::InvalidTopKK),
             "{:?}",
@@ -1710,7 +1839,7 @@ mod tests {
                 serde_json::json!({"e": {"op": "entropy", "params": {"field": "category"}}}),
             ),
         ];
-        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(errors.is_empty(), "{:?}", errors);
     }
 
@@ -1725,7 +1854,7 @@ mod tests {
                 serde_json::json!({"b": {"op": "bloom_member", "params": {"field": "device_id", "target_fpr": 2.0}}}),
             ),
         ];
-        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(
             errors.iter().any(|e| e.code == ErrorCode::InvalidBloomFpr),
             "{:?}",
@@ -1751,7 +1880,7 @@ mod tests {
                 }),
             ),
         ];
-        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         // missing_key → AggregationUnknownField
         // no_field → AggregationUnknownField
         // badwindow → AggregationInvalidWindow
@@ -1812,7 +1941,7 @@ mod tests {
                 }),
             ),
         ];
-        let (compiled, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (compiled, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(errors.is_empty(), "expected no errors, got: {errors:#?}");
         assert_eq!(compiled.len(), 1);
         assert_eq!(compiled[0].1.features[0].descriptor.kind, AggKind::First);
@@ -1831,7 +1960,7 @@ mod tests {
                 }),
             ),
         ];
-        let (compiled, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (compiled, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(errors.is_empty(), "expected no errors, got: {errors:#?}");
         assert_eq!(compiled[0].1.features[0].descriptor.n, Some(3));
     }
@@ -1849,7 +1978,7 @@ mod tests {
                 }),
             ),
         ];
-        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(
             errors.iter().any(|e| e.path.contains("params.n")),
             "expected n-missing error, got: {errors:#?}"
@@ -1869,7 +1998,7 @@ mod tests {
                 }),
             ),
         ];
-        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(
             errors.iter().any(|e| e.path.contains("params.n")),
             "expected n>0 error, got: {errors:#?}"
@@ -1889,7 +2018,7 @@ mod tests {
                 }),
             ),
         ];
-        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(
             errors.iter().any(|e| e.path.contains("params.field")),
             "expected field-missing error for first, got: {errors:#?}"
@@ -1913,7 +2042,7 @@ mod tests {
                 }),
             ),
         ];
-        let (compiled, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (compiled, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(errors.is_empty(), "expected no errors, got: {errors:#?}");
         assert_eq!(compiled[0].1.features.len(), 5);
     }
@@ -1931,7 +2060,7 @@ mod tests {
                 }),
             ),
         ];
-        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(
             errors
                 .iter()
@@ -1953,7 +2082,7 @@ mod tests {
                 }),
             ),
         ];
-        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(
             errors
                 .iter()
@@ -1975,7 +2104,7 @@ mod tests {
                 }),
             ),
         ];
-        let (compiled, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (compiled, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(errors.is_empty(), "expected no errors, got: {errors:#?}");
         assert_eq!(
             compiled[0].1.features[0].descriptor.window_ms,
@@ -1998,7 +2127,7 @@ mod tests {
                 }),
             ),
         ];
-        let (compiled, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (compiled, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(errors.is_empty(), "expected no errors, got: {errors:#?}");
         assert_eq!(compiled[0].1.features.len(), 3);
     }
@@ -2016,7 +2145,7 @@ mod tests {
                 }),
             ),
         ];
-        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry());
+        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
         assert!(
             errors.iter().any(|e| e.path.contains("params.n")),
             "expected n-required error for time_since_last_n, got: {errors:#?}"

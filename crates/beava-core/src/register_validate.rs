@@ -764,8 +764,19 @@ pub fn validate_payload(
     if errors.is_empty() {
         // Only run Rule 11 if Rules 1-10 passed (avoids cascading errors from
         // missing upstreams or expressions that failed Rule 10).
-        let (agg_compiled, agg_errors) =
-            crate::agg_compile::compile_aggregations_from_nodes(&payload, current);
+        //
+        // Thread `propagated_schemas` (per-derivation post-chain schema from
+        // Rule 10) into Rule 11 so `resolve_upstream_schema_for_agg` can see
+        // the actually narrowed/renamed schema rather than the
+        // client-supplied carry-forward `d.schema`. Without this an
+        // aggregation on a field that the chain dropped/renamed away would
+        // be silently accepted at register time (and then summed against
+        // the dropped field at apply time).
+        let (agg_compiled, agg_errors) = crate::agg_compile::compile_aggregations_from_nodes(
+            &payload,
+            current,
+            &propagated_schemas,
+        );
         compiled_aggregations = agg_compiled;
         errors.extend(agg_errors);
     }

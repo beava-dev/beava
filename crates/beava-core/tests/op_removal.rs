@@ -98,7 +98,7 @@ fn geo_agg_nodes(
 fn test_unique_cells_register_rejected() {
     let nodes = geo_agg_nodes("Src", "Deriv", "cells", "unique_cells");
     let registry = RegistryInner::default();
-    let (_compiled, errors) = compile_aggregations_from_nodes(&nodes, &registry);
+    let (_compiled, errors) = compile_aggregations_from_nodes(&nodes, &registry, &[]);
     // Must have at least one error about the unknown op name.
     assert!(
         !errors.is_empty(),
@@ -120,7 +120,7 @@ fn test_unique_cells_register_rejected() {
 fn test_geo_entropy_register_rejected() {
     let nodes = geo_agg_nodes("Src", "Deriv", "geo_h", "geo_entropy");
     let registry = RegistryInner::default();
-    let (_compiled, errors) = compile_aggregations_from_nodes(&nodes, &registry);
+    let (_compiled, errors) = compile_aggregations_from_nodes(&nodes, &registry, &[]);
     assert!(
         !errors.is_empty(),
         "expected registration of 'geo_entropy' to be rejected after D-05 removal; got no errors"
