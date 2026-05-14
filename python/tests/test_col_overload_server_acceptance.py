@@ -18,7 +18,6 @@ from __future__ import annotations
 import pytest
 
 import beava as bv
-from beava._errors import RegistrationError
 
 
 @pytest.fixture

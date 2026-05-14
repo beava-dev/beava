@@ -7,6 +7,56 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.0.4] - 2026-05-13
+
+First release with behavioural fixes since v0.0.0. Three operator bugs that
+mis-routed data through the engine + SDK are gone; the rest of the release
+is regression coverage so the bug class can't return.
+
+### Fixed
+
+- **`WindowedOp::update_at` honours the dispatcher's `pre_val`.** Windowed
+  field-bearing ops (`mean`/`avg`/`sum`/`top_k`/`quantile` with `window=`)
+  were re-extracting from `extracted[field_idx]` instead of using the
+  `pre_val` the outer apply-loop had already resolved via the agg-local →
+  union-index remap. End-to-end symptoms: `mean("price", window="…")`
+  returned `Null` and `top_k("category", window="…")` returned a different
+  field's distribution whenever a prior windowed op in the same agg
+  referenced a different field. Fix routes `pre_val` through the windowed
+  arm.
+- **`EventTypeMixState::update_at` honours the dispatcher's `pre_val`.**
+  Same bug class as the windowed fix; the second `update_at` arm that
+  discarded `pre_val` and re-extracted from the wrong index space.
+- **SDK `~bv.col(x)` emits `(not x)`, not `!(x)`.** The server's
+  where-parser rejects bare unary `!` (`unexpected character '!'`) but
+  accepts the `not` keyword. Every register that used the idiomatic
+  `~bv.col(...)` inside `where=` had been failing with
+  `aggregation_invalid_where`.
+
+### Tests added (33 regression tests across five files)
+
+- `crates/beava-core/tests/windowed_op_uses_caller_pre_val.rs` — 4 tests.
+- `crates/beava-core/tests/field_ordering_invariant.rs` — 4 tests covering
+  multi-agg reversed field order, non-overlapping subsets,
+  top_k-after-mean stacking, geo lat/lon position swaps.
+- `crates/beava-core/tests/agg_combinations_matrix.rs` — 12 tests covering
+  (where × window × field) 2^3 matrix and 3+ mixed windowed ops in one
+  agg.
+- `crates/beava-server/tests/wire_roundtrip_parity.rs` — 3 tests asserting
+  HTTP-JSON and TCP-msgpack produce identical state for a complex schema.
+- `python/tests/test_op_roundtrips_extended.py` +
+  `test_col_overload_server_acceptance.py` + `internal/test_col_invert.py`
+  — 18 Python tests covering var / std / percentile / top_k / decay / geo
+  / event_type_mix end-to-end plus `bv.col` overload server-acceptance.
+
+### Examples
+
+- `examples/python/agent_runtime.py` reverts the `bv.col("ok") == False`
+  workaround back to idiomatic `~bv.col("ok")`.
+- `marketplace_rerank.py` no longer returns `None` for
+  `avg_view_price_30m` and surfaces `'watches'` for `top_category_30m`
+  (it had been a corrupted price distribution pre-fix).
+
 ## [0.0.3] - 2026-05-12
 
 Syncs the Rust workspace version with the Python package version so
