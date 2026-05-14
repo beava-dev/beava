@@ -1,0 +1,130 @@
+topic: "Beava use cases — current and potential applications of beava as a real-time feature server"
+
+# Items = candidate use-case domains for beava. Each will be scored on every field in fields.yaml.
+# Numbering is a stable ID for cross-referencing; ordering within sections is intentional (most-stated first).
+items:
+
+  # --- Stated in README (current, load-bearing positioning) ---
+  - id: 1a
+    name: "Fraud — card-not-present checkout / transaction fraud"
+    notes: "Classic per-card / per-user velocity rules, device+IP risk. Card-not-present is the bulk of e-commerce loss."
+  - id: 1b
+    name: "Fraud — instant-payments / real-time-rails risk (FedNow, UPI, SEPA Instant, RTP)"
+    notes: "Single-digit-second end-to-end decisioning. FedNow $10M limit (Nov 2024) made this a 12-month tailwind."
+  - id: 1c
+    name: "Fraud — Authorized Push-Payment (APP) / social-engineering scams"
+    notes: "Per-counterparty velocity, 'first-time payee + large amount' patterns. UK PSR 2024 reimbursement rules are the buyer pressure."
+  - id: 2
+    name: "Fraud — account abuse / bot defence (signup floods, credential stuffing, scraping)"
+    notes: "Per-IP, per-fingerprint, per-route velocity. 76% of fraud now post-identity-verification."
+  - id: 3
+    name: "Ad-tech — frequency capping & pacing"
+    notes: "Per-user-per-campaign counters with strict no-double-count. Edge-deployment friendly."
+  - id: 4
+    name: "Ad-tech — click/install fraud, invalid-traffic (IVT)"
+    notes: "Per-click, per-device, per-publisher rolling rates and distributions."
+  - id: 5
+    name: "Behavioral analytics — live product analytics"
+    notes: "Session counters, recency, engagement aggregates per user. Read-heavy."
+
+  # --- Adjacent, strong technical fit ---
+  - id: 6
+    name: "Real-time personalization / ranking & recsys features (live commerce, marketplace ranking)"
+    notes: "Last-N items viewed, dwell, repeat-purchase rate. Whatnot @ 300M features/sec, Apartment List sub-5ms are the public references."
+  - id: 7
+    name: "Real-time credit / BNPL / KYC risk decisioning"
+    notes: "Per-applicant rolling features at decision time. Distinct buyer (lender) from PSP."
+  - id: 7b
+    name: "PSP / payment-orchestration real-time risk"
+    notes: "Processor-side, not lender-side. Chalk lists this as a named use case."
+  - id: 8
+    name: "AML / transaction monitoring (batch and near-real-time)"
+    notes: "Structuring patterns, peer-group velocity. Regulator-grade durability requirements."
+  - id: 9
+    name: "Trust & safety / abuse detection on UGC platforms"
+    notes: "Report rates, post velocity, network-level signals."
+  - id: 9b
+    name: "Trust & safety on live-streaming / livestream moderation"
+    notes: "Per-streamer per-minute report velocity, chat-burst features. 2025 Bluesky/Airbnb signals."
+  - id: 10
+    name: "Marketplace integrity — seller velocity, refund/return-window features"
+    notes: "Abuse-side of marketplaces. Distinct from matching/pricing (24)."
+  - id: 11
+    name: "In-game anti-cheat & player-behaviour features"
+    notes: "Per-player APM, win-rate windows, lobby-burst features. Riot/PUBG references."
+  - id: 11b
+    name: "Game economy / virtual-currency AML (RMT, gold-farming)"
+    notes: "Per-account currency-in/out velocity, trade-network features. Different from anti-cheat."
+  - id: 12
+    name: "Real-time / dynamic pricing inputs"
+    notes: "Demand counters, sell-through rate per SKU/zone."
+  - id: 12b
+    name: "Mobility / dispatch surge & ETA features"
+    notes: "Per-geohash/H3 cell demand counters, per-driver acceptance rate. 100ms decision budget."
+  - id: 13
+    name: "IoT / device telemetry rollups + anomaly windows"
+    notes: "Per-device counters, drift detection windows."
+  - id: 14
+    name: "Observability — per-tenant/per-route rolling rates, anomaly detection"
+    notes: "Application-metrics niche; competes with Prometheus + recording rules."
+  - id: 14b
+    name: "Usage-based billing / metering / SaaS quotas"
+    notes: "Per-tenant per-API-key consumption with audit-grade durability. WAL is a hard requirement Redis lacks natively."
+  - id: 15
+    name: "Network security / SIEM enrichment per-IP/per-asset"
+    notes: "Rolling features feeding SOC rules. SecOps buyer."
+  - id: 15b
+    name: "API abuse / bot defence / WAF feature backend (edge / platform)"
+    notes: "Per-IP/per-key/per-route adaptive rate limiting. Buyer is API-platform/edge, not fraud team."
+  - id: 15c
+    name: "Edge / CDN per-customer rate-limit & usage features"
+    notes: "Fastly / Cloudflare / Supabase edge patterns. beava's single-binary nature is uniquely strong here."
+  - id: 16
+    name: "LLM / AI-gateway feature backend (token velocity, jailbreak velocity, agent quotas)"
+    notes: "Per-key TPM/RPM + semantic-velocity features. 2025 agentic-AI threat wave."
+  - id: 17
+    name: "Conversion / lifecycle marketing triggers (event-driven journeys)"
+    notes: "'User did X N times in 24h → fire.' Requires a trigger primitive beava doesn't ship yet."
+  - id: 18a
+    name: "Online feature store for tabular fraud/risk classifiers"
+    notes: "20–100+ features per decision in <100ms. The vanilla 'online FS' role."
+  - id: 18b
+    name: "Online feature store for ranking / recsys"
+    notes: "Write-heavy, read-heavy, different freshness SLA than (18a)."
+
+  # --- New from web search (less-explored but interesting) ---
+  - id: 19
+    name: "Impossible-travel / geo-velocity for identity & account-takeover"
+    notes: "Showcases beava's 'distances' primitive. Flagship demo opportunity."
+  - id: 20
+    name: "Device intelligence / device-graph velocity features"
+    notes: "Signups-per-device, accounts-per-device, devices-per-account. Castle / Fingerprint / TrustDecision buyer pattern."
+  - id: 21
+    name: "On-demand marketplace matching & pricing (healthcare staffing, delivery, freight, mobility)"
+    notes: "Medely is the public Chalk reference. Matching/pricing distinct from marketplace abuse (10)."
+  - id: 22
+    name: "Live sports betting risk & odds management"
+    notes: "Per-player/per-market wager velocity, exposure counters, sharp-money detection."
+  - id: 23
+    name: "Crypto / web3 wallet risk scoring & on-chain transaction monitoring"
+    notes: "TRM <400ms, Chainalysis, Elliptic. Per-address rolling features, hop-distance to sanctioned addresses."
+  - id: 23b
+    name: "Crypto-exchange withdrawal-velocity governance"
+    notes: "Tiered-approval counters, blast-radius limits after credential compromise."
+  - id: 24
+    name: "Bandit / contextual-bandit & online RL serving features"
+    notes: "Per-arm and per-context rolling reward features at inference-time. Pure-ML buyer."
+  - id: 25
+    name: "Telecom CDR fraud — wholesale / IRSF / bypass"
+    notes: "Per-A/B-number/destination velocity in ms. Subex, Mobileum, LATRO incumbent."
+  - id: 26
+    name: "Real-time insurance underwriting & claims fraud at FNOL"
+    notes: "Behavioral session telemetry at quote/claim. Regulator-grade retention."
+  - id: 27
+    name: "Supply chain / inventory real-time stock & velocity"
+    notes: "Per-SKU/per-DC sell-through, per-SKU/per-zone reservation velocity."
+
+execution:
+  batch_size: 4              # parallel deep-research agents
+  items_per_agent: 1         # one item per agent
+  output_dir: ./results      # /research-deep will write per-item files here

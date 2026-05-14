@@ -12,23 +12,6 @@ Authors:
 
 * [Khanh Doan](https://github.com/Khanathan)
 
-References:
-
-* Issue: [beava-dev/beava#56](https://github.com/beava-dev/beava/issues/56)
-  — *feat: @bv.expr symbolic Python frontend (v0.1 capstone)*
-* Existing operator-overload DSL: [`python/beava/_col.py`](../python/beava/_col.py)
-* `@bv.event` decorator (function form): [`python/beava/_events.py`](../python/beava/_events.py) (lines 297–356)
-* Aggregation descriptors: [`python/beava/_agg.py`](../python/beava/_agg.py)
-* Wire-string grammar + parser: [`crates/beava-core/src/expr.rs`](../crates/beava-core/src/expr.rs)
-  (grammar block at lines 5–19)
-* Expression evaluator: [`crates/beava-core/src/eval.rs`](../crates/beava-core/src/eval.rs)
-* Builtins table: [`crates/beava-core/src/expr_builtins.rs`](../crates/beava-core/src/expr_builtins.rs)
-* 3VL helpers on `Value`: [`crates/beava-core/src/row.rs`](../crates/beava-core/src/row.rs)
-  (lines 146 / 174 / 198)
-* Locked invariants: [`SOURCE-OF-TRUTH.md`](../SOURCE-OF-TRUTH.md)
-* Codebase orientation: [`CLAUDE.md`](../CLAUDE.md)
-
----
 
 ## Summary
 
@@ -68,7 +51,6 @@ that subsequent per-op contributions follow a templated pattern
 (~30–50 LOC across `expr_builtins.rs`, `eval.rs`, the Python
 builtins-meta table, and one golden test).
 
----
 
 ## Motivation
 
@@ -86,15 +68,7 @@ read naturally in Python:
   and (when the two arms differ) two separate derivations recombined
   downstream.
 * **Chained comparisons.** `0 < dwell_ms < 60_000` is *silently
-  broken* under the current DSL. Python desugars `a < b < c` to `(a
-  < b) and (b < c)` at the language level — where `and` is Python's,
-  not the SDK's `&` overload (`_col.py:80`). Because `_Expr` does
-  not define `__bool__`, both `_BinOp` instances are truthy by
-  default, and Python's `and` returns its right operand whenever the
-  left is truthy. Net: `0 < bv.col("x") < 60_000` evaluates to
-  *just* `(x < 60_000)` — the `0 < x` half is silently discarded.
-  The wire grammar caps comparisons at one per expression anyway
-  (`expr.rs:11`: `CmpExpr := AddExpr (op AddExpr)?`).
+  broken* under the current DSL. The wire grammar caps comparisons at one per expression.
 * **Intermediate names.** `parts = email.split("@"); parts[1]` has
   no in-expression equivalent. Today users must emit two successive
   `with_columns` calls and re-reference `bv.col("derived")` from
@@ -169,90 +143,69 @@ derived columns (`_agg.py:80 _serialize_where`).
 
 ## Goals
 
-Mirroring the issue's Scope section:
+This RFC succeeds when each of the following holds. These are the
+commitments the design (and the acceptance suite under §Testing) is
+written against; the file-by-file scope lives in §Design and §Impact
+Analysis.
 
-### SDK (~1000 LOC Python) — `python/beava/`
-
-* `@bv.expr` decorator (`_expr_decorator.py`) — mirrors the
-  `@bv.event` function-form decorator pattern at `_events.py:297
-  _make_event_derivation` (signature inspection, three-tier name
-  resolution: globals → closure cells → caller-frame locals; marker
-  attribute on the returned wrapper).
-* AST rewriter (`_expr_ast.py`) — `ast.NodeTransformer` for
-  `if/else`, ternary `IfExp`, `and / or`, `not`, comparison chains
-  (`a < b < c`), `in` (`x in [1,2,3]`), `is None` / `is not None`,
-  arithmetic and one-op comparisons. Reference: torch.fx
-  `_symbolic_trace.py` for the proxy-tracing pattern.
-* Operator-overload tracer (`_expr_tracer.py`) — `_SymbolicCol`
-  proxy and `_Sym*` node types that mirror the `_col.py::_Expr`
-  hierarchy (frozen dataclasses; explicit `__hash__` per subclass
-  because `__eq__` returns an `_Expr`, per `_col.py:95-97`).
-* Type checker at call sites against the event schema. **Parameter
-  types required**; **return type inferred from the IR**. Reuses the
-  schema map already attached to `EventSource`/`EventDerivation` by
-  `_events.py:208 _make_event_source`.
-* JSON IR emitter using the existing wire format — every `_Sym*`
-  node implements `to_expr_string()` with the same contract as
-  `_col.py::_Expr.to_expr_string` (line 109). The serialized string
-  flows through the existing three serialization sites
-  (`_events.py:46 / :65`, `_agg.py:80`); `python/beava/_app.py` is
-  unchanged.
-
-### Rust (~500 LOC) — `crates/beava-core/`
-
-* Extend `expr.rs` with four new `Expr` variants — `IfElse`,
-  `LetBinding`, `Compare`, `In`. Each carries `span: Span`,
-  matching the existing pattern at `expr.rs:87` (`Field`, `Literal`,
-  `BinOp`, `UnaryOp`, `Call`).
-* Extend `Expr::span()` (line 113) and `collect_fields()` (line 134)
-  with one match arm per new variant. **`LetBinding` shadows its
-  bound name** in `collect_fields` — uses of the bound name inside
-  `body` resolve to the binding, not to a field of the same name.
-* Extend the parser (recursive-descent in `expr.rs`) with the
-  matching productions for the four new forms. The existing
-  `paren_depth > 0` gate (`expr.rs:628 parse_or` and downward) is
-  preserved; the SDK is still required to fully parenthesize.
-* Extend `eval.rs` with one match arm per new variant. **All
-  3VL behavior delegates to the existing
+* **Plain-Python authoring.** A user can decorate a regular Python
+  function with `@bv.expr` — using `if / elif / else`, ternary
+  expressions, `and / or / not`, `is None`, chained comparisons
+  (`0 < x < 100`), `x in [literal-list]`, and intermediate-variable
+  assignment — and have it register, type-check at decoration time,
+  and execute identically to an equivalent `bv.col` chain. The
+  canonical `ClickFeatures` example in §Motivation registers as
+  written.
+* **The four IR gaps from §Motivation close — exactly.** The
+  expression grammar gains the minimal productions needed for
+  branching (`IfElse`), intermediate names (`LetBinding`), chained
+  comparisons (`Compare`), and literal-set membership (`In`). No
+  further IR extensions ship with this RFC. The grammar block at
+  the top of `expr.rs` and the parser are updated in lockstep.
+* **Byte-identical wire output for the overlap.** For every
+  construct expressible in *both* `bv.col` and `@bv.expr`, the two
+  authoring surfaces serialize to the same expression string and
+  parse to the same `Expr` tree. The server cannot tell which
+  surface emitted a given expression. Every existing parser /
+  evaluator test stays green unchanged.
+* **All locked invariants preserved.** The wire frame envelope,
+  opcodes (`python/beava/_wire.py`), registration path
+  (`python/beava/_app.py`), and mio data plane
+  (`apply_shard.rs::dispatch_*_sync`) are untouched. Three-valued
+  logic for the new eval arms delegates to the existing
   `Value::and_three_valued / or_three_valued / not_three_valued`
-  helpers** (`row.rs:146 / 174 / 198`) — *do not duplicate the
-  truth tables inside `eval.rs`* (CLAUDE.md "things to never do").
-* Null-aware semantics for the new nodes match the existing strict-null
-  semantics (`eval.rs:1-43` doc comment) and the
-  `rewrite_null_eq` Pass B (`expr.rs:34`) — both are preserved
-  unchanged.
-* **One representative op per family lands as a template** for the
-  cohort to copy when adding subsequent ops. Issue #56 names
-  `math.log1p` as a good worked example.
+  helpers — never duplicated. The strict-null `==` guard and
+  `rewrite_null_eq` Pass B stay paired; the `paren_depth > 0`
+  parser gate is preserved; `MAX_EVAL_DEPTH = 512` continues to
+  bound the new variants.
+* **Errors land at decoration time, structured.** Unsupported
+  Python constructs, missing parameter annotations, and call-site
+  type mismatches raise `RegistrationError(code, path, message)`
+  with a source-line pointer — at decoration time, before the
+  expression ever reaches the wire. No silent lowering to
+  incorrect IR, no deferred runtime failure, no subprocess
+  interpreter fallback.
+* **Functions are a reuse unit.** A `@bv.expr`-decorated function
+  can be called from inside another `@bv.expr` or from a
+  `with_columns(...)` derivation; its cached IR inlines with formal
+  parameters substituted at the call site. When called with
+  concrete Python values (e.g. from pytest), the wrapper calls the undecorated body so feature functions are
+  unit-testable as plain Python.
+* **Net-additive.** Absent any `@bv.expr` use, no existing
+  behavior changes — public surface (`bv.col`, `bv.lit`, `bv.event`,
+  `bv.table`, `bv.App`, `_agg.py` operator catalogue), parse
+  output, registration ordering, error codes, sample apps, and
+  CI gates all stay as they are today.
+* **A templated per-op contribution path ships alongside the
+  framework.** After this RFC lands, adding a new scalar op is
+  ~30–50 LOC across four files — one `BUILTINS` row in
+  `expr_builtins.rs` (or one `Expr` variant + parser/eval arms if
+  the op needs new syntax), an optional eval-arm extension, one
+  row in `_builtins_meta.py`, and one golden test under
+  `python/tests/v0/`. The path is documented end-to-end in
+  `CONTRIBUTING-OPS.md`, and the first per-op `good first issue`
+  merges through it as the proof point.
 
-### Contribution template (~50 LOC docs)
-
-* `CONTRIBUTING-OPS.md` — walks one full op contribution end-to-end
-  (Rust enum variant or `BUILTINS` row → eval arm → tracer table
-  entry → golden test). The first per-op `good first issue` ticket
-  merges through it as proof.
-
----
-
-## Non-Goals
-
-Mirroring the issue's "Out of Scope (Deferred)" section:
-
-* **Nested types** (struct, list, vector). Tier 2; separate v0.1
-  phase.
-* **Subprocess Python fallback.** Explicitly rejected per #56.
-* **Variadic args, recursion, `for` loops with dynamic bounds.**
-  Register-time errors raised by the AST rewriter.
-* **Cross-event joins, event-time, session windows.** Locked or
-  tracked separately (event-time semantics design tracked in
-  beava-dev/beava#51).
-* **Changing the wire frame envelope** (`python/beava/_wire.py`,
-  opcodes, content type). Per the locked invariant in
-  `SOURCE-OF-TRUTH.md`, "wire format is locked; new wire features
-  get new opcode numbers." This RFC adds *expression-string
-  grammar productions*, not new wire opcodes.
-
----
 
 ## Design
 
@@ -345,7 +298,7 @@ The decorator returns a wrapper that, when called with `_Expr` /
 `_Col` / `_SymbolicCol` arguments (e.g. inside another `@bv.expr`
 or inside a `with_columns(...)` derivation), inlines its cached IR
 with the formal parameters substituted. When called with concrete
-Python values (e.g. inside a unit test), it falls through to the
+Python values (e.g. inside a unit test), it calls the
 original undecorated function — so users can pytest their `@bv.expr`
 functions with plain Python.
 
@@ -516,7 +469,6 @@ existing strict-null `BinOp("==")` guard is preserved verbatim, as
 is the `MAX_EVAL_DEPTH = 512` bound (`eval.rs:47`); the new
 variants count toward depth.
 
----
 
 ## Impact Analysis
 
@@ -558,23 +510,6 @@ Beava components this RFC touches.
       structural change.
 - [ ] Sketches, wire format (`sketches/`, `wire.rs`) — unchanged.
 
-### Runtime / server (`crates/beava-runtime-core/`, `crates/beava-server/`)
-
-- [ ] mio data plane (`apply_shard.rs::dispatch_*_sync`) —
-      unchanged. New `Expr` variants are evaluated through the same
-      `eval.rs` entrypoint.
-- [ ] axum admin sidecar (`http_admin.rs`) — unchanged.
-- [ ] WAL / snapshots (`crates/beava-persistence/`) — unchanged.
-      The expression string is opaque to the WAL.
-
-### Wire / compatibility
-
-- [ ] Opcode numbers — unchanged. Per the locked invariant, opcodes
-      never change shape and new features get new numbers. This RFC
-      adds expression-string grammar productions, not new wire
-      opcodes.
-- [x] Expression-string grammar — four new productions. Consumed
-      only by the server's `expr::parse`.
 
 ### Docs / website
 
@@ -588,62 +523,9 @@ Beava components this RFC touches.
       variants to the architectural-commitments expression-engine
       list.
 
----
-
-## Operations
-
-### Performance & cost
-
-This RFC is **register-time and parse-time work**. The hot path on
-the server is structurally unchanged: events still flow through
-`apply_shard.rs::dispatch_push_sync` and the evaluator visits the
-same `Expr` tree the parser produced.
-
-- **Register-time (Python).** AST parsing + symbolic execution is
-  one-shot per `@bv.expr` per process. Cached on
-  `fn.__beava_expr_ir__`; repeat calls are dict lookups.
-- **Apply path (Rust).** `IfElse` adds one branch per occurrence;
-  `LetBinding` adds one map insert + one map lookup per use of the
-  bound name; `Compare(n)` is a flat loop over n+1 operands;
-  `In(k)` is a linear search over k literals (k is small in
-  practice). Net: comparable to today.
-- **Memory.** `LetBinding`'s per-evaluation env is a `SmallVec`-style
-  buffer with inline capacity; no heap growth on typical
-  expressions.
-- **Wire bytes.** Marginally larger expression strings for the new
-  forms. The wire frame envelope is unchanged.
-
-### Observability
-
-- **Configuration.** No new flags. `@bv.expr` is opt-in by usage.
-- **Metrics.** None added in this RFC.
-- **Logging.** Errors flow through the existing structured
-  `RegistrationError(code, path, message, errors)` shape (see
-  `_errors.py`). Server-side parse / eval errors keep their existing
-  span-aware reporting (`expr.rs::ParseError`).
-
-### Compatibility
-
-- **Existing public APIs.** `bv.col` / `bv.lit` / `bv.event` /
-  `bv.table` / `bv.App` unchanged. `@bv.expr` is net-additive.
-  Aggregation helpers in `_agg.py` unchanged.
-- **Existing wire format.** Round-trip property: every expression
-  the *current* `_col.py` emits today parses to the *same* `Expr`
-  AST after this RFC, modulo the parser-internal n=1-vs-n-ary
-  `Compare` collapse (no wire change). All existing parser tests
-  stay green.
-- **Existing data on disk.** No persistence changes.
-- **Mixed-version.** An old server cannot parse the four new
-  productions and will return the existing structured parse error.
-  An unmodified SDK against an old server is unaffected (it does
-  not emit the new forms unless the user writes `@bv.expr`). We
-  document that `@bv.expr` requires a matching-or-newer server.
-
----
-
 ## Testing
 
-Per the issue's Done-When section. Acceptance suite is `python/tests/v0/`
+Acceptance suite is `python/tests/v0/`
 (per `python/pyproject.toml::testpaths`).
 
 - **`python/tests/v0/test_symbolic_frontend.py`** — the canonical
@@ -675,111 +557,23 @@ Per the issue's Done-When section. Acceptance suite is `python/tests/v0/`
 CI gate: `bash .github/scripts/check.sh` (the canonical script the
 repo already ships) — unchanged in shape, expanded in body.
 
----
 
-## Rollout
 
-* **Single PR** per the issue's framing (v0.1 capstone). Commit
-  order so the stack reads top-down for a reviewer:
-  1. Rust: four new `Expr` variants + parser productions + eval arms
-     + Rust unit tests. Green on its own against an unmodified SDK
-     (the SDK doesn't emit the new forms yet).
-  2. Python: tracer + AST rewriter + decorator + `_builtins_meta.py`
-     + new error codes + `__init__.py` export.
-  3. Acceptance test (`test_symbolic_frontend.py`) + targeted
-     Python tests.
-  4. `CONTRIBUTING-OPS.md` + `docs/python/expr.mdx` +
-     `CHANGELOG.md` + `SOURCE-OF-TRUTH.md`.
-* **No feature flag.** The decorator is net-additive; absent any
-  `@bv.expr` use, no behavior changes.
-* **Cohort positioning** (issue's Cohort Positioning section). The
-  framework is the on-ramp; subsequent cohort PRs ship per-op
-  contributions through `CONTRIBUTING-OPS.md`. After this RFC lands,
-  a new scalar op = ~30–50 LOC across four files:
-  - `crates/beava-core/src/expr_builtins.rs` — one `BUILTINS` row
-    (or one `Expr` variant + `expr.rs` arms if it needs new syntax).
-  - `crates/beava-core/src/eval.rs` — one match-arm extension (only
-    if a new variant was added; pure builtins go straight through
-    the existing `Call` arm).
-  - `python/beava/_builtins_meta.py` — one row mirroring the Rust
-    arity / return type.
-  - `python/tests/v0/test_<op>.py` — one golden test.
-* **Effort.** Per the issue: ~2 weeks human / ~1–2 days CC. Cohort
-  Track-1 capstone.
-
----
-
-## Alternatives
-
-### Extend `_col.py` with helpers (`bv.if_`, `bv.let`, `bv.in_`) instead of `@bv.expr`
-
-Would close the IR gap (Layers 4–6) without the SDK side (Layers
-1–3). Rejected: gives no reuse unit (every feature would re-build
-the helper chain by hand), no Python-as-source ergonomics, no
-decoration-time type checking, no source-span fidelity for errors.
-The issue's Cohort Positioning explicitly targets data scientists
-writing plain Python — the helper-only path does not get there.
-
-### Direct JSON IR emission from the SDK (skip the string grammar)
-
-The decorator could emit JSON nodes that the server accepts
-alongside the parsed string IR. Rejected: would create two IRs to
-keep in sync; every config file, CLI input, and example that goes
-through the string parser would drift from the SDK output. CLAUDE.md
-treats the string grammar as canonical and the parser as the
-enforcement point.
-
-### Subprocess Python fallback for unsupported nodes
-
-For nodes outside the allow-list, ship a sidecar Python interpreter
-that the server shells out to per event. **Explicitly rejected by
-the issue.** Defeats the apply-path latency contract and introduces
-a security surface v0 cannot afford.
-
----
 
 ## Open Questions
 
-* **Q1.** `match` statements (PEP 634) inside `@bv.expr`? Tentative
-  answer: defer; `if / elif / else` covers the canonical example.
-* **Q2.** Where does `_builtins_meta.py` live and how is it kept in
+* **Q1.** Where does `_builtins_meta.py` live and how is it kept in
   sync with `expr_builtins.rs`? Tentative answer: hand-maintain with
   a CI cross-check; revisit if the table exceeds ~20 rows.
-* **Q3.** Closure capture: freeze captured module-level values at
+* **Q2.** Closure capture: freeze captured module-level values at
   decoration time, or resolve at call time? Tentative answer:
   freeze at decoration time (`_SymLit` the captured value once);
   error if a captured name does not resolve to a literal-equivalent.
   Mirrors how `_make_event_derivation` resolves names at decoration
   time.
-* **Q4.** `dwell_bucket(7500) == 1` from a unit test — should the
-  wrapper fall through to the original undecorated function for
-  concrete-value inputs? Tentative answer: yes (Layer 1, step 6
-  rationale).
-* **Q5.** Source-span fidelity for errors raised inside lowered
+* **Q3.** Source-span fidelity for errors raised inside lowered
   builtins (e.g. an `email_domain` that fails because `email`
   resolves null at row time). Tentative answer: span tracking on
   `_Sym*` nodes carries the `inspect.getsourcelines` line into the
   Rust span at parse time via a side-channel header in the wire
   string; defer the precise mechanism to a follow-up if needed.
-
----
-
-## Sub-issues
-
-Per the issue's tracker:
-
-* **Infrastructure:** beava-dev/beava#58, #59, #57, #60, #67.
-* **Representative op batches:** beava-dev/beava#66, #63, #61, #64.
-* **Integration + onboarding:** beava-dev/beava#62, #65.
-
-This RFC is the architectural umbrella; the sub-issues track the
-per-area work items.
-
----
-
-## Updates
-
-* *2026-05-14* — Draft revised to mirror issue #56 closely
-  (added `In` IR variant; cited torch.fx reference; added Cohort
-  Positioning to Rollout; tightened references to current Beava
-  files).

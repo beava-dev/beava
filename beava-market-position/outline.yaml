@@ -1,0 +1,103 @@
+topic: "Beava's current market position — competitor archetypes and market segments beava is positioned in or against, evaluated against the use-case map in ../beava-use-cases/"
+
+# Items = market segments / competitor archetypes that frame beava's positioning.
+# Each will be scored on every field in fields.yaml during /research-deep.
+# Ordering: horizontal infra-platform competitors first, then vertical incumbents, then 2025-2026 supplementary segments.
+# Cross-reference IDs refer to entries in ../beava-use-cases/outline.yaml.
+
+items:
+
+  # --- Horizontal infra-platform competitors (cross-cutting beava use cases) ---
+  - id: H1
+    name: "Real-time / online feature stores (independent)"
+    notes: "Chalk, Feast, Hopsworks. Tecton (acq. Databricks Aug 2025) and Fennel (acq. Databricks Apr 2025) no longer standalone — see X1. Chalk raised $50M Series A May 2025 at $500M valuation."
+    use_case_refs: [18a, 18b, 10, 21]
+  - id: H2
+    name: "Stream processing engines"
+    notes: "Flink, Materialize (BSL), RisingWave (Apache-2.0), ksqlDB, Spark Real-Time Mode. License posture (BSL vs Apache-2.0) is increasingly a buyer filter."
+    use_case_refs: [5, 13, 14]
+  - id: H3
+    name: "Real-time KV / in-memory state"
+    notes: "Valkey (cloud-default 2025-2026), Redis 8 (post-AGPL), Dragonfly (4.5x throughput vs Valkey), Aerospike, Hazelcast, RonDB, KeyDB. Redis-Valkey split now resolved; AWS/GCP/Ubuntu 26.04 default to Valkey."
+    use_case_refs: [3, 12, 14b, 18a, 18b]
+  - id: H4
+    name: "Streaming OLAP / 'real-time enough'"
+    notes: "ClickHouse, Pinot, Druid, StarRocks, Tinybird ($30M), Hydrolix ($80M Apr 2025). Streaming materialized views shipped 2025-2026; convergence with H2."
+    use_case_refs: [5, 14]
+  - id: H5
+    name: "DIY pattern: Kafka + Flink/Spark + Valkey/Redis stitched"
+    notes: "The 'do it yourself' baseline. Most buyers' current architecture; beava replaces this entire stack."
+    use_case_refs: [1a, 1b, 2, 6, 14b]
+
+  # --- Vertical incumbents (use-case-bound competitors) ---
+  - id: V1
+    name: "Card-not-present / payments fraud platforms"
+    notes: "Sift, Forter, Sardine, Stripe Radar AI (Stripe Sessions 2025), Riskified. Closed-loop ML scorers; beava is the feature backend they're built on."
+    use_case_refs: [1a]
+  - id: V2
+    name: "APP-scam / instant-payments risk"
+    notes: "Featurespace, NICE Actimize, ThreatMetrix, Hawk AI ($56M Series C Feb 2025). EU IPR VoP deadline Oct 9 2025 + UK PSR APP reimbursement (Oct 2024) are the buyer-creating forces."
+    use_case_refs: [1b, 1c]
+  - id: V3
+    name: "Account-abuse / bot-defence"
+    notes: "Castle, Arkose, hCaptcha Enterprise, Cloudflare Bot Mgmt ($5k/mo Enterprise-only)."
+    use_case_refs: [2, 15b]
+  - id: V4
+    name: "Ad-tech frequency cap / IVT detection"
+    notes: "HUMAN, DoubleVerify (106% YoY bot fraud surge reported), IAS. Most ad-server frequency cap stays in-house at the ad server."
+    use_case_refs: [3, 4]
+  - id: V5
+    name: "Recsys / personalization feature platforms"
+    notes: "Now thin: Chalk, Hopsworks, in-house at Whatnot (300M features/sec) / Apartment List (sub-5ms). Fennel rolled into Databricks Apr 2025."
+    use_case_refs: [6, 18b]
+  - id: V6
+    name: "Crypto wallet risk / on-chain monitoring"
+    notes: "Chainalysis, TRM Labs (unicorn $70M Series C Feb 2026, <400ms), Elliptic, Merkle Science."
+    use_case_refs: [23, 23b]
+  - id: V7
+    name: "AML transaction monitoring"
+    notes: "NICE Actimize, SAS, ComplyAdvantage, Hawk AI. Regulator-grade durability bar."
+    use_case_refs: [8]
+  - id: V8
+    name: "Telecom CDR fraud (wholesale / IRSF / bypass)"
+    notes: "Subex, Mobileum, LATRO, Hiya. Telco-specific sales motion."
+    use_case_refs: [25]
+  - id: V9
+    name: "Edge/CDN per-customer rate-limit & abuse"
+    notes: "Cloudflare Workers + Durable Objects (SQLite-backed, 10GB/object, global), Fastly Compute, Akamai EdgeWorkers, Supabase Edge. Durable Objects is the closest architectural peer to beava-at-edge."
+    use_case_refs: [15b, 15c]
+  - id: V10
+    name: "Sports-betting risk"
+    notes: "Sportradar UFDS AI, Genius Sports, in-house. FIFA renewal through 2031."
+    use_case_refs: [22]
+  - id: V11
+    name: "LLM / AI-gateway usage governance"
+    notes: "Portkey (open-sourced Apache-2.0 Mar 2026), Helicone, Kong AI Gateway, LiteLLM. Re-cut from original LLM-feature-backend framing: the wedge is per-tenant token/cost counters."
+    use_case_refs: [16]
+  - id: V12
+    name: "Trust & safety / livestream moderation"
+    notes: "Hive, Sift Content Integrity, in-house at Bluesky/Airbnb. Beava's role is the velocity-feature backend, not the classifier."
+    use_case_refs: [9, 9b]
+
+  # --- 2025-2026 supplementary segments (new from web-search supplement) ---
+  - id: X1
+    name: "Hyperscaler-bundled feature platforms"
+    notes: "Databricks (post-Tecton/Fennel acquisitions), Redis Feature Form (Apr 2026 launch after Featureform acq. Oct 2025). Category collapse: 'real-time features' now defaults to a hyperscaler bundle, not best-of-breed. Single biggest threat for beava."
+    use_case_refs: [18a, 18b, 10]
+  - id: X2
+    name: "Streaming aggregation for observability metrics"
+    notes: "Last9 Levitate, Grafana Mimir streaming aggregation, Chronosphere. Commercial response to Prometheus recording-rule limits on high-cardinality. beava's count/sum/mean/quantile maps 1:1 — SRE buyer, different sales motion."
+    use_case_refs: [14]
+  - id: X3
+    name: "Real-time graph databases for fraud rings"
+    notes: "TigerGraph (sub-100ms fraud graph queries), Memgraph (in-memory, OSS — closest architectural shape to beava), Neo4j AuraDS. Same fraud-rule buyer, different primitives."
+    use_case_refs: [1a, 1c, 20]
+  - id: X4
+    name: "Identity / agentic-identity layer"
+    notes: "Persona ($200M Series D @ $2B May 2025 for 'agentic AI verified-identity layer'), Socure RiskOS (FedRAMP 2025), Incode, ID.me ($340M Sep 2025 @ $2B). Overlaps beava's ATO / account-abuse surface."
+    use_case_refs: [2, 19, 20]
+
+execution:
+  batch_size: 4              # 4 parallel deep-research agents
+  items_per_agent: 1         # one item per agent
+  output_dir: ./results      # /research-deep will write per-item files here

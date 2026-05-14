@@ -1,0 +1,144 @@
+topic: "Beava use cases — current and potential applications"
+
+# detail_level: brief (one line) | moderate (~paragraph) | detailed (multi-paragraph with examples)
+# Fields are grouped semantically. The deep-research agent should fill every field for every item;
+# any value the agent cannot ground in evidence goes into the per-item `uncertain` list rather than
+# being guessed.
+
+categories:
+
+  domain_fit:
+    description: "What the use case actually is and what shape it has in beava terms."
+    fields:
+      - name: domain_name
+        description: "Canonical name of the use-case domain."
+        detail_level: brief
+      - name: one_line_definition
+        description: "One sentence that names the actor, the decision, and the time budget."
+        detail_level: brief
+      - name: representative_jobs_to_be_done
+        description: "The 1–3 concrete jobs an engineer in this domain is trying to accomplish (e.g., 'block ATO before authentication completes')."
+        detail_level: moderate
+      - name: event_shapes
+        description: "Typical events that would land in beava (login_attempt, charge, click, claim_filed, …) and their key fields."
+        detail_level: moderate
+      - name: feature_shapes
+        description: "Typical aggregations expressed in beava primitives (count, n_unique, velocity, distance, distribution; tumbling/sliding/session windows)."
+        detail_level: moderate
+      - name: entity_grain
+        description: "The natural primary key (user, device, IP, card BIN, IMEI, wallet, geohash/H3, API key, SKU, IMSI, (account+counterparty) pair, …)."
+        detail_level: brief
+      - name: window_semantics_required
+        description: "Tumbling vs sliding vs hopping vs session; whether exact or approximate (HLL/CMS) aggregates are acceptable."
+        detail_level: moderate
+      - name: exactly_once_or_idempotency_needs
+        description: "Whether the domain tolerates at-least-once (analytics) or requires strict no-double-count (ad caps, AML, billing)."
+        detail_level: brief
+
+  technical_fit:
+    description: "Architectural sizing and SLOs the domain imposes — read against beava's current capabilities."
+    fields:
+      - name: latency_budget
+        description: "Read latency the use case can tolerate end-to-end."
+        detail_level: brief
+      - name: feature_freshness_sla
+        description: "Maximum acceptable age of a feature value (distinct from query latency)."
+        detail_level: brief
+      - name: throughput_profile
+        description: "Steady-state and peak EPS for a typical buyer. Compare against beava's published numbers."
+        detail_level: moderate
+      - name: read_to_write_ratio
+        description: "Write-heavy (ad-tech, telemetry) vs read-heavy (recsys ranking) vs balanced."
+        detail_level: brief
+      - name: state_size_estimate
+        description: "Entities × per-entity bytes for a typical buyer. Surface whether beava's in-memory-only model fits."
+        detail_level: moderate
+      - name: cardinality_pattern
+        description: "Bounded (campaigns, SKUs), slowly-growing (users), explosive (IPs, sessions, devices). Drives memory + eviction."
+        detail_level: moderate
+      - name: typical_state_lifecycle_and_ttl
+        description: "How long features need to live (seconds for ad caps, hours for sessions, 30–90 days for AML, years for KYC)."
+        detail_level: brief
+      - name: typical_feature_count_per_decision
+        description: "Number of features queried per decision (often 20–100+ for fraud); shapes batching / get-many design."
+        detail_level: brief
+      - name: durability_requirements
+        description: "Best-effort | crash-safe | regulator-grade. Maps to beava's WAL + snapshot story."
+        detail_level: moderate
+      - name: deployment_topology_fit
+        description: "Single-binary edge / regional cluster / sidecar / multi-region active-active. beava is single-binary today."
+        detail_level: moderate
+
+  commercial_fit:
+    description: "Who buys, why now, what regulation pulls them in."
+    fields:
+      - name: who_buys
+        description: "Buyer persona (risk team, growth, ML platform, SecOps, finance/billing, sportsbook ops, etc.)."
+        detail_level: brief
+      - name: market_size_signal
+        description: "Qualitative TAM signal — incumbent revenue, regulator-driven spend, public case studies."
+        detail_level: moderate
+      - name: urgency_drivers
+        description: "What forces the buyer to act now (regulation, fraud loss, ad waste, audit deadline)."
+        detail_level: moderate
+      - name: regulatory_or_audit_constraints
+        description: "AML/BSA, FFIEC, PSD3/SCA, PCI-DSS, HIPAA, GDPR/CCPA, SOC2 — shapes retention, PII, durability."
+        detail_level: moderate
+      - name: time_to_value_signal
+        description: "How quickly a buyer can stand up a useful prototype (1 day for impossible-travel demo; 2 weeks for telecom CDR ingest)."
+        detail_level: brief
+
+  competition:
+    description: "Who beava is competing with in this domain and where it wins or loses."
+    fields:
+      - name: incumbents
+        description: "Generic streaming/feature-store competitors (Redis+Lua, Flink, Materialize, RisingWave, Tecton, Feast, Chalk, Hopsworks, Fennel, Aerospike, RonDB)."
+        detail_level: moderate
+      - name: competitive_incumbent_per_domain
+        description: "Domain-specific incumbents (Sift/Forter for payments; Sumsub/Persona for KYC velocity; Chainalysis/TRM for crypto; Subex/Mobileum for telecom; Cloudflare/Castle for bot)."
+        detail_level: moderate
+      - name: beava_differentiator
+        description: "Why beava could win — single binary, 50+ primitives, no broker/ETL, sub-ms TCP, Apache-2.0 no open-core."
+        detail_level: moderate
+      - name: where_beava_loses_today
+        description: "Concrete gaps for this domain (no TLS/auth in v0, no in-process sharding, no triggers, in-memory only, etc.)."
+        detail_level: moderate
+      - name: integration_surface
+        description: "Upstream producers expected (Kafka, Kinesis, Flink, Spark Real-Time Mode, mobile SDK direct push, gRPC) — beava's HTTP/TCP-push is different from Kafka-only feature stores."
+        detail_level: moderate
+      - name: scoring_engine_coupling
+        description: "Does the buyer plug beava into an external rules engine (Drools, FEEL, Snowflake), an ML scorer (XGBoost, ONNX), or both?"
+        detail_level: brief
+
+  adoption_signals:
+    description: "Evidence of pull — case studies, community chatter, working demos."
+    fields:
+      - name: existing_public_users_or_case_studies
+        description: "Named buyers running this use case on a comparable platform today."
+        detail_level: moderate
+      - name: community_discussions
+        description: "Relevant beava Discord / GitHub Discussion / RFC threads, plus broader community signals."
+        detail_level: brief
+      - name: examples_or_demos_in_repo
+        description: "Whether `examples/` already ships a runnable vertical demo for this domain (and the file path if so)."
+        detail_level: brief
+      - name: adversarial_pressure_level
+        description: "Active adversary (fraud, anti-cheat, AML) vs passive load (analytics, observability) — drives feature-drift expectations."
+        detail_level: brief
+
+  risk_and_non_goals:
+    description: "Where this use case is the wrong fit for beava, and what beava would need to ship to make it production-grade."
+    fields:
+      - name: non_goals
+        description: "When beava is the wrong tool (batch backfill, long historical lookbacks, full event archive, joins across entities, etc.)."
+        detail_level: moderate
+      - name: open_engineering_gaps
+        description: "Concrete features beava would need to ship for this domain (TLS, auth, sharding, triggers, multi-tenancy, secondary indexes, …)."
+        detail_level: detailed
+      - name: trigger_action_required
+        description: "Whether the use case needs only feature serving, or also event-driven 'fire when counter crosses threshold' actions."
+        detail_level: brief
+
+# Reserved: deep-research phase will populate `uncertain` per item for any field
+# where evidence was insufficient.
+uncertain: []
