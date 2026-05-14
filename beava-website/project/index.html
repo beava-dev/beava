@@ -314,16 +314,29 @@
       </span>
     );
 
-    const DecisionCell = ({ text }) => (
-      <span style={{
-        display: 'inline-flex', alignItems: 'center', gap: 8,
-        fontFamily: 'var(--font-sans)', fontSize: 14, fontWeight: 600,
-        color: 'var(--accent)',
-      }}>
-        <span aria-hidden style={{ fontFamily: 'var(--font-mono)', opacity: 0.65 }}>→</span>
-        {text}
-      </span>
-    );
+    // A decision is "passive" (no action / continue monitoring) when the
+    // threshold isn't met — the system reads the live feature and does
+    // nothing, which is itself a meaningful product signal. Render passive
+    // rows in green so the reader sees at a glance which rows fired and
+    // which didn't, instead of every row looking like a fired alert.
+    // Active decisions ("pause", "require approval", "boost", "launch
+    // setup rescue", "show upgrade path", "send usage tip") keep the
+    // existing accent orange.
+    const PASSIVE_DECISION = /^(continue monitoring|allow|no action|keep .+)$/i;
+    const DecisionCell = ({ text }) => {
+      const passive = PASSIVE_DECISION.test(text);
+      const color = passive ? 'var(--beava-success)' : 'var(--accent)';
+      return (
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+          fontFamily: 'var(--font-sans)', fontSize: 14, fontWeight: 600,
+          color,
+        }}>
+          <span aria-hidden style={{ fontFamily: 'var(--font-mono)', opacity: 0.65 }}>→</span>
+          {text}
+        </span>
+      );
+    };
 
     const FeedRow = ({ row, now, columnWidths }) => (
       <div style={{
