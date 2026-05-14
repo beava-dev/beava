@@ -9,7 +9,6 @@
 ///
 /// Task 1.a commit is the RED commit. Task 1.b + 2.b make them GREEN.
 use beava_core::agg_buffer::{str_from_row, EventTypeMixState};
-use beava_core::agg_op::{ExtractedFields, FIELD_IDX_NONE};
 use beava_core::agg_state::value_to_key_string;
 use beava_core::row::{Row, Value};
 
@@ -143,13 +142,10 @@ fn test_event_type_mix_functional_parity() {
 fn test_event_type_mix_update_at_consumes_extracted_value() {
     let mut state = EventTypeMixState::new(10, None);
 
-    // Build a synthetic ExtractedFields with one slot containing a Value::Str
+    // update_at consumes the dispatcher-resolved pre_val directly — no
+    // row.get scan, no re-extraction from extracted[field_idx].
     let val = Value::Str("click".into());
-    let extracted: ExtractedFields = smallvec::smallvec![Some(&val)];
-
-    // Call update_at: consumes the pre-extracted Value, not row.get
-    // This method doesn't exist yet → RED.
-    state.update_at(&extracted, 0, 1_000, true);
+    state.update_at(Some(&val), true);
 
     // Functional assertion: counts["click"] == 1
     assert_eq!(
@@ -159,12 +155,10 @@ fn test_event_type_mix_update_at_consumes_extracted_value() {
     );
     assert_eq!(state.total, 1, "total should be 1");
 
-    // FIELD_IDX_NONE must be a no-op
-    state.update_at(&extracted, FIELD_IDX_NONE, 2_000, true);
-    assert_eq!(state.total, 1, "FIELD_IDX_NONE must be a no-op");
-
-    // Drop unused variable warning suppressor
-    drop(extracted);
+    // pre_val == None must be a no-op (fieldless invocation, or field not
+    // present in this event after the dispatcher's remap).
+    state.update_at(None, true);
+    assert_eq!(state.total, 1, "pre_val == None must be a no-op");
 }
 
 // ─── Test 6: Bloom insert receives Cow::Borrowed &str (no allocation) ─────────
