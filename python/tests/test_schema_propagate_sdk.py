@@ -21,15 +21,10 @@ The negative tests (Tests 1 / 2 / 3a) assert that referencing a field
 after it has been narrowed away (``select``), removed (``drop``), or
 relabeled (``rename``) raises a ``RegistrationError`` at
 ``app.register`` time — the server's schema-propagation FieldMissing
-surface is what catches this. These tests CURRENTLY xfail because the
-server does not enforce post-``select`` / post-``drop`` /
-post-``rename`` field-reference checks against downstream
-aggregations: a chain like ``Tx.drop('b').agg(s=bv.sum('b'))`` is
-silently accepted and (worse) the runtime DOES sum the dropped field.
-This is the same drift class as PR #115 (SDK ``cols`` vs server
-``fields``); see the inline ``pytest.mark.xfail`` reasons for the
-specific shapes observed. Removing the xfail markers is the success
-signal for the upstream fix.
+surface is what catches this. The fix that threads ``propagated_schemas``
+through ``compile_aggregations_from_nodes`` makes these checks fire, so
+register-time validation now rejects ``Tx.drop('b').agg(s=bv.sum('b'))``
+and friends with ``AggregationUnknownField``.
 """
 from __future__ import annotations
 
@@ -40,17 +35,14 @@ from beava._errors import RegistrationError
 
 # Drift surfaced 2026-05-14 while authoring this file: the server-side
 # schema-propagation FieldMissing surface (schema_propagate.rs §
-# apply_select_schema / apply_drop_schema / apply_rename_schema) is NOT
+# apply_select_schema / apply_drop_schema / apply_rename_schema) was NOT
 # wired through to register-time validation of downstream aggregations.
-# A chain like ``tx.drop('b').agg(sum_b=bv.sum('b'))`` registers cleanly
-# and the runtime sums the dropped field as if drop never happened.
-# The 3 xfail tests below document the exact shape of the drift; remove
-# the markers once the upstream fix lands.
-_SERVER_AGG_FIELD_CHECK_REASON = (
-    "drift: server doesn't reject downstream agg fields removed by an "
-    "upstream select/drop/rename — runtime sums the field as if the "
-    "chain op never ran. PR #115-class drift; see file docstring."
-)
+# The fix threads the propagated (narrowed) schemas produced by Rule 10
+# (`validate_expressions` → `OpChain::compile` → `final_schema`) into
+# `compile_aggregations_from_nodes`, which now consults the propagated
+# entry before falling back to the client-supplied derivation schema.
+# The 3 tests below (previously xfail) now pass and serve as the
+# regression guard for the same drift class as PR #115.
 
 
 @pytest.fixture
@@ -65,7 +57,6 @@ def app(beava_binary):  # noqa: ARG001 — fixture pulled in for binary side-eff
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(reason=_SERVER_AGG_FIELD_CHECK_REASON, strict=True)
 def test_select_narrows_schema_to_listed_fields(app):
     """After ``select('user_id', 'a')`` the downstream agg can use ``a``
     but a sibling agg referencing ``c`` (which select narrowed away) must
@@ -102,7 +93,6 @@ def test_select_narrows_schema_to_listed_fields(app):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(reason=_SERVER_AGG_FIELD_CHECK_REASON, strict=True)
 def test_drop_removes_listed_fields_from_schema(app):
     """After ``drop('b')`` a downstream agg on ``b`` must fail to register;
     agg on a kept field ``a`` must succeed and roundtrip correctly.
@@ -135,8 +125,7 @@ def test_drop_removes_listed_fields_from_schema(app):
 def test_rename_changes_field_name_in_downstream_schema(app):
     """After ``rename(amount='value')`` aggregating on the new name
     ``value`` succeeds and roundtrips. Companion negative case lives in
-    ``test_rename_old_name_unreachable_in_downstream_schema`` below
-    (currently xfailing).
+    ``test_rename_old_name_unreachable_in_downstream_schema`` below.
     """
 
     @bv.event
@@ -161,11 +150,10 @@ def test_rename_changes_field_name_in_downstream_schema(app):
     )
 
 
-@pytest.mark.xfail(reason=_SERVER_AGG_FIELD_CHECK_REASON, strict=True)
 def test_rename_old_name_unreachable_in_downstream_schema(app):
     """After ``rename(amount='value')`` an agg on the *old* name
     ``amount`` must fail to register — the propagated schema no longer
-    carries it. Currently registers cleanly (drift)."""
+    carries it."""
 
     @bv.event
     class TxBad:
