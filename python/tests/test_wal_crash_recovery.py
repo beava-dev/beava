@@ -735,22 +735,6 @@ def test_recovery_after_sigkill_mid_push(server_factory: Any) -> None:
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Critical durability bug: `force=True` schema replacement is not "
-        "durably recorded. WAL replay rebuilds schema A's state from "
-        "pre-replace events and then applies post-replace events against "
-        "schema A as well, ignoring the force-register. Pre-kill the "
-        "table returns {'total': 100.0} (schema B). Post-restart it "
-        "returns {'cnt': 15} (schema A's count of every event regardless "
-        "of schema). When the recovery code is fixed to honour the "
-        "force-register in WAL replay (or to retract pre-replace events "
-        "and snapshot the post-replace state), this test will go from "
-        "xfail to pass and `strict=True` will trip — flip the marker off "
-        "at that point."
-    ),
-)
 def test_register_force_replace_then_kill_restart(server_factory: Any) -> None:
     """Force-replace schema A with B, push only to B, then kill + restart.
 

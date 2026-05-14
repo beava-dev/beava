@@ -254,24 +254,19 @@ def test_force_register_with_conflicting_field_types_for_same_field(
     app: Any,
 ) -> None:
     """Register ``Txn`` with ``amount: float``. Force-register the same
-    event name with ``amount: int``. Lock the observed behaviour.
+    event name with ``amount: int``. Destructive type-change must wipe
+    state for the affected descriptor AND its downstream cascade.
 
-    Observed 2026-05-14 (post-13.7.5 SDK against post-13.4 engine):
-      - The server ACCEPTS the destructive ``f64 -> i64`` type-change
-        when ``force=True`` is set — no ``force_required`` raised.
-      - The pre-swap accumulated state SURVIVES the swap: a baseline of
-        ``s=1.0+2.0=3.0`` (f64) reads back unchanged immediately after
-        the re-register.
-      - Subsequent int pushes are ADDED to the existing f64 accumulator
-        (server-side coercion): pushing ``7`` then ``3`` lifts the
-        result to ``s=13.0``.
+    Contract (per ``docs/http/register.mdx``): "Destructive changes ...
+    drop the affected descriptor's accumulated state when applied." For
+    a type-change on the ``Txn.amount`` field, the upstream ``Txn``
+    descriptor is force-removed; the downstream ``UserTxn`` derivation
+    whose compiled chain references the old type is cascaded into the
+    removal. Both re-register with fresh ``agg_id``s; the prior
+    accumulator slot becomes inert.
 
-    Documented divergence: ``docs/http/register.mdx`` states "Destructive
-    changes ... drop the affected descriptor's accumulated state when
-    applied." The observed behaviour preserves state and coerces. This
-    test locks the OBSERVED behaviour so a future fix that aligns
-    server with docs (drop state on type-change) MUST update this
-    assertion explicitly rather than silently regress.
+    Post-swap reads MUST NOT surface the prior f64 baseline. Subsequent
+    int pushes start from zero.
     """
 
     @bv.event
@@ -301,29 +296,29 @@ def test_force_register_with_conflicting_field_types_for_same_field(
     def UserTxn(txn: Txn) -> Any:  # noqa: F811
         return txn.group_by("user_id").agg(s=bv.sum("amount", window="forever"))
 
-    # Observed behaviour: force=True accepts the type-change cleanly; no
-    # RegistrationError surfaces.
+    # force=True accepts the destructive type-change.
     result = app.register(Txn, UserTxn, force=True)
     assert result["status"] == "ok"
 
-    # Observed behaviour: prior f64 state is PRESERVED across the
-    # destructive type-change (divergence from docs/http/register.mdx
-    # which claims destructive changes drop state).
+    # Prior f64 state MUST NOT survive the destructive type swap. Either
+    # the row is empty (descriptor was wiped + re-registered with a
+    # fresh agg_id; no events have hit it yet) OR ``s`` reads as 0.
     post_swap = app.get("UserTxn", "alice")
-    assert "s" in post_swap and abs(post_swap["s"] - 3.0) < 1e-9, (
-        f"prior f64 accumulator must survive the destructive type swap "
-        f"(observed-locked behaviour as of 2026-05-14); got {post_swap!r}"
-    )
+    if "s" in post_swap:
+        assert abs(float(post_swap["s"])) < 1e-9, (
+            f"prior f64 accumulator must be wiped on destructive type swap; "
+            f"got {post_swap!r}"
+        )
+    # else: empty row is the cleanest "no state" representation.
 
-    # Observed behaviour: subsequent int pushes are coerced and added on
-    # top of the surviving f64 accumulator. 3.0 + 7 + 3 = 13.0.
+    # Subsequent int pushes start from zero. 0 + 7 + 3 = 10.
     app.push("Txn", {"user_id": "alice", "amount": 7})
     app.push("Txn", {"user_id": "alice", "amount": 3})
     final = app.get("UserTxn", "alice")
     assert "s" in final, f"post-swap aggregation must respond; got {final!r}"
-    assert abs(float(final["s"]) - 13.0) < 1e-9, (
-        f"post-swap sum must equal 13.0 (3.0 surviving f64 baseline + 7 + 3 "
-        f"coerced int pushes); got {final!r}"
+    assert abs(float(final["s"]) - 10.0) < 1e-9, (
+        f"post-swap sum must equal 10.0 (no surviving baseline; only 7 + 3 "
+        f"post-swap int pushes); got {final!r}"
     )
 
 
