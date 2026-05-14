@@ -17,6 +17,7 @@ use a two-stage chain instead::
 """
 from __future__ import annotations
 
+import math
 import re
 import warnings
 from dataclasses import dataclass
@@ -68,6 +69,13 @@ def _enforce_field_str(field_arg: Any, op: str) -> str:
             code="schema_mismatch",
             path=op,
             message=f"bv.{op}(field) must be a string; got {type(field_arg).__name__}",
+            errors=[],
+        )
+    if len(field_arg) == 0:
+        raise RegistrationError(
+            code="schema_mismatch",
+            path=op,
+            message=f"bv.{op}(field) must be a non-empty string column name; got ''",
             errors=[],
         )
     return field_arg
@@ -213,6 +221,8 @@ def quantile(
     ``q`` is in the open interval ``(0, 1)``.
     """
     _enforce_field_str(field, "quantile")
+    if q is None:
+        raise ValueError("quantile q must be in (0, 1); got None")
     if not (0.0 < q < 1.0):
         raise ValueError(f"quantile q must be in (0, 1); got {q}")
     _validate_window(window, "quantile", required=False)
@@ -528,6 +538,10 @@ def outlier_count(
     where: Any = None,
 ) -> AggDescriptor:
     """Count of events outside the ±sigma·stddev band."""
+    if sigma <= 0:
+        raise ValueError(
+            f"outlier_count sigma must be > 0; got {sigma}"
+        )
     _enforce_field_str(field, "outlier_count")
     _validate_window(window, "outlier_count", required=True)
     return AggDescriptor(
@@ -586,6 +600,10 @@ def histogram(
         if not isinstance(b, (int, float)):
             raise ValueError(
                 f"histogram buckets entries must be numeric; got {b!r}"
+            )
+        if isinstance(b, float) and math.isnan(b):
+            raise ValueError(
+                f"histogram buckets entries must not be NaN; got {buckets!r}"
             )
     for i in range(1, len(buckets)):
         if buckets[i] <= buckets[i - 1]:

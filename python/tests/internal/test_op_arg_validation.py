@@ -27,8 +27,6 @@ permissive direction.
 """
 from __future__ import annotations
 
-import math
-
 import pytest
 
 import beava as bv
@@ -60,12 +58,12 @@ def test_quantile_q_missing_kwarg_raises_typeerror() -> None:
         bv.quantile("amount", window="1h")  # type: ignore[call-arg]
 
 
-def test_quantile_q_none_raises() -> None:
-    """``q=None`` slips past the kwarg-required check and currently raises
-    ``TypeError`` from the ``0.0 < q < 1.0`` comparison rather than a
-    typed ``ValueError`` — gap flagged in commit message.
+def test_quantile_q_none_raises_valueerror() -> None:
+    """``q=None`` slips past the kwarg-required check; the explicit
+    None-guard raises a typed ``ValueError`` mentioning the open
+    interval rather than a bare comparison ``TypeError``.
     """
-    with pytest.raises((TypeError, ValueError)):
+    with pytest.raises(ValueError, match=r"quantile q must be in \(0, 1\); got None"):
         bv.quantile("amount", q=None, window="1h")  # type: ignore[arg-type]
 
 
@@ -220,14 +218,14 @@ def test_histogram_valid_strictly_increasing() -> None:
     assert d["buckets"] == [0.0, 1.0, 10.0, 100.0]
 
 
-def test_histogram_buckets_with_nan_currently_accepted_GAP() -> None:
-    """VALIDATION GAP: ``isinstance(nan, float)`` is True and
-    ``nan <= 1.0`` is False, so a NaN bucket sneaks through the
-    strict-increase check at ``_agg.py:590-594``. Pinning the current
-    permissive behavior — when fixed, flip this test to ``raises``.
+def test_histogram_buckets_with_nan_rejected() -> None:
+    """NaN buckets are rejected: ``isinstance(nan, float)`` is True and
+    ``nan <= 1.0`` is False, so without the explicit NaN guard a NaN
+    bucket would sneak through the strict-increase check. Locked at
+    ``_agg.py`` histogram bucket validation.
     """
-    d = bv.histogram("x", buckets=[1.0, float("nan"), 3.0]).to_dict()
-    assert any(isinstance(b, float) and math.isnan(b) for b in d["buckets"])
+    with pytest.raises(ValueError, match=r"histogram buckets entries must not be NaN"):
+        bv.histogram("x", buckets=[1.0, float("nan"), 3.0])
 
 
 # ── window arg (_validate_window, _agg.py:32-43) ────────────────────────
@@ -328,25 +326,31 @@ def test_field_string_accepted() -> None:
     assert d["field"] == "amount"
 
 
-def test_field_empty_string_currently_accepted_GAP() -> None:
-    """VALIDATION GAP: ``_enforce_field_str`` checks ``isinstance(_, str)``
-    but never checks ``len > 0``. Empty-string field names sail through
-    the SDK and only fail at the server. Pinning current behavior — when
-    the SDK rejects empties, flip this to ``raises``.
+def test_field_empty_string_rejected() -> None:
+    """Empty-string field names are rejected: ``_enforce_field_str``
+    now checks ``len > 0`` so empties fail at the SDK boundary rather
+    than the server.
     """
-    d = bv.sum("", window="1h").to_dict()
-    assert d["field"] == ""
+    with pytest.raises(RegistrationError, match=r"non-empty string") as ei:
+        bv.sum("", window="1h")
+    assert ei.value.code == "schema_mismatch"
 
 
-# ── outlier_count sigma has no SDK validation — GAP ─────────────────────
-def test_outlier_count_negative_sigma_currently_accepted_GAP() -> None:
-    """VALIDATION GAP: ``outlier_count`` documents a ±sigma band but does
-    not enforce ``sigma > 0`` at the SDK layer. Negative / zero sigma is
-    silently forwarded to the server. Pinning current behavior."""
-    d = bv.outlier_count("x", window="1h", sigma=-1.0).to_dict()
-    assert d["sigma"] == -1.0
-    d = bv.outlier_count("x", window="1h", sigma=0.0).to_dict()
-    assert d["sigma"] == 0.0
+# ── outlier_count sigma must be > 0 ─────────────────────────────────────
+@pytest.mark.parametrize("sigma", [-1.0, 0.0, -1e-9, -100.0])
+def test_outlier_count_non_positive_sigma_raises(sigma: float) -> None:
+    """``outlier_count`` documents a ±sigma·stddev band; sigma must be
+    strictly positive. Negative / zero is rejected at the SDK boundary.
+    """
+    with pytest.raises(ValueError, match=r"outlier_count sigma must be > 0") as ei:
+        bv.outlier_count("x", window="1h", sigma=sigma)
+    assert str(sigma) in str(ei.value)
+
+
+@pytest.mark.parametrize("sigma", [1e-9, 1.0, 3.0, 100.0])
+def test_outlier_count_positive_sigma_accepted(sigma: float) -> None:
+    d = bv.outlier_count("x", window="1h", sigma=sigma).to_dict()
+    assert d["sigma"] == sigma
 
 
 # ── cast target whitelist (_col.py:102-106) ─────────────────────────────
