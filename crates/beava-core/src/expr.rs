@@ -44,6 +44,16 @@
 
 use std::collections::BTreeSet;
 
+/// Maximum nesting depth accepted by the parser.
+///
+/// Mirrors `crate::eval::MAX_EVAL_DEPTH = 512` so that any expression which
+/// parses successfully is also safe to evaluate without the runtime depth
+/// guard silently returning `Value::Null`. A predicate deeper than this
+/// produces a `ParseError` at register time (surfaced as
+/// `aggregation_invalid_where` in the registration response) instead of
+/// silently filtering out every row.
+pub const MAX_PARSE_DEPTH: usize = 512;
+
 // ─── Public types ─────────────────────────────────────────────────────────────
 
 /// Byte-offset span into the source string (`start..end`, exclusive end).
@@ -242,6 +252,12 @@ struct Parser<'src> {
     /// Binary ops (add/mul/cmp/and/or) are only consumed when depth > 0,
     /// enforcing the SDK invariant that every binary op is parenthesized.
     paren_depth: usize,
+    /// Current expression-nesting depth (incremented on every `parse_expr`
+    /// entry, decremented on exit). Bounded by `MAX_PARSE_DEPTH` so that a
+    /// passing parse is also safe for `eval::eval` (which caps at the same
+    /// value, but silently returns Null past the cap — we want a loud
+    /// register-time error instead).
+    parse_depth: usize,
 }
 
 impl<'src> Parser<'src> {
@@ -251,6 +267,7 @@ impl<'src> Parser<'src> {
             pos: 0,
             peeked: None,
             paren_depth: 0,
+            parse_depth: 0,
         };
         // Pre-fill the lookahead so `peek()` is always valid.
         p.advance_lookahead()?;
@@ -598,7 +615,29 @@ impl<'src> Parser<'src> {
     // ── Grammar non-terminals ─────────────────────────────────────────────────
 
     fn parse_expr(&mut self) -> Result<Expr, ParseError> {
-        self.parse_or()
+        // Bound expression nesting at the same depth eval is willing to walk.
+        // Without this, a 600-deep `&` chain parses cleanly, then `eval` (cap
+        // `MAX_EVAL_DEPTH = 512`) silently returns Null at runtime — every
+        // event gets filtered out with no diagnostic. Fail loudly here so
+        // register surfaces `aggregation_invalid_where` with a "depth" reason
+        // instead.
+        self.parse_depth += 1;
+        if self.parse_depth > MAX_PARSE_DEPTH {
+            let col = self
+                .peek()
+                .map(|t| t.span.start + 1)
+                .unwrap_or(self.pos + 1);
+            return Err(ParseError {
+                col,
+                reason: format!(
+                    "col {col}: predicate nesting depth exceeds {} (got {})",
+                    MAX_PARSE_DEPTH, self.parse_depth
+                ),
+            });
+        }
+        let result = self.parse_or();
+        self.parse_depth -= 1;
+        result
     }
 
     fn parse_or(&mut self) -> Result<Expr, ParseError> {
@@ -1848,5 +1887,85 @@ mod tests {
                 result.err()
             );
         }
+    }
+
+    // ── Test 31: parser rejects depth > MAX_PARSE_DEPTH ──────────────────────
+    //
+    // A 600-deep left-associative AND chain — same shape the Python SDK emits
+    // for `predicate = (predicate & x)` in a loop — must be rejected at parse
+    // time. Before this guard the parse succeeded and `eval::eval` silently
+    // returned Null for every event, dropping all rows with no diagnostic.
+
+    #[test]
+    fn test_parser_rejects_over_max_depth() {
+        // Build "(((...(a and a) and a)...) and a)" with 600 ANDs.
+        // Each AND adds one paren level → 600 nested parse_expr calls.
+        //
+        // Run on a fat-stack worker thread. Even though the depth guard
+        // bails out at frame `MAX_PARSE_DEPTH + 1`, walking that many
+        // parse_expr → parse_or → … → parse_atom frames in debug mode
+        // still chews through the cargo-test default ~2 MiB stack before
+        // it gets there. Production main-thread stacks (8 MiB) hold this
+        // comfortably.
+        let handle = std::thread::Builder::new()
+            .stack_size(16 * 1024 * 1024)
+            .spawn(|| {
+                const N: usize = 600;
+                let mut s = String::from("a");
+                for _ in 0..N {
+                    s = format!("({s} and a)");
+                }
+                parse(&s).map_err(|e| e.reason).map(|_| ())
+            })
+            .expect("spawn fat-stack worker");
+        let result = handle.join().expect("worker did not panic");
+        let reason = result.expect_err("600-deep AND chain must be rejected");
+        assert!(
+            reason.to_lowercase().contains("depth"),
+            "error reason must mention 'depth'; got: {reason:?}"
+        );
+        assert!(
+            reason.contains(&MAX_PARSE_DEPTH.to_string()),
+            "error reason should cite the limit ({}); got: {:?}",
+            MAX_PARSE_DEPTH,
+            reason
+        );
+    }
+
+    // ── Test 32: parser accepts depth at MAX_PARSE_DEPTH ─────────────────────
+    //
+    // A chain whose top-level `parse_expr` depth is exactly `MAX_PARSE_DEPTH`
+    // must parse cleanly. This pins down that the bound is an inclusive max,
+    // not an off-by-one over-rejection that breaks legitimately-deep predicates.
+
+    #[test]
+    fn test_parser_accepts_at_max_depth() {
+        // Top-level parse_expr is depth 1. Each `(...)` paren adds one more
+        // parse_expr call. To land on depth == MAX_PARSE_DEPTH, wrap with
+        // (MAX_PARSE_DEPTH - 1) parens-with-AND-children.
+        //
+        // Run on a fat-stack worker thread: cargo-test threads default to
+        // ~2 MiB, but the recursive parser + recursive `Drop` on the AST
+        // both need O(depth) frames. Production server threads are 8 MiB
+        // (default Rust main / tokio worker) so a 512-deep predicate fits
+        // at runtime; the test just needs a larger stack to reproduce that.
+        let handle = std::thread::Builder::new()
+            .stack_size(16 * 1024 * 1024)
+            .spawn(|| {
+                let n = MAX_PARSE_DEPTH - 1;
+                let mut s = String::from("a");
+                for _ in 0..n {
+                    s = format!("({s} and a)");
+                }
+                parse(&s).map(|_| ()).map_err(|e| e.reason)
+            })
+            .expect("spawn fat-stack worker");
+        let result = handle.join().expect("worker did not panic");
+        assert!(
+            result.is_ok(),
+            "depth == MAX_PARSE_DEPTH ({}) must parse; got: {:?}",
+            MAX_PARSE_DEPTH,
+            result.err()
+        );
     }
 }

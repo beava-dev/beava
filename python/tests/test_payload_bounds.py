@@ -229,21 +229,21 @@ def test_expr_parser_rejects_or_evaluates_deeply_nested_where_predicate(
 ) -> None:
     """Register an event-derivation with a 600-deep ``&``-chained filter.
 
-    ``crates/beava-core/src/eval.rs`` caps recursion at ``MAX_EVAL_DEPTH =
-    512``: at deeper depths the evaluator returns ``Null`` (the silent DoS
-    guard) instead of overflowing the stack. The register-time parser does
-    NOT cap depth — the chain is accepted at compile time. The contract
-    this test locks:
+    Before the parser learned about ``MAX_PARSE_DEPTH``, the chain was
+    accepted at register time and then ``eval`` (capped at
+    ``MAX_EVAL_DEPTH = 512`` in ``crates/beava-core/src/eval.rs``) silently
+    returned ``Null`` for every event — dropping the row with no
+    diagnostic. The parser now caps nesting at the same depth eval is
+    willing to walk: any predicate deeper than ``MAX_PARSE_DEPTH = 512``
+    is rejected loudly at register time. The contract this test locks:
 
-      * The server MUST NOT panic / stack-overflow / hang at register time
-        or push time (the canary: a follow-up push completes).
-      * Either the chain compiles cleanly and the depth-guarded eval
-        returns ``Null`` (so the filter rejects the event silently) OR the
-        server returns a structured registration error.
-
-    If the server crashes / segfaults / never returns, that is a real DoS
-    vector and the test will fail by timeout / connection drop — caller
-    must stop and report.
+      * Register MUST raise ``RegistrationError`` with a structured code
+        (``aggregation_invalid_where`` or the equivalent
+        ``invalid_expression`` for ``filter`` ops) — never a silent
+        success that then drops every row.
+      * The error message MUST mention ``depth`` so operators can
+        diagnose the cause without spelunking the source.
+      * The server MUST NOT panic / stack-overflow / hang.
     """
     with bv.App(test_mode=True) as app:
 
@@ -267,26 +267,34 @@ def test_expr_parser_rejects_or_evaluates_deeply_nested_where_predicate(
         def DeepCount(df: DeepFiltered):
             return df.group_by("user_id").agg(c=bv.count(window="forever"))
 
-        try:
+        with pytest.raises(bv.RegistrationError) as excinfo:
             app.register(Deep, DeepFiltered, DeepCount)
-        except bv.RegistrationError as e:
-            # Acceptable outcome: server rejected the deep predicate at
-            # register time. Lock-in: the error MUST be structured (carries
-            # a code), not a generic transport failure.
-            assert e.code, f"RegistrationError without code: {e!r}"
-            return
 
-        # Canary push: server stayed up through the deep register. A normal
-        # OP_PING completes within the per-call timeout — if the apply
-        # loop is wedged, this will raise.
-        app.ping()
-        # The push itself must not panic. Server-side eval may return
-        # Null (depth guard) and the filter rejects the event; that is
-        # the expected silent-DoS-guard behaviour, not a bug.
-        app.push("Deep", {"user_id": "alice", "x": 1, "y": 5})
-        # Server still responsive after the deep push.
+        err = excinfo.value
+        # Structured error required: surface the parse-time depth ceiling
+        # via the standard registration error envelope, NOT a transport
+        # failure. The exact code depends on the op (Filter vs agg-where);
+        # both ride the same `expr::parse` rejection upstream.
+        assert err.code, f"RegistrationError without code: {err!r}"
+        assert err.code in {
+            "aggregation_invalid_where",
+            "invalid_expression",
+        }, (
+            f"unexpected error code: {err.code!r} (expected "
+            f"'aggregation_invalid_where' or 'invalid_expression')"
+        )
+        # The message must cite the depth ceiling — without "depth" in
+        # the reason, operators have no actionable diagnostic.
+        message = str(err).lower()
+        assert "depth" in message, (
+            f"register rejection must mention 'depth' so operators can "
+            f"diagnose; got: {err!r}"
+        )
+
+        # Canary: server stayed up through the failed register. A normal
+        # OP_PING must complete — if the apply loop wedged, this raises.
         pong = app.ping()
-        assert "server_version" in pong, f"server unresponsive after deep push: {pong!r}"
+        assert "server_version" in pong, f"server unresponsive: {pong!r}"
 
 
 # ---------------------------------------------------------------------------
