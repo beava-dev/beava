@@ -299,6 +299,24 @@ def _collect_caller_frame_locals_for_events() -> dict[str, Any]:
         del frame
 
 
+def _is_event_upstream(ann: Any) -> bool:
+    """Return True if ``ann`` looks like a Beava event-source / event-derivation.
+
+    Two shapes count:
+      * ``@bv.event class Foo: ...`` — :func:`_make_event_source` mirrors
+        ``_kind = "event_source"`` onto the class itself.
+      * ``@bv.event def Bar(...): ...`` — :class:`EventDerivation` instance
+        with ``_is_bv_event_function = True``.
+    """
+    if isinstance(ann, EventDerivation) and getattr(
+        ann, "_is_bv_event_function", False
+    ):
+        return True
+    if getattr(ann, "_kind", None) == "event_source":
+        return True
+    return False
+
+
 def _make_event_derivation(fn: Callable[..., Any]) -> EventDerivation:
     sig = inspect.signature(fn)
     params = list(sig.parameters.values())
@@ -322,6 +340,7 @@ def _make_event_derivation(fn: Callable[..., Any]) -> EventDerivation:
     except Exception:
         resolved = {}
     upstream_proxies: list[Any] = []
+    resolved_anns: list[tuple[str, Any]] = []
     for p in params:
         ann = resolved.get(p.name, p.annotation)
         if isinstance(ann, str):
@@ -346,6 +365,25 @@ def _make_event_derivation(fn: Callable[..., Any]) -> EventDerivation:
                 f"    def {fn.__name__}({p.name}: Tagged): return {p.name}.<chain>"
             )
         upstream_proxies.append(ann)
+        resolved_anns.append((p.name, ann))
+    # Reject multi-upstream derivations at decoration time. The engine
+    # only supports a single-upstream chain in v0 — `_to_register_json`
+    # walks `_parent` up to ONE EventSource and silently drops any second
+    # upstream, surfacing later as the unhelpful server-side error
+    # `invalid_registration: missing field 'fields'`. Sharp TypeError here
+    # tells the user what's actually unsupported. Mirrors the
+    # raw-chain-as-annotation rejection above.
+    event_params = [
+        name for name, ann in resolved_anns if _is_event_upstream(ann)
+    ]
+    if len(event_params) > 1:
+        raise TypeError(
+            f"@bv.event def {fn.__name__}(...) accepts multiple upstream "
+            f"event parameters ({event_params}), but multi-upstream "
+            f"derivations are not supported in v0. Either:\n"
+            f"  1. Pick a single upstream and combine state at the table layer.\n"
+            f"  2. File a feature request if you need this pattern."
+        )
     result = fn(*upstream_proxies)
     if not isinstance(result, EventDerivation):
         raise TypeError(

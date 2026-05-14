@@ -254,14 +254,14 @@ def test_fan_out_then_fan_in(app: Any) -> None:
     """Tx fan-OUT into AOk + BRisky, then fan-IN at the table layer via CStats.
 
     Exercises same-source branching followed by re-merge at the consumer.
-    v0's @bv.event def chain emits a SINGLE upstream root through the wire
-    payload (``_to_register_json`` walks ``_parent`` up to the EventSource),
-    so a true multi-source fan-in event derivation isn't expressible
-    end-to-end at the SDK→server boundary. The pragmatic fan-in is at the
-    table-consumer layer: AStats reads AOk, BStats reads BRisky, and CStats
-    reads Tx directly — CStats acts as the union (every push hits it) and
-    its count must be the strict superset of A+B counts (AOk/BRisky
-    predicates are mutually exclusive on this fixture).
+    Multi-upstream ``@bv.event def C(a: A, b: B)`` is now rejected at
+    decorator time; see
+    ``python/tests/internal/test_event_derivation_rejects_multi_upstream.py``.
+    The pragmatic fan-in is at the table-consumer layer: AStats reads AOk,
+    BStats reads BRisky, and CStats reads Tx directly — CStats acts as the
+    union (every push hits it) and its count must be the strict superset of
+    A+B counts (AOk/BRisky predicates are mutually exclusive on this
+    fixture).
     """
 
     @bv.event
