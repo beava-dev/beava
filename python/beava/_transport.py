@@ -452,8 +452,20 @@ class TcpTransport(Transport):
         JSON-encoded. v0 defaults to JSON on this path (the server's
         msgpack path is reserved for the read fast-path only).
 
+        On success the server echoes ``OP_PUSH`` (0x0010) with a body
+        like ``{"ack_lsn": N, "idempotent_replay": bool,
+        "registry_version": M}``. On validation failure the server
+        emits ``OP_ERROR_RESPONSE`` (0xFFFF) with body
+        ``{"error": {"code": "..."}, "registry_version": M}``; we
+        raise :exc:`RegistrationError` so fire-and-forget callers
+        don't silently drop events.
+
         Returns:
             Parsed JSON ACK dict (e.g. ``{"ack_lsn": 42}``).
+
+        Raises:
+            RegistrationError: Server returned ``OP_ERROR_RESPONSE`` or
+                an unexpected response opcode.
         """
         envelope = json.dumps(
             {"event": event_name, "body": fields}, ensure_ascii=False
@@ -461,6 +473,18 @@ class TcpTransport(Transport):
         sock = self._ensure_connected()
         sock.sendall(encode_frame(OP_PUSH, CT_JSON, envelope))
         frame = read_frame(sock, self.max_frame_bytes)
+        if frame.op != OP_PUSH:
+            try:
+                err_body = json.loads(frame.payload.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                err_body = {"error": {"code": "unparseable_error"}}
+            raise RegistrationError(
+                code=err_body.get("error", {}).get("code", "unexpected_frame"),
+                message=(
+                    f"expected OP_PUSH (0x0010), "
+                    f"got op={frame.op:#06x} ct={frame.ct:#04x} body={err_body!r}"
+                ),
+            )
         result: dict[str, Any] = json.loads(frame.payload.decode("utf-8"))
         return result
 

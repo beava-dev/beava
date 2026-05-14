@@ -1,42 +1,34 @@
 """Coverage for type mismatch at push time.
 
 The audit flagged no test asserts what the server does when a push payload's
-field types disagree with the declared schema. These tests lock down the
-**current observed contract** so any future change to it is visible.
+field types disagree with the declared schema. These tests pin the
+contract: server-side validation failures **raise**
+:exc:`RegistrationError` on the SDK side over TCP / TCP-embed.
 
-# REAL BUG SURFACED (2026-05-14)
+# BUG FIXED (2026-05-14)
 
-The Python SDK's TCP-embed transport ``_transport.py::TcpTransport.send_push``
-(lines 443-465) does **not** check the response frame's opcode. The server
-emits ``OP_ERROR_RESPONSE`` with a JSON body of
-``{"error": {"code": "..."}, "registry_version": N}`` on push validation
-failures, but the SDK happily parses that as JSON and returns the dict to
-user code — there is no ``RegistrationError`` raised, no exception, no
-signal that the push was rejected.
+Previously the Python SDK's TCP transport
+``_transport.py::TcpTransport.send_push`` did not check the response
+frame's opcode. The server emits ``OP_ERROR_RESPONSE`` (0xFFFF) on push
+validation failures, but the SDK happily parsed that as JSON and
+returned ``{"error": {...}, "registry_version": N}`` to user code — no
+exception, no signal that the push was rejected.
 
-Compare to ``send_get`` (lines 467-506) which correctly checks
-``frame.op != OP_GET_RESPONSE`` and raises. ``send_push`` is missing the
-analogous opcode check (``frame.op != OP_PUSH_RESPONSE`` or the equivalent).
+``send_push`` now mirrors ``send_get``: it checks
+``frame.op != OP_PUSH`` and raises :exc:`RegistrationError` with the
+parsed ``error.code`` whenever the server returns anything other than
+an echoed ``OP_PUSH`` ack. Fire-and-forget callers that previously
+silently dropped events on validation failures now surface those
+failures as exceptions.
 
-Practical impact: user code that does ``app.push(...)`` and ignores the
-return value (the documented "fire-and-forget" idiom) will silently drop
-events on validation failures. There is no exception, no log, no
-``ack_lsn``. The user sees a successful return.
-
-The HTTP transport path at ``_transport.py:156-192`` is correctly written
-(it raises on non-2xx), but the embed-mode default is TCP, so the bug
-fires on the docs' canonical setup.
-
-These tests lock down the bug as it stands today by asserting the **shape
-of the returned dict** (``"error"`` vs ``"ack_lsn"``). When the SDK is
-fixed to raise, these tests will flip and must be rewritten to assert
-``pytest.raises(RegistrationError)``.
+The HTTP transport path at ``_transport.py:156-192`` was already
+correct (it raises on non-2xx).
 
 # Contract pinned (verified by reading the impl)
 
 1. Client-side validation: the Python SDK does **not** validate payload
    types in :py:meth:`bv.App.push`. ``_app.py:585-594`` forwards directly
-   to ``transport.send_push``; ``_transport.py:443-465`` JSON-encodes
+   to ``transport.send_push``; ``_transport.py:443-490`` JSON-encodes
    ``{"event": name, "body": fields}`` and ships it on the wire as-is.
 
 2. Server-side validation lives in
@@ -59,19 +51,30 @@ fixed to raise, these tests will flip and must be rewritten to assert
      * ``FieldType::Bytes`` | ``Datetime`` | ``Json`` ↔ any non-null.
 
 3. Success response: ``{"ack_lsn": int, "registry_version": int,
-   "idempotent_replay": bool}``.
-   Error response (over TCP-embed): ``{"error": {"code": "..."},
-   "registry_version": int}`` — currently returned to user code instead
-   of raising.
+   "idempotent_replay": bool}`` (echoed back on ``OP_PUSH``).
+   Error response (over TCP-embed): ``OP_ERROR_RESPONSE`` with body
+   ``{"error": {"code": "..."}, "registry_version": int}`` — now
+   raises :exc:`RegistrationError` with the matching ``code``.
 """
 
 from __future__ import annotations
 
+import json
+import socket
+import threading
 from typing import Any
 
 import pytest
 
 import beava as bv
+from beava._errors import RegistrationError
+from beava._transport import TcpTransport
+from beava._wire import (
+    CT_JSON,
+    OP_ERROR_RESPONSE,
+    encode_frame,
+    read_frame,
+)
 
 
 @pytest.fixture
@@ -79,31 +82,6 @@ def app(beava_binary):  # noqa: ARG001 — pulls the cargo-build side-effect
     """Fresh embed-mode ``bv.App(test_mode=True)`` per test."""
     with bv.App(test_mode=True) as instance:
         yield instance
-
-
-def _assert_push_error(result: dict[str, Any], expected_code: str) -> None:
-    """Assert that a push result is the (silent) error-body shape.
-
-    Locks down the BUG documented in the module docstring: the TCP-embed
-    transport does not raise on server-side push errors. When the SDK is
-    fixed, these assertions will fail and must be rewritten to
-    ``pytest.raises(RegistrationError) as exc_info; assert
-    exc_info.value.code == expected_code``.
-    """
-    assert "error" in result, (
-        f"BUG-FIX REGRESSION: expected error-body shape "
-        f"(SDK currently does NOT raise on push errors over TCP-embed); "
-        f"got {result!r}. If the SDK was fixed to raise, rewrite this "
-        f"test to use pytest.raises(RegistrationError)."
-    )
-    assert "ack_lsn" not in result, (
-        f"expected error-body without ack_lsn, got {result!r}"
-    )
-    code = result["error"].get("code")
-    assert code == expected_code, (
-        f"expected error code {expected_code!r}, got {code!r} "
-        f"(full body: {result!r})"
-    )
 
 
 def _assert_push_ok(result: dict[str, Any]) -> None:
@@ -123,9 +101,8 @@ def test_push_string_against_float_field(app):
     """``amount: float`` + ``{"amount": "abc"}`` → ``invalid_event``.
 
     ``"abc"`` parses to ``Value::Str``; ``value_type_compatible(Str, F64)``
-    returns false → server emits ``invalid_event``. The SDK does NOT
-    raise (see module-docstring bug note) — the error body comes back as
-    the return value.
+    returns false → server emits ``invalid_event``. The SDK raises
+    :exc:`RegistrationError` with that code.
     """
 
     @bv.event
@@ -135,8 +112,9 @@ def test_push_string_against_float_field(app):
 
     app.register(Tx)
 
-    result = app.push("Tx", {"user_id": "alice", "amount": "abc"})
-    _assert_push_error(result, "invalid_event")
+    with pytest.raises(RegistrationError) as exc_info:
+        app.push("Tx", {"user_id": "alice", "amount": "abc"})
+    assert exc_info.value.code == "invalid_event"
 
 
 # ---------------------------------------------------------------------------
@@ -201,8 +179,8 @@ def test_push_int_against_str_field(app):
 
     JSON ``42`` parses to ``Value::I64(42)``;
     ``value_type_compatible(I64, Str)`` is false → server rejects. No
-    silent stringification ("42") happens. SDK does NOT raise — error
-    body is returned (see module bug note).
+    silent stringification ("42") happens. SDK raises
+    :exc:`RegistrationError` with code ``invalid_event``.
     """
 
     @bv.event
@@ -212,8 +190,9 @@ def test_push_int_against_str_field(app):
 
     app.register(Click)
 
-    result = app.push("Click", {"user_id": 42, "page": "/home"})
-    _assert_push_error(result, "invalid_event")
+    with pytest.raises(RegistrationError) as exc_info:
+        app.push("Click", {"user_id": 42, "page": "/home"})
+    assert exc_info.value.code == "invalid_event"
 
 
 # ---------------------------------------------------------------------------
@@ -226,7 +205,7 @@ def test_push_with_missing_required_field(app):
 
     ``validate_row_against_descriptor`` walks ``descriptor.schema.fields``;
     the first missing required field (``row.get(field_name) == None``)
-    returns false → server rejects. SDK does NOT raise.
+    returns false → server rejects. SDK raises :exc:`RegistrationError`.
     """
 
     @bv.event
@@ -238,8 +217,9 @@ def test_push_with_missing_required_field(app):
     app.register(Order)
 
     # Missing `amount`.
-    result = app.push("Order", {"user_id": "alice", "item_id": "sku-1"})
-    _assert_push_error(result, "invalid_event")
+    with pytest.raises(RegistrationError) as exc_info:
+        app.push("Order", {"user_id": "alice", "item_id": "sku-1"})
+    assert exc_info.value.code == "invalid_event"
 
 
 # ---------------------------------------------------------------------------
@@ -254,7 +234,7 @@ def test_push_with_unknown_field(app):
     validation, so the error code is ``unknown_field_v0`` (not
     ``invalid_event``). ``event_time`` / ``event_time_ms`` get the
     special-case ``unknown_field_event_time_v0`` code instead; this test
-    pins the general case. SDK does NOT raise.
+    pins the general case. SDK raises :exc:`RegistrationError`.
     """
 
     @bv.event
@@ -263,8 +243,9 @@ def test_push_with_unknown_field(app):
 
     app.register(Ping)
 
-    result = app.push("Ping", {"user_id": "alice", "extra_garbage": "lol"})
-    _assert_push_error(result, "unknown_field_v0")
+    with pytest.raises(RegistrationError) as exc_info:
+        app.push("Ping", {"user_id": "alice", "extra_garbage": "lol"})
+    assert exc_info.value.code == "unknown_field_v0"
 
 
 # ---------------------------------------------------------------------------
@@ -278,7 +259,8 @@ def test_push_with_null_against_non_nullable(app):
     Python ``None`` → JSON ``null`` → ``Value::Null``. The numeric arm of
     ``value_type_compatible`` is
     ``matches!(val, Value::I64(_) | Value::F64(_))`` — ``Value::Null`` is
-    not in that arm → false → ``invalid_event``. SDK does NOT raise.
+    not in that arm → false → ``invalid_event``. SDK raises
+    :exc:`RegistrationError`.
     """
 
     @bv.event
@@ -288,5 +270,100 @@ def test_push_with_null_against_non_nullable(app):
 
     app.register(Tx)
 
-    result = app.push("Tx", {"user_id": "alice", "amount": None})
-    _assert_push_error(result, "invalid_event")
+    with pytest.raises(RegistrationError) as exc_info:
+        app.push("Tx", {"user_id": "alice", "amount": None})
+    assert exc_info.value.code == "invalid_event"
+
+
+# ---------------------------------------------------------------------------
+# 7. Unexpected response opcode → SDK raises RegistrationError
+# ---------------------------------------------------------------------------
+
+
+def test_push_response_unexpected_opcode_raises():
+    """Mock TCP server returns a non-OP_PUSH, non-error frame → raise.
+
+    Mirrors ``send_get``'s unexpected-opcode behaviour: any frame whose
+    op is neither the success op (``OP_PUSH``) nor a recognised error
+    is surfaced as :exc:`RegistrationError`. Catches future server
+    bugs that emit a stray opcode instead of silently returning a
+    dict to user code.
+    """
+
+    # In-process TCP echo that replies with an unexpected opcode.
+    bogus_op = 0x1234  # not OP_PUSH, not OP_ERROR_RESPONSE
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    host, port = server.getsockname()
+
+    def serve():
+        conn, _ = server.accept()
+        try:
+            # Read the inbound OP_PUSH frame and discard it.
+            read_frame(conn, 4 * 1024 * 1024)
+            body = json.dumps({"weird": "shape"}).encode("utf-8")
+            conn.sendall(encode_frame(bogus_op, CT_JSON, body))
+        finally:
+            conn.close()
+            server.close()
+
+    t = threading.Thread(target=serve, daemon=True)
+    t.start()
+    try:
+        transport = TcpTransport(host=host, port=port)
+        try:
+            with pytest.raises(RegistrationError) as exc_info:
+                transport.send_push(event_name="X", fields={"a": 1})
+            # No "error.code" in body → fallback code.
+            assert exc_info.value.code == "unexpected_frame"
+            # The diagnostic message embeds the actual opcode we sent.
+            assert f"{bogus_op:#06x}" in str(exc_info.value)
+        finally:
+            transport.close()
+    finally:
+        t.join(timeout=2.0)
+
+
+# ---------------------------------------------------------------------------
+# 8. OP_ERROR_RESPONSE with malformed (non-JSON) body → fallback code
+# ---------------------------------------------------------------------------
+
+
+def test_push_error_response_with_unparseable_body_raises():
+    """Server returns ``OP_ERROR_RESPONSE`` but the body isn't JSON.
+
+    Belt-and-suspenders for the json.loads guard inside send_push: the
+    SDK must still raise (never return) and must not crash on bad
+    bytes. The fallback code path lands on ``unexpected_frame``.
+    """
+
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    host, port = server.getsockname()
+
+    def serve():
+        conn, _ = server.accept()
+        try:
+            read_frame(conn, 4 * 1024 * 1024)
+            conn.sendall(encode_frame(OP_ERROR_RESPONSE, CT_JSON, b"\xff\xfe garbage"))
+        finally:
+            conn.close()
+            server.close()
+
+    t = threading.Thread(target=serve, daemon=True)
+    t.start()
+    try:
+        transport = TcpTransport(host=host, port=port)
+        try:
+            with pytest.raises(RegistrationError) as exc_info:
+                transport.send_push(event_name="X", fields={"a": 1})
+            assert exc_info.value.code == "unparseable_error" or (
+                exc_info.value.code == "unexpected_frame"
+            )
+        finally:
+            transport.close()
+    finally:
+        t.join(timeout=2.0)
+
