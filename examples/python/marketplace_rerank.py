@@ -69,11 +69,11 @@ def main() -> int:
     print(f"sku_882 momentum:    {sku}")
     print(f"user_1382 intent:    {user}")
 
-    if sku.get("cart_velocity_5m", 0) >= 2:
+    if (sku.get("cart_velocity_5m") or 0) >= 2:
         print("reflex: boost sku_882 in trending shelf")
-    if user.get("avg_view_price_30m", 0) > 200:
+    if (user.get("avg_view_price_30m") or 0) > 200:
         print("reflex: sort user_1382 toward premium picks")
-    if user.get("unique_skus_30m", 0) >= 3:
+    if (user.get("unique_skus_30m") or 0) >= 3:
         print("reflex: diversify recommendations for user_1382")
 
     print("OK -- marketplace_rerank.py")

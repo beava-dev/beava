@@ -73,11 +73,11 @@ def main() -> int:
     print(f"user_1271 friction:  {user}")
     print(f"org_acme  expansion: {org}")
 
-    if user.get("errors_10m", 0) >= 2:
+    if (user.get("errors_10m") or 0) >= 2:
         print("reflex: launch setup rescue for user_1271")
-    if user.get("docs_burn_10m", 0) >= 5:
+    if (user.get("docs_burn_10m") or 0) >= 5:
         print("reflex: open guided onboarding for user_1271")
-    if org.get("limit_hits_24h", 0) >= 5:
+    if (org.get("limit_hits_24h") or 0) >= 5:
         print("reflex: surface upgrade path to org_acme")
 
     print("OK -- growth_rescue.py")

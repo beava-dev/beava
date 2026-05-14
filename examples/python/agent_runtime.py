@@ -34,12 +34,12 @@ class AgentStep:
 @bv.table(key="session_id")
 def SessionReflexes(e: AgentStep):
     return e.group_by("session_id").agg(
-        failure_rate_5m  = bv.ratio(window="5m", where=~bv.col("ok")),
+        failure_rate_5m  = bv.ratio(window="5m", where=bv.col("ok") == False),
         top_tool_10m     = bv.top_k("tool", k=1, window="10m"),
         unique_tools_10m = bv.n_unique("tool", window="10m"),
         token_burn_1m    = bv.sum("tokens", window="1m"),
         p95_latency_5m   = bv.quantile("latency_ms", q=0.95, window="5m"),
-        risky_streak     = bv.streak(where=bv.col("risky")),
+        risky_streak     = bv.streak(where=bv.col("risky") == True),
         last_action      = bv.last("action"),
     )
 
@@ -72,11 +72,11 @@ def main() -> int:
     features = app.get("SessionReflexes", "session_44")
     print(f"session_44 reflexes: {features}")
 
-    if features.get("failure_rate_5m", 0) > 0.4:
+    if (features.get("failure_rate_5m") or 0) > 0.4:
         print("reflex: lock tool access")
-    if features.get("risky_streak", 0) >= 2:
+    if (features.get("risky_streak") or 0) >= 2:
         print("reflex: require human approval")
-    if features.get("token_burn_1m", 0) > 10_000:
+    if (features.get("token_burn_1m") or 0) > 10_000:
         print("reflex: switch to a cheaper model")
 
     print("OK -- agent_runtime.py")
