@@ -289,6 +289,7 @@ impl ApplyShard {
                 // semantic; callers who want to add a field without losing
                 // state should send the request without `force` (additive
                 // path is allowed by `register_check_force_required`).
+                let mut force_removed: Vec<String> = Vec::new();
                 if force {
                     let mut to_remove: Vec<String> = Vec::new();
                     for entry in &diff.destructive {
@@ -339,12 +340,62 @@ impl ApplyShard {
                     }
                     to_remove.sort();
                     to_remove.dedup();
+
+                    // Cascade closure: every downstream derivation whose
+                    // `upstreams` reference a descriptor in `to_remove` is
+                    // structurally broken by the force-removal — its
+                    // compiled chain references the old upstream shape and
+                    // its accumulator slot is keyed off the same agg_id.
+                    // Re-registering the upstream without cascading would
+                    // leave the orphan downstream wired to stale state, so
+                    // pull every transitive downstream into the removal
+                    // list.
+                    //
+                    // Walk over the pre-removal snapshot (already captured
+                    // above as `prev_snapshot`) — we already hold it and
+                    // it has not mutated since classify_register_diff ran.
+                    // The registry is a DAG by construction (cycles
+                    // forbidden at register time); we still cap the
+                    // fixpoint iteration at `descriptor_count` as a
+                    // belt-and-braces termination guard.
+                    let descriptor_count = prev_snapshot.events.len()
+                        + prev_snapshot.tables.len()
+                        + prev_snapshot.derivations.len();
+                    for _ in 0..descriptor_count {
+                        let to_remove_set: std::collections::HashSet<String> =
+                            to_remove.iter().cloned().collect();
+                        let mut additions: Vec<String> = Vec::new();
+                        for (name, deriv) in prev_snapshot.derivations.iter() {
+                            if to_remove_set.contains(name.as_str()) {
+                                continue;
+                            }
+                            if deriv
+                                .upstreams
+                                .iter()
+                                .any(|u| to_remove_set.contains(u.as_str()))
+                            {
+                                additions.push(name.clone());
+                            }
+                        }
+                        if additions.is_empty() {
+                            break;
+                        }
+                        to_remove.extend(additions);
+                        to_remove.sort();
+                        to_remove.dedup();
+                    }
+
                     if !to_remove.is_empty() {
                         self.state
                             .dev_agg
                             .registry
                             .force_remove_descriptors(&to_remove);
                     }
+                    // Captured for the RegistryBump WAL record so recovery
+                    // can replay the same force-removal closure BEFORE
+                    // re-applying `payload_nodes` — without this, replay
+                    // resurfaces pre-removal state.
+                    force_removed = to_remove;
                 }
 
                 // Register is cold path: delegate to the async WAL-backed
@@ -359,6 +410,7 @@ impl ApplyShard {
                     &state_clone.dev_agg.registry,
                     reg_payload,
                     &state_clone.wal_sink,
+                    force_removed,
                 ));
                 // Grow `state_tables` so the hot path can index by
                 // `desc.agg_id` without bounds issues. Register is rare,

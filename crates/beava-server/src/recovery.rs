@@ -13,7 +13,6 @@
 
 use crate::register::RegistryBumpPayload;
 use crate::registry_debug::DevAggState;
-use beava_core::agg_apply::apply_event_to_aggregations;
 use beava_core::row::{Row, Value};
 use beava_core::snapshot_body::SnapshotBody;
 use beava_persistence::{list_snapshots, Lsn, PersistError, RecordType, SnapshotReader, WalReader};
@@ -286,11 +285,21 @@ pub fn replay_handrolled_wal_dir(
                 .and_then(|d| d.cold_after_ms);
             {
                 let mut tables = dev_agg.state_tables.lock();
-                beava_core::agg_apply::apply_event_to_aggregations(
+                // Replay variant: route the event ONLY to aggregations
+                // whose owning derivation was registered at or before the
+                // event's stamped `rv`. Without this filter, a force-
+                // replace that swaps `UserTxn(cnt)` for `UserTxn(total)`
+                // would credit the pre-replace events to the post-replace
+                // aggregation on recovery (bumps replay first, then
+                // ALL events replay against the final registry). See
+                // `Registry::compiled_aggregations_for_source_at_rv` for
+                // the rationale.
+                beava_core::agg_apply::apply_event_to_aggregations_replay(
                     &rec.event_name,
                     &row,
                     rec.et_ms,
                     lsn,
+                    rec.rv as u64,
                     &dev_agg.registry,
                     &mut tables,
                     cold_after_ms,
@@ -357,11 +366,15 @@ pub fn replay_wal_from_lsn(
                     .and_then(|d| d.cold_after_ms);
                 {
                     let mut tables = dev_agg.state_tables.lock();
-                    apply_event_to_aggregations(
+                    // Same per-event registry-version filter as the
+                    // hand-rolled `*.wal` replay path — see comment in
+                    // `replay_handrolled_wal_dir`.
+                    beava_core::agg_apply::apply_event_to_aggregations_replay(
                         &payload.s,
                         &row,
                         payload.et,
                         rec.lsn,
+                        payload.rv,
                         &dev_agg.registry,
                         &mut tables,
                         cold_after_ms,

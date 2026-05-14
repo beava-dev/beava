@@ -128,9 +128,14 @@ fn only_apply_shard_and_recovery_call_apply_event_to_aggregations() {
             Err(_) => continue,
         };
         let stripped = strip_line_comments(&content);
-        if stripped.contains("apply_event_to_aggregations(") {
+        // Match `apply_event_to_aggregations(` AND the replay variant
+        // `apply_event_to_aggregations_replay(` — both are hot-path
+        // entries gated by the mio-only invariant.
+        if stripped.contains("apply_event_to_aggregations(")
+            || stripped.contains("apply_event_to_aggregations_replay(")
+        {
             violations.push(format!(
-                "{}: contains a call to `apply_event_to_aggregations(` (only apply_shard.rs and recovery.rs may call it)",
+                "{}: contains a call to `apply_event_to_aggregations[_replay](` (only apply_shard.rs and recovery.rs may call it)",
                 f.display()
             ));
         }
@@ -237,10 +242,11 @@ fn sanity_allowlisted_callers_actually_contain_patterns() {
          moved — update the test allowlist."
     );
     assert!(
-        recovery_stripped.contains("apply_event_to_aggregations("),
+        recovery_stripped.contains("apply_event_to_aggregations(")
+            || recovery_stripped.contains("apply_event_to_aggregations_replay("),
         "sanity: recovery.rs must contain a call to apply_event_to_aggregations \
-         (the cold-path WAL replay site). If this fails, recovery has moved — \
-         update the test allowlist."
+         (or the `_replay` variant — the cold-path WAL replay site). If this \
+         fails, recovery has moved — update the test allowlist."
     );
     assert!(
         http_admin_stripped.contains("axum::"),

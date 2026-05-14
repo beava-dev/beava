@@ -264,10 +264,65 @@ pub fn apply_event_to_aggregations(
     source_name: &str,
     row: &Row,
     now_ms: i64,
-    _event_id: u64, // Phase 5: unused. Phase 6 WAL populates via D-08.
+    event_id: u64, // Phase 5: unused. Phase 6 WAL populates via D-08.
     registry: &Registry,
     state_tables: &mut StateTables,
     cold_after_ms: Option<u64>,
+) {
+    let descs = registry.compiled_aggregations_for_source(source_name);
+    apply_event_to_aggregations_with_descs(
+        source_name,
+        row,
+        now_ms,
+        event_id,
+        registry,
+        state_tables,
+        cold_after_ms,
+        descs,
+    );
+}
+
+/// Replay-only variant: route the event ONLY to aggregations whose owning
+/// `DerivationDescriptor.registered_at_version <= event_rv`. Live path
+/// uses `apply_event_to_aggregations` (no version filter). See
+/// `Registry::compiled_aggregations_for_source_at_rv` for the rationale.
+#[allow(clippy::too_many_arguments)] // mirrors the live entry-point signature
+pub fn apply_event_to_aggregations_replay(
+    source_name: &str,
+    row: &Row,
+    now_ms: i64,
+    event_id: u64,
+    event_rv: u64,
+    registry: &Registry,
+    state_tables: &mut StateTables,
+    cold_after_ms: Option<u64>,
+) {
+    let descs = registry.compiled_aggregations_for_source_at_rv(source_name, event_rv);
+    apply_event_to_aggregations_with_descs(
+        source_name,
+        row,
+        now_ms,
+        event_id,
+        registry,
+        state_tables,
+        cold_after_ms,
+        descs,
+    );
+}
+
+/// Shared body for `apply_event_to_aggregations` (live path) and
+/// `apply_event_to_aggregations_replay` (recovery). Takes pre-resolved
+/// descs so the caller can choose whether to apply a version filter.
+#[allow(clippy::too_many_arguments)] // mirrors the live entry-point signature
+fn apply_event_to_aggregations_with_descs(
+    source_name: &str,
+    row: &Row,
+    now_ms: i64,
+    _event_id: u64,
+    registry: &Registry,
+    state_tables: &mut StateTables,
+    cold_after_ms: Option<u64>,
+    descs: Vec<std::sync::Arc<crate::agg_descriptor::AggregationDescriptor>>,
 ) {
     // SPIKE: per-substage timing of the agg hot path.
     // Gated on its OWN env var (not BEAVA_TRACE_APPLY_TIMING) so that the
@@ -286,7 +341,6 @@ pub fn apply_event_to_aggregations(
         None
     };
 
-    let descs = registry.compiled_aggregations_for_source(source_name);
     let t_registry = t0.map(|t| t.elapsed());
 
     // Hoist ExtractedFields build above the descriptor loop. The per-event

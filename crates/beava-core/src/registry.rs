@@ -317,6 +317,41 @@ impl Registry {
             .unwrap_or_default()
     }
 
+    /// Return only those compiled aggregations whose owning
+    /// `DerivationDescriptor.registered_at_version <= max_rv`. Used by
+    /// WAL replay to drop pre-bump events when a force-replace
+    /// reinstalls an aggregation at a later registry version: the
+    /// hand-rolled WAL stamps each event with the registry version it
+    /// landed under (`rv`), and replay must NOT credit a pre-bump event
+    /// to a post-bump (force-replaced) aggregation. Without this
+    /// filter, the architectural split between persistence-WAL
+    /// `RegistryBump` records and the hand-rolled `*.wal` event log
+    /// (bumps replay first, then ALL events replay against the final
+    /// registry) would silently lose the force-replace boundary.
+    ///
+    /// Live path uses `compiled_aggregations_for_source` (no filter).
+    pub fn compiled_aggregations_for_source_at_rv(
+        &self,
+        source_name: &str,
+        max_rv: u64,
+    ) -> Vec<Arc<AggregationDescriptor>> {
+        let inner = self.inner.read();
+        let aggs = match inner.aggregations_by_source.get(source_name) {
+            Some(v) => v,
+            None => return Vec::new(),
+        };
+        aggs.iter()
+            .filter(|a| {
+                inner
+                    .derivations
+                    .get(&a.node_name)
+                    .map(|d| d.registered_at_version <= max_rv)
+                    .unwrap_or(false)
+            })
+            .cloned()
+            .collect()
+    }
+
     /// Install descriptors into the registry under a write lock. Monotonically
     /// bumps the version to `new_version`. Panics in debug if `new_version` is
     /// not strictly greater than the current version.

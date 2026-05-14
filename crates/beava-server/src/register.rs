@@ -37,6 +37,19 @@ pub struct RegistryBumpPayload {
     pub new_version: u64,
     /// Validated `PayloadNode`s that produced this bump.
     pub payload_nodes: Vec<PayloadNode>,
+    /// Descriptor names force-removed by `apply_shard`'s force-handling
+    /// block before this bump was applied (post-cascade closure). On
+    /// recovery, `apply_registry_bump` replays this list through
+    /// `force_remove_descriptors` BEFORE re-validating + re-applying
+    /// `payload_nodes` — without this, WAL replay rebuilds pre-replace
+    /// state from prior records and silently overrides the force boundary.
+    ///
+    /// Empty on non-force registers. `#[serde(default)]` keeps the JSON
+    /// codec forward/backward compatible with WAL records written before
+    /// this field existed — they decode with an empty Vec → no
+    /// force-removal on replay, identical to prior behaviour.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub force_removed_descriptors: Vec<String>,
 }
 
 impl RegistryBumpPayload {
@@ -50,13 +63,21 @@ impl RegistryBumpPayload {
 
 /// Re-apply a recovered RegistryBump record to the in-memory registry.
 ///
-/// Re-runs validation + compile to rebuild caches, then calls
-/// `apply_registration`. Idempotent on the descriptor set: if a node is
-/// already present, it is left in place.
+/// 1. If `bump.force_removed_descriptors` is non-empty, replay those
+///    removals through `force_remove_descriptors`. The live-path cascade
+///    closure (in `apply_shard.rs`) is already baked into this list, so
+///    recovery does NOT recompute cascade — it just replays.
+/// 2. Re-run validation + compile to rebuild caches against the
+///    post-removal snapshot.
+/// 3. Call `apply_registration`. Idempotent on the descriptor set: if a
+///    node is already present, it is left in place.
 pub fn apply_registry_bump(
     registry: &Arc<Registry>,
     bump: RegistryBumpPayload,
 ) -> Result<(), String> {
+    if !bump.force_removed_descriptors.is_empty() {
+        registry.force_remove_descriptors(&bump.force_removed_descriptors);
+    }
     let snapshot = registry.snapshot();
     let validated = match validate_payload(&snapshot, bump.payload_nodes) {
         Ok(v) => v,
@@ -189,18 +210,27 @@ pub enum RegisterOutcome {
 /// WAL-backed entry point. When `wal_sink` is `Some` a `RegistryBump` record
 /// is written and fsynced BEFORE the in-memory registry mutates (apply-after-
 /// fsync). On WAL failure returns `WalUnavailable` so HTTP maps to 503.
+///
+/// `force_removed` carries the post-cascade list of descriptors that
+/// `apply_shard`'s force-handling block removed before delegating here.
+/// It is recorded verbatim in the `RegistryBump` payload so recovery
+/// replays the same removal step before re-validating the new payload —
+/// without this, WAL replay rebuilds the pre-removal state and silently
+/// loses the force boundary.
 pub(crate) async fn execute_register_with_wal(
     registry: &Arc<Registry>,
     payload: RegisterPayload,
     wal_sink: &WalSink,
+    force_removed: Vec<String>,
 ) -> RegisterOutcome {
-    execute_register_inner(registry, payload, Some(wal_sink)).await
+    execute_register_inner(registry, payload, Some(wal_sink), force_removed).await
 }
 
 async fn execute_register_inner(
     registry: &Arc<Registry>,
     payload: RegisterPayload,
     wal_sink: Option<&WalSink>,
+    force_removed: Vec<String>,
 ) -> RegisterOutcome {
     if payload.nodes.is_empty() {
         let version = registry.version();
@@ -303,6 +333,7 @@ async fn execute_register_inner(
         let bump = RegistryBumpPayload {
             new_version: current_snapshot.version + 1,
             payload_nodes: nodes.clone(),
+            force_removed_descriptors: force_removed.clone(),
         };
         let encoded = match bump.encode() {
             Ok(b) => b,
