@@ -5,10 +5,10 @@ only accepts: ``==``, ``!=``, ``<``, ``>``, ``<=``, ``>=``, ``and``, ``or``,
 ``not`` (keyword), parentheses, identifiers, literals. A bare ``!`` is
 rejected with ``unexpected character '!'``.
 
-The SDK's ``~bv.col(...)`` overload (python/beava/_col.py: _UnaryOp.to_expr_string)
-currently serialises as ``!(x)`` — which the server REJECTS. This file locks
-down that mismatch so an eventual fix (serialising to ``(not x)`` instead)
-will surface as a green test that previously was red.
+Covers each overload that produces a where-predicate, end-to-end:
+``==`` / ``!=`` (literal comparison), ``&`` / ``|`` (compound predicates),
+and ``~`` (logical NOT — serialises to the ``not`` keyword the parser
+accepts, not the bare ``!`` that it rejects).
 
 Requires: ``target/debug/beava`` (or release) discoverable via embed mode.
 """
@@ -90,20 +90,17 @@ def test_and_or_serialize_and_accepted(app):
 
 
 # ---------------------------------------------------------------------------
-# Currently-rejected overload — the `~` invert bug
+# `~` (invert) overload — now emits `(not …)` and is accepted by the server
 # ---------------------------------------------------------------------------
 
 
-def test_invert_currently_rejected_by_server(app):
-    """``~bv.col('ok')`` → ``!(ok)`` is rejected by the server's expr parser.
+def test_invert_serializes_and_accepted(app):
+    """``~bv.col('ok')`` → ``(not ok)`` → register OK.
 
-    This is a KNOWN SDK bug: the ``__invert__`` overload should emit
-    ``(not ok)`` (a keyword the parser accepts) instead of ``!(ok)`` (a
-    bare ``!`` that the parser rejects at expr.rs:370 with ``unexpected
-    character '!'``).
-
-    When the SDK is fixed, this test will start passing the register call —
-    flip ``pytest.raises`` to ``assert success`` at that point.
+    Previously the SDK emitted ``!(ok)`` which the server's where-parser
+    rejected at ``expr.rs:370`` with ``unexpected character '!'``. The
+    parser accepts ``not`` as a keyword (``expr.rs:463``) so the fix is
+    purely SDK-side: emit ``(not x)`` instead of ``!(x)``.
     """
 
     @bv.event
@@ -111,12 +108,8 @@ def test_invert_currently_rejected_by_server(app):
         user_id: str
         ok: bool
 
-    # Sanity: confirm the SDK still emits the bug-shape on the wire.
-    assert (~bv.col("ok")).to_expr_string() == "!(ok)", (
-        "Expected the SDK's __invert__ to emit '!(ok)' so this regression "
-        "lock-down catches a future fix. If the SDK changed, update this "
-        "test."
-    )
+    # Wire-shape: SDK must emit the keyword form the server accepts.
+    assert (~bv.col("ok")).to_expr_string() == "(not ok)"
 
     @bv.table(key="user_id")
     def UserNotOks(os: Outcome):
@@ -124,16 +117,27 @@ def test_invert_currently_rejected_by_server(app):
             n_not_ok=bv.count(where=~bv.col("ok")),
         )
 
-    with pytest.raises(RegistrationError) as exc_info:
-        app.register(Outcome, UserNotOks)
+    resp = app.register(Outcome, UserNotOks)
+    assert resp.get("status") == "ok", f"register failed: {resp!r}"
 
-    err = exc_info.value
-    assert err.code == "aggregation_invalid_where", (
-        f"expected aggregation_invalid_where, got code={err.code!r} "
-        f"message={err.message!r}"
-    )
-    # The parse error message must mention the bare '!' the parser
-    # tripped on, anchoring this test to the actual server-side cause.
-    assert "!" in err.message, (
-        f"expected parse error to mention '!'; got message={err.message!r}"
-    )
+
+def test_invert_compound_with_and_or_accepted(app):
+    """``~(col(x) == 1) & col(y)`` — nested invert inside a compound predicate
+    must still serialise + parse cleanly. Locks down that the keyword
+    form composes with ``and`` / ``or``.
+    """
+
+    @bv.event
+    class Ev:
+        user_id: str
+        x: int
+        y: bool
+
+    @bv.table(key="user_id")
+    def Counts(es: Ev):
+        return es.group_by("user_id").agg(
+            n=bv.count(where=(~(bv.col("x") == 1)) & bv.col("y")),
+        )
+
+    resp = app.register(Ev, Counts)
+    assert resp.get("status") == "ok", f"register failed: {resp!r}"

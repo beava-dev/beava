@@ -34,12 +34,12 @@ class AgentStep:
 @bv.table(key="session_id")
 def SessionReflexes(e: AgentStep):
     return e.group_by("session_id").agg(
-        failure_rate_5m  = bv.ratio(window="5m", where=bv.col("ok") == False),
+        failure_rate_5m  = bv.ratio(window="5m", where=~bv.col("ok")),
         top_tool_10m     = bv.top_k("tool", k=1, window="10m"),
         unique_tools_10m = bv.n_unique("tool", window="10m"),
         token_burn_1m    = bv.sum("tokens", window="1m"),
         p95_latency_5m   = bv.quantile("latency_ms", q=0.95, window="5m"),
-        risky_streak     = bv.streak(where=bv.col("risky") == True),
+        risky_streak     = bv.streak(where=bv.col("risky")),
         last_action      = bv.last("action"),
     )
 

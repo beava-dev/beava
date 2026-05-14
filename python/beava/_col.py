@@ -162,7 +162,12 @@ class _UnaryOp(_Expr):
         if self.op == "isnull":
             return f"({self.operand.to_expr_string()} == null)"
         if self.op == "~":
-            return f"!({self.operand.to_expr_string()})"
+            # Server's where-parser (crates/beava-core/src/expr.rs:361-373 +
+            # the `"not" => TokenKind::Not` keyword table) accepts `!=` for
+            # not-equal and `not` (keyword) for logical negation, but
+            # rejects bare unary `!` with `unexpected character '!'`. Emit
+            # `(not …)` so SDK-built where predicates round-trip cleanly.
+            return f"(not {self.operand.to_expr_string()})"
         raise ValueError(f"unknown unary op: {self.op!r}")
 
     def __hash__(self) -> int:
