@@ -202,7 +202,7 @@ const SearchModal = ({ query, setQuery, onClose }) => {
   ), document.body);
 };
 
-const SiteHeader = ({ active = null, search = false, maxWidth = 1200 }) => {
+const SiteHeader = ({ active = null, search = false, maxWidth = 1200, hideCta = false }) => {
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [query, setQuery] = React.useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
@@ -253,7 +253,7 @@ const SiteHeader = ({ active = null, search = false, maxWidth = 1200 }) => {
   };
 
   const linkBase = {
-    padding: '6px 10px', borderRadius: 7,
+    padding: '6px 8px', borderRadius: 7,
     fontSize: 14, fontWeight: 500,
     color: 'var(--fg2)', textDecoration: 'none',
     fontFamily: 'var(--font-sans)',
@@ -293,6 +293,13 @@ const SiteHeader = ({ active = null, search = false, maxWidth = 1200 }) => {
       }
       .bv-site-nav-link:hover::after { opacity: 1; }
       .bv-site-nav-link:hover { color: var(--fg1) !important; }
+
+      /* Outlined pill CTA in nav — sits apart from the text links. */
+      .bv-nav-cta:hover {
+        background: var(--accent);
+        color: #fff !important;
+        border-color: var(--accent) !important;
+      }
 
       /* Hamburger button — hidden on desktop, shown on tablet+phone */
       .bv-hamburger { display: none; }
@@ -345,11 +352,12 @@ const SiteHeader = ({ active = null, search = false, maxWidth = 1200 }) => {
   const MobileMenu = () => {
     if (!mobileMenuOpen) return null;
     const items = [
-      { id: 'guide',     label: 'Guide',     href: '/guide/' },
-      { id: 'docs',      label: 'Docs',      href: '/docs/' },
-      { id: 'community', label: 'Community', href: '/community/' },
-      { id: 'github',    label: 'GitHub',    href: 'https://github.com/beava-dev/beava', external: true },
-      { id: 'discord',   label: 'Discord',   href: 'https://discord.gg/J5trwbCYpS',        external: true },
+      { id: 'guide',     label: 'Guide',        href: '/guide/' },
+      { id: 'docs',      label: 'Docs',         href: '/docs/' },
+      { id: 'community', label: 'Community',    href: '/community/' },
+      { id: 'github',    label: 'GitHub',       href: 'https://github.com/beava-dev/beava',     external: true },
+      { id: 'discord',   label: 'Discord',      href: 'https://discord.gg/J5trwbCYpS',          external: true },
+      ...(hideCta ? [] : [{ id: 'help', label: 'Help!', href: 'https://calendly.com/hoang-beava/30min', external: true }]),
     ];
     return ReactDOM.createPortal(
       <>
@@ -442,13 +450,36 @@ const SiteHeader = ({ active = null, search = false, maxWidth = 1200 }) => {
           </div>
         ) : <div style={{ flex: 1 }}/>}
 
-        <nav className="bv-nav-desktop" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <nav className="bv-nav-desktop" style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Link id="guide" label="Guide" href="/guide/"/>
           <Link id="docs" label="Docs" href="/docs/"/>
           <Link id="sdk" label="SDK reference" href="/sdk/python/"/>
           <Link id="community" label="Community" href="/community/"/>
           <Link id="github" label="GitHub" href="https://github.com/beava-dev/beava" external/>
           <Link id="discord" label="Discord" href="https://discord.gg/J5trwbCYpS" external/>
+          {!hideCta && (
+            <a
+              href="https://calendly.com/hoang-beava/30min"
+              target="_blank"
+              rel="noopener"
+              className="bv-nav-cta"
+              style={{
+                marginLeft: 10,
+                padding: '5px 12px',
+                borderRadius: 999,
+                border: '1px solid var(--accent)',
+                fontFamily: 'var(--font-sans)',
+                fontSize: 13,
+                fontWeight: 600,
+                color: 'var(--accent)',
+                textDecoration: 'none',
+                background: 'transparent',
+                whiteSpace: 'nowrap',
+                transition: 'background 120ms, border-color 120ms, color 120ms',
+              }}>
+              Help!
+            </a>
+          )}
         </nav>
 
         <Hamburger/>
