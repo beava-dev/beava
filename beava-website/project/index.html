@@ -168,18 +168,47 @@
     // Cycle through all six so the rotating feed surfaces every vertical.
     const ORDER = ['agent_steps', 'tool_risk', 'cart_momentum', 'view_price', 'user_errors', 'limit_hits'];
 
-    const mintRow = (name, idx, ts) => {
+    // Passive decisions render in green; active in accent orange. Mirror of
+    // PASSIVE_DECISION below; lifted here so the row minter can enforce a
+    // no-3-in-a-row rule on the visible feed.
+    const IS_PASSIVE_RE = /^(continue monitoring|allow|no action|keep .+)$/i;
+    const rowIsPassive = (row) => IS_PASSIVE_RE.test(row.decision);
+
+    // Mint a row, optionally forcing a polarity. Each template's valueOf
+    // range straddles its threshold, so re-rolling up to 24 times almost
+    // always finds the requested polarity; we accept whatever the last
+    // roll produced as a safety fallback so the feed never stalls.
+    const mintRow = (name, idx, ts, forcedPolarity = null) => {
       const t = FEED_TEMPLATES[name];
-      const entity = t.entity();
-      const rawVal = t.valueOf ? t.valueOf() : null;
-      const feat = t.feature(rawVal);
-      const decision = t.decision(rawVal ?? feat.value);
-      const dollars = t.dollars ? t.dollars(rawVal ?? feat.value) : null;
-      return {
-        id: `${ts}-${idx}-${Math.random().toString(36).slice(2,6)}`,
-        ts, event: t.event, entity, feature: feat, decision, dollars,
-        isNew: true,
-      };
+      let row = null;
+      for (let attempt = 0; attempt < 24; attempt++) {
+        const rawVal = t.valueOf ? t.valueOf() : null;
+        const feat = t.feature(rawVal);
+        const decision = t.decision(rawVal ?? feat.value);
+        const dollars = t.dollars ? t.dollars(rawVal ?? feat.value) : null;
+        row = {
+          id: `${ts}-${idx}-${Math.random().toString(36).slice(2,6)}`,
+          ts, event: t.event, entity: t.entity(), feature: feat, decision, dollars,
+          isNew: true,
+        };
+        if (!forcedPolarity) return row;
+        const isPassive = IS_PASSIVE_RE.test(decision);
+        if (forcedPolarity === 'passive' && isPassive) return row;
+        if (forcedPolarity === 'active' && !isPassive) return row;
+      }
+      return row;
+    };
+
+    // Compute a forced polarity for the next row based on the two rows
+    // immediately preceding it (which together with the new row make up
+    // the visible three). If both are the same polarity, force the
+    // opposite so the panel never shows three-of-a-kind in a row.
+    const forcedPolarityFor = (prevRows) => {
+      if (prevRows.length < 2) return null;
+      const a = rowIsPassive(prevRows[0]);
+      const b = rowIsPassive(prevRows[1]);
+      if (a !== b) return null;
+      return a ? 'active' : 'passive';
     };
 
     const seedRows = () => {
@@ -187,10 +216,17 @@
       const initial = ['agent_steps', 'cart_momentum', 'user_errors'];
       // Seed rows are settled history — render without the fresh-row wash so
       // the panel opens calm and only later arrivals get the orange highlight.
-      return initial.map((name, i) => ({
-        ...mintRow(name, i, Date.now() - (initial.length - i) * 1800),
-        isNew: false,
-      }));
+      // Generate newest-first so the no-3-in-a-row rule matches the pushSynthetic
+      // order; the array stays in newest-first order to align with how
+      // pushSynthetic prepends.
+      const rows = [];
+      for (let i = 0; i < initial.length; i++) {
+        const name = initial[initial.length - 1 - i];
+        const ts = Date.now() - i * 1800;
+        const forced = forcedPolarityFor(rows);
+        rows.push({ ...mintRow(name, i, ts, forced), isNew: false });
+      }
+      return rows;
     };
 
     const ageLabel = (ts, now) => {
@@ -214,7 +250,11 @@
       const pushSynthetic = React.useCallback((eventName) => {
         setRows(prev => {
           const ts = Date.now();
-          const row = mintRow(eventName, prev.length, ts);
+          // If the two most-recent rows are the same polarity, force the new
+          // row to the opposite polarity — the visible 3 are never all green
+          // or all orange.
+          const forced = forcedPolarityFor(prev);
+          const row = mintRow(eventName, prev.length, ts, forced);
           return [row, ...prev.map(r => ({ ...r, isNew: false }))].slice(0, 3);
         });
       }, []);
@@ -260,11 +300,10 @@
     // rows in green so the reader sees at a glance which rows fired and
     // which didn't, instead of every row looking like a fired alert.
     // Active decisions ("pause", "require approval", "boost", "launch
-    // setup rescue", "show upgrade path", "send usage tip") keep the
-    // existing accent orange.
-    const PASSIVE_DECISION = /^(continue monitoring|allow|no action|keep .+)$/i;
+    // setup rescue", "show upgrade path") keep the existing accent orange.
+    // The regex itself is defined once near `mintRow` as IS_PASSIVE_RE.
     const DecisionCell = ({ text }) => {
-      const passive = PASSIVE_DECISION.test(text);
+      const passive = IS_PASSIVE_RE.test(text);
       const color = passive ? 'var(--beava-success)' : 'var(--accent)';
       return (
         <span style={{
