@@ -22,6 +22,7 @@
 //! These tests RED on current main and GREEN after the fix that routes the
 //! caller's pre_val through the windowed arm.
 
+use beava_core::agg_buffer::EventTypeMixState;
 use beava_core::agg_op::{AggKind, AggOp, ExtractedFields, FIELD_IDX_NONE, SketchParams};
 use beava_core::agg_windowed::WindowedOp;
 use beava_core::row::{Row, Value};
@@ -157,4 +158,52 @@ fn windowed_top_k_captures_caller_pre_val_not_extracted_field_idx() {
         !rendered.contains("220"),
         "windowed TopK must NOT surface the wrong extracted slot (220.0); got {rendered}"
     );
+}
+
+// ── Test 4: EventTypeMix honours caller's pre_val (same bug class) ──────────
+
+/// `EventTypeMixState::update_at` was reading
+/// `extracted[field_idx]` directly, with the same agg-local-vs-union
+/// confusion as `WindowedOp::update_at`. The dispatcher at
+/// `AggOp::update_with_extracted_no_where` for `AggOp::EventTypeMix` had
+/// already computed the correct `pre_val`; the windowed and event-type-mix
+/// arms were the only two that ignored it.
+///
+/// Same setup as the windowed tests: caller passes the correct `pre_val`
+/// (`"CORRECT"`), but `extracted[field_idx]` holds a different value
+/// (`"WRONG"`). After the fix, EventTypeMix must count `"CORRECT"`.
+#[test]
+fn event_type_mix_uses_caller_pre_val_not_extracted_field_idx() {
+    let mut op = AggOp::EventTypeMix(Box::new(EventTypeMixState::new(10, None)));
+
+    let correct = Value::Str("CORRECT".into());
+    let wrong = Value::Str("WRONG".into());
+    // Two-slot extracted; the wrong value is at the slot field_idx points to.
+    let extracted: ExtractedFields<'_> = smallvec![Some(&wrong), Some(&correct)];
+
+    op.update_with_extracted(
+        Some(&correct),
+        100,
+        None,
+        &Row::new(),
+        Some("event_type"),
+        0,
+        &extracted,
+        FIELD_IDX_NONE,
+        FIELD_IDX_NONE,
+    );
+
+    match op.query(999) {
+        Value::Map(m) => {
+            assert!(
+                m.contains_key("CORRECT"),
+                "EventTypeMix must count caller's pre_val ('CORRECT'); got {m:?}"
+            );
+            assert!(
+                !m.contains_key("WRONG"),
+                "EventTypeMix must NOT count the wrong extracted slot ('WRONG'); got {m:?}"
+            );
+        }
+        other => panic!("expected Value::Map, got {other:?}"),
+    }
 }
