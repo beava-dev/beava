@@ -144,13 +144,34 @@ def _make_event(name: str) -> tuple[str, dict, str]:
 
 
 def _decide(scenario: str, feature_value) -> str:
+    """Pick a decision label given the current feature value.
+
+    Each scenario has at least one **passive** branch ("continue
+    monitoring", "allow", "keep …") for the case where the feature
+    hasn't crossed an action threshold. The homepage feed renders
+    those in green so the reader can scan the panel and see which
+    rows fired and which didn't — every-row-orange reads as
+    every-row-fired, which is wrong.
+    """
     if scenario == "login_failed":
-        return "require verification" if (feature_value or 0) >= 5 else "increase risk score"
+        n = feature_value or 0
+        if n >= 5:
+            return "require verification"
+        if n >= 2:
+            return "increase risk score"
+        return "continue monitoring"
     if scenario == "product_clicked":
-        return "refresh recommendations"
+        n = feature_value or 0
+        if n >= 5:
+            return "refresh recommendations"
+        return "keep default recommendations"
     if scenario == "llm_request":
         kilo = (feature_value or 0) / 1000.0
-        return "throttle expensive model" if kilo >= 90 else "route to cheap model"
+        if kilo >= 90:
+            return "throttle expensive model"
+        if kilo >= 30:
+            return "route to cheap model"
+        return "allow"
     return ""
 
 
