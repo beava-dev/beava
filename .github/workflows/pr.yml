@@ -106,8 +106,12 @@ jobs:
           python-version: "3.11"
 
       - name: Install Python dependencies
+        # `pytest-cov` is informational here — `--cov-fail-under` is
+        # deliberately omitted from the pytest invocation below so coverage
+        # drift surfaces in the PR summary without blocking merges. Promote
+        # to a gate once a baseline stabilises.
         run: |
-          pip install pytest ruff mypy
+          pip install pytest pytest-cov ruff mypy
           pip install -e python/
 
       - name: ruff check
@@ -121,7 +125,11 @@ jobs:
       - name: Run Python tests (v0 acceptance suite via pyproject testpaths)
         id: python_tests
         run: |
-          cd python && python -m pytest -v 2>&1 | tee /tmp/python-test-output.txt
+          cd python && python -m pytest -v \
+            --cov=beava \
+            --cov-report=term \
+            --cov-report=term-missing:skip-covered \
+            2>&1 | tee /tmp/python-test-output.txt
 
       - name: Add Python summary
         if: always()
@@ -129,4 +137,66 @@ jobs:
           echo "## Python Test Results" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           tail -10 /tmp/python-test-output.txt >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "No test output captured" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "## Python coverage (pytest-cov, informational)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          # Slice between the "---------- coverage" line and the "TOTAL" line +
+          # one line of trailing context. Falls back to the full tail if the
+          # markers aren't found (e.g. test run failed before coverage emit).
+          awk '/^---+ coverage/{flag=1} flag; /^TOTAL/{flag=0; print ""; exit}' \
+            /tmp/python-test-output.txt >> "$GITHUB_STEP_SUMMARY" 2>/dev/null \
+            || echo "No coverage block captured" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  coverage-rust:
+    name: Rust coverage (informational)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # Informational only — does not gate. Runs in parallel with the `rust` job
+    # rather than serialised behind it because llvm-cov rebuilds with
+    # instrumentation flags (separate target/ tree), so there's no cache reuse
+    # benefit to ordering.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-coverage-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
+          restore-keys: |
+            rust-coverage-${{ runner.os }}-
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov,cargo-nextest
+
+      - name: Run cargo llvm-cov
+        # `--features testing` mirrors the gate jobs above. `--summary-only`
+        # prints the per-crate + workspace `% lines / regions / functions`
+        # table to stdout; no HTML / lcov artefact is produced (kept light).
+        run: |
+          cargo llvm-cov nextest \
+            --workspace \
+            --features testing \
+            --summary-only \
+            2>&1 | tee /tmp/rust-cov-output.txt
+
+      - name: Add coverage summary
+        if: always()
+        run: |
+          echo "## Rust coverage (cargo-llvm-cov, informational)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          # The summary table appears after the test results; slice from the
+          # `Filename` header (which leads the table) through the `TOTAL` row.
+          awk '/^Filename/{flag=1} flag; /^TOTAL/{flag=0; print ""; exit}' \
+            /tmp/rust-cov-output.txt >> "$GITHUB_STEP_SUMMARY" 2>/dev/null \
+            || tail -30 /tmp/rust-cov-output.txt >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
