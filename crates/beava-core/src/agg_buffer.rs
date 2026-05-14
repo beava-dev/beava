@@ -13,7 +13,6 @@
 //! deterministic xorshift seeded from `items_seen`).
 //! D-08 (Phase 11 CONTEXT): all operators are lifetime / windowless in v0.
 
-use crate::agg_op::{ExtractedFields, FIELD_IDX_NONE};
 use crate::row::{Row, Value};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;

@@ -23,7 +23,7 @@
 //! caller's pre_val through the windowed arm.
 
 use beava_core::agg_buffer::EventTypeMixState;
-use beava_core::agg_op::{AggKind, AggOp, ExtractedFields, FIELD_IDX_NONE, SketchParams};
+use beava_core::agg_op::{AggKind, AggOp, ExtractedFields, SketchParams, FIELD_IDX_NONE};
 use beava_core::agg_windowed::WindowedOp;
 use beava_core::row::{Row, Value};
 use smallvec::smallvec;
@@ -85,12 +85,26 @@ fn windowed_avg_uses_caller_pre_val_and_does_not_return_null() {
     let extracted: ExtractedFields<'_> = smallvec![Some(&wrong_slot)];
 
     op.update_with_extracted(
-        Some(&v1), 100, None, &Row::new(), Some("price"),
-        0, &extracted, FIELD_IDX_NONE, FIELD_IDX_NONE,
+        Some(&v1),
+        100,
+        None,
+        &Row::new(),
+        Some("price"),
+        0,
+        &extracted,
+        FIELD_IDX_NONE,
+        FIELD_IDX_NONE,
     );
     op.update_with_extracted(
-        Some(&v2), 200, None, &Row::new(), Some("price"),
-        0, &extracted, FIELD_IDX_NONE, FIELD_IDX_NONE,
+        Some(&v2),
+        200,
+        None,
+        &Row::new(),
+        Some("price"),
+        0,
+        &extracted,
+        FIELD_IDX_NONE,
+        FIELD_IDX_NONE,
     );
 
     match op.query(999) {
