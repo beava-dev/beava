@@ -56,6 +56,10 @@ path = "src/lib.rs"
 name = "beava-bench"
 path = "src/bin/beava-bench.rs"
 
+[[bin]]
+name = "memprofile"
+path = "src/bin/memprofile.rs"
+
 [[bench]]
 name = "blast_shape_bench"
 harness = false

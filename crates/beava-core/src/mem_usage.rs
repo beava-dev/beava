@@ -1,0 +1,493 @@
+//! Deterministic structural memory accounting for aggregation state.
+//!
+//! This is intentionally not allocator instrumentation. It reports stable,
+//! platform-independent estimates from owned state shape: inline stack slots,
+//! `Box<T>` payloads, vector capacity, sketch backing stores, and documented
+//! map overhead estimates.
+
+use crate::agg_op::AggOp;
+use crate::row::Value;
+use serde::Serialize;
+use std::collections::VecDeque;
+use std::mem::{size_of, size_of_val};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemBreakdown {
+    pub label: String,
+    pub bytes: usize,
+    pub kind: String,
+    pub note: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemProfile {
+    pub label: String,
+    pub stack_bytes: usize,
+    pub heap_bytes: usize,
+    pub breakdown: Vec<MemBreakdown>,
+}
+
+impl MemProfile {
+    pub fn new(label: impl Into<String>, stack_bytes: usize) -> Self {
+        Self {
+            label: label.into(),
+            stack_bytes,
+            heap_bytes: 0,
+            breakdown: Vec::new(),
+        }
+    }
+
+    pub fn total_bytes(&self) -> usize {
+        self.stack_bytes + self.heap_bytes
+    }
+
+    pub fn add_breakdown(
+        &mut self,
+        label: impl Into<String>,
+        bytes: usize,
+        kind: impl Into<String>,
+        note: impl Into<String>,
+    ) {
+        if bytes == 0 {
+            return;
+        }
+        self.heap_bytes = self.heap_bytes.saturating_add(bytes);
+        self.breakdown.push(MemBreakdown {
+            label: label.into(),
+            bytes,
+            kind: kind.into(),
+            note: note.into(),
+        });
+    }
+
+    pub fn absorb_nested(&mut self, prefix: &str, nested: MemProfile) {
+        self.add_breakdown(
+            format!("{prefix} stack payload"),
+            nested.stack_bytes,
+            "nested_stack",
+            "nested AggOp stored inside an owned heap allocation",
+        );
+        for entry in nested.breakdown {
+            self.add_breakdown(
+                format!("{prefix} / {}", entry.label),
+                entry.bytes,
+                entry.kind,
+                entry.note,
+            );
+        }
+    }
+}
+
+pub trait MemUsage {
+    fn mem_profile(&self) -> MemProfile;
+}
+
+pub fn sort_profiles_desc(rows: &mut [MemProfile]) {
+    rows.sort_by(|a, b| {
+        b.total_bytes()
+            .cmp(&a.total_bytes())
+            .then_with(|| a.label.cmp(&b.label))
+    });
+}
+
+pub fn vec_heap_bytes<T>(vec: &Vec<T>) -> usize {
+    vec.capacity().saturating_mul(size_of::<T>())
+}
+
+pub fn vecdeque_heap_bytes<T>(deque: &VecDeque<T>) -> usize {
+    deque.capacity().saturating_mul(size_of::<T>())
+}
+
+pub fn serialized_heap_estimate<T: Serialize>(value: &T) -> usize {
+    serde_json::to_vec(value).map(|v| v.len()).unwrap_or(0)
+}
+
+pub fn estimated_btree_map_heap_bytes(len: usize, key_value_bytes: usize) -> usize {
+    const BTREE_ENTRY_OVERHEAD: usize = 32;
+    len.saturating_mul(key_value_bytes.saturating_add(BTREE_ENTRY_OVERHEAD))
+}
+
+pub fn estimated_hash_map_heap_bytes(capacity: usize, key_value_bytes: usize) -> usize {
+    const HASH_ENTRY_OVERHEAD: usize = 24;
+    capacity.saturating_mul(key_value_bytes.saturating_add(HASH_ENTRY_OVERHEAD))
+}
+
+#[cfg(test)]
+fn serde_profile<T: Serialize>(label: &str, value: &T) -> MemProfile {
+    let mut profile = MemProfile::new(label, size_of_val(value));
+    profile.add_breakdown(
+        format!("{label} serialized owned state estimate"),
+        serialized_heap_estimate(value),
+        "estimate",
+        "deterministic serialized-size proxy for private owned heap fields",
+    );
+    profile
+}
+
+fn value_vec_breakdown(profile: &mut MemProfile, label: &str, values: &Vec<Value>) {
+    profile.add_breakdown(
+        label,
+        vec_heap_bytes(values),
+        "Vec",
+        "capacity * size_of::<Value>()",
+    );
+}
+
+fn value_deque_breakdown(profile: &mut MemProfile, label: &str, values: &VecDeque<Value>) {
+    profile.add_breakdown(
+        label,
+        vecdeque_heap_bytes(values),
+        "VecDeque",
+        "capacity * size_of::<Value>()",
+    );
+}
+
+impl MemUsage for AggOp {
+    fn mem_profile(&self) -> MemProfile {
+        let mut profile = MemProfile::new(aggop_label(self), size_of::<AggOp>());
+        match self {
+            AggOp::Count(_)
+            | AggOp::Sum(_)
+            | AggOp::Avg(_)
+            | AggOp::Min(_)
+            | AggOp::Max(_)
+            | AggOp::Variance(_)
+            | AggOp::StdDev(_)
+            | AggOp::Ratio(_)
+            | AggOp::First(_)
+            | AggOp::Last(_)
+            | AggOp::FirstSeen(_)
+            | AggOp::LastSeen(_)
+            | AggOp::Age(_)
+            | AggOp::HasSeen(_)
+            | AggOp::TimeSince(_)
+            | AggOp::Streak(_)
+            | AggOp::MaxStreak(_)
+            | AggOp::NegativeStreak(_)
+            | AggOp::FirstSeenInWindow(_)
+            | AggOp::Ewma(_)
+            | AggOp::EwVar(_)
+            | AggOp::EwZScore(_)
+            | AggOp::DecayedSum(_)
+            | AggOp::DecayedCount(_)
+            | AggOp::Twa(_)
+            | AggOp::RateOfChange(_)
+            | AggOp::InterArrivalStats(_)
+            | AggOp::DeltaFromPrev(_)
+            | AggOp::Trend(_)
+            | AggOp::TrendResidual(_)
+            | AggOp::OutlierCount(_)
+            | AggOp::ValueChangeCount(_)
+            | AggOp::ZScore(_) => {}
+
+            AggOp::FirstN(s) => value_vec_breakdown(&mut profile, "FirstN values", &s.values),
+            AggOp::LastN(s) => value_deque_breakdown(&mut profile, "LastN values", &s.values),
+            AggOp::Lag(s) => value_deque_breakdown(&mut profile, "Lag values", &s.values),
+            AggOp::TimeSinceLastN(s) => profile.add_breakdown(
+                "TimeSinceLastN timestamps",
+                vecdeque_heap_bytes(&s.times_ms),
+                "VecDeque",
+                "capacity * size_of::<i64>()",
+            ),
+            AggOp::BurstCount(op) => {
+                profile.add_breakdown(
+                    "BurstCount buckets",
+                    vec_heap_bytes(&op.state.buckets),
+                    "Vec",
+                    "capacity * size_of::<u64>()",
+                );
+                profile.add_breakdown(
+                    "BurstCount bucket_epoch",
+                    vec_heap_bytes(&op.state.bucket_epoch),
+                    "Vec",
+                    "capacity * size_of::<i64>()",
+                );
+            }
+            AggOp::Histogram(s) => {
+                profile.add_breakdown(
+                    "Histogram split points",
+                    vec_heap_bytes(&s.buckets),
+                    "Vec",
+                    "capacity * size_of::<f64>()",
+                );
+                profile.add_breakdown(
+                    "Histogram counts",
+                    vec_heap_bytes(&s.counts),
+                    "Vec",
+                    "capacity * size_of::<u64>()",
+                );
+            }
+            AggOp::DowHourHistogram(s) => profile.add_breakdown(
+                "DowHourHistogram counts",
+                vec_heap_bytes(&s.counts),
+                "Vec",
+                "capacity * size_of::<u64>()",
+            ),
+            AggOp::MostRecentN(s) => {
+                value_vec_breakdown(&mut profile, "MostRecentN buffer", &s.buf)
+            }
+            AggOp::ReservoirSample(s) => {
+                value_vec_breakdown(&mut profile, "ReservoirSample reservoir", &s.reservoir)
+            }
+            AggOp::EventTypeMix(s) => {
+                let boxed_bytes = size_of_val(&**s);
+                profile.add_breakdown(
+                    "Box<EventTypeMixState>",
+                    boxed_bytes,
+                    "Box",
+                    "heap allocation for boxed payload",
+                );
+                profile.add_breakdown(
+                    "EventTypeMix BTreeMap entries",
+                    estimated_btree_map_heap_bytes(s.counts.len(), 48),
+                    "BTreeMap",
+                    "estimated node overhead plus String/u64 payload",
+                );
+                if let Some(allowed) = &s.allowed {
+                    profile.add_breakdown(
+                        "EventTypeMix allowed categories",
+                        vec_heap_bytes(allowed),
+                        "Vec",
+                        "capacity * size_of::<String>()",
+                    );
+                }
+            }
+            AggOp::HourOfDayHistogram(s) => {
+                add_boxed_serialized(&mut profile, "HourOfDayHistogram", &**s)
+            }
+            AggOp::SeasonalDeviation(s) => {
+                add_boxed_serialized(&mut profile, "SeasonalDeviation", &**s)
+            }
+            AggOp::GeoVelocity(s) => add_boxed_serialized(&mut profile, "GeoVelocity", &**s),
+            AggOp::GeoDistance(s) => add_boxed_serialized(&mut profile, "GeoDistance", &**s),
+            AggOp::GeoSpread(s) => add_boxed_serialized(&mut profile, "GeoSpread", &**s),
+            AggOp::DistanceFromHome(s) => {
+                profile.add_breakdown(
+                    "Box<DistanceFromHomeState>",
+                    size_of_val(&**s),
+                    "Box",
+                    "heap allocation for boxed payload",
+                );
+                profile.add_breakdown(
+                    "DistanceFromHome coordinate buffer",
+                    vec_heap_bytes(&s.buf),
+                    "Vec",
+                    "capacity * size_of::<(f64, f64)>()",
+                );
+            }
+
+            AggOp::CountDistinct(s) => add_boxed_serialized(&mut profile, "CountDistinct", &**s),
+            AggOp::Percentile(s) => add_boxed_serialized(&mut profile, "Percentile", &**s),
+            AggOp::TopK(s) => add_boxed_serialized(&mut profile, "TopK", &**s),
+            AggOp::BloomMember(s) => add_boxed_serialized(&mut profile, "BloomMember", &**s),
+            AggOp::Entropy(s) => add_boxed_serialized(&mut profile, "Entropy", &**s),
+
+            AggOp::Windowed(w) => {
+                profile.add_breakdown(
+                    "Box<WindowedOp>",
+                    size_of_val(&**w),
+                    "Box",
+                    "heap allocation for boxed WindowedOp payload",
+                );
+                if w.buckets.spilled() {
+                    profile.add_breakdown(
+                        "WindowedOp spilled bucket SmallVec",
+                        w.buckets
+                            .capacity()
+                            .saturating_mul(size_of::<(i64, Box<AggOp>)>()),
+                        "SmallVec",
+                        "spilled capacity * size_of::<(i64, Box<AggOp>)>()",
+                    );
+                }
+                for (idx, (_, bucket)) in w.buckets.iter().enumerate() {
+                    let nested = bucket.mem_profile();
+                    profile.add_breakdown(
+                        format!("Windowed bucket {idx} Box<AggOp>"),
+                        size_of::<AggOp>(),
+                        "Box",
+                        "heap allocation for bucket AggOp enum slot",
+                    );
+                    for entry in nested.breakdown {
+                        profile.add_breakdown(
+                            format!("Windowed bucket {idx} / {}", entry.label),
+                            entry.bytes,
+                            entry.kind,
+                            entry.note,
+                        );
+                    }
+                }
+            }
+        }
+        profile
+    }
+}
+
+fn add_boxed_serialized<T: Serialize>(profile: &mut MemProfile, label: &str, value: &T) {
+    profile.add_breakdown(
+        format!("Box<{label}>"),
+        size_of_val(value),
+        "Box",
+        "heap allocation for boxed payload",
+    );
+    profile.add_breakdown(
+        format!("{label} owned internals"),
+        serialized_heap_estimate(value),
+        "estimate",
+        "deterministic serialized-size proxy for private sketch/container internals",
+    );
+}
+
+fn aggop_label(op: &AggOp) -> String {
+    match op {
+        AggOp::Count(_) => "Count",
+        AggOp::Sum(_) => "Sum",
+        AggOp::Avg(_) => "Avg",
+        AggOp::Min(_) => "Min",
+        AggOp::Max(_) => "Max",
+        AggOp::Variance(_) => "Variance",
+        AggOp::StdDev(_) => "StdDev",
+        AggOp::Ratio(_) => "Ratio",
+        AggOp::CountDistinct(_) => "CountDistinct",
+        AggOp::Percentile(_) => "Percentile",
+        AggOp::TopK(_) => "TopK",
+        AggOp::BloomMember(_) => "BloomMember",
+        AggOp::Entropy(_) => "Entropy",
+        AggOp::Windowed(_) => "Windowed",
+        AggOp::First(_) => "First",
+        AggOp::Last(_) => "Last",
+        AggOp::FirstN(_) => "FirstN",
+        AggOp::LastN(_) => "LastN",
+        AggOp::Lag(_) => "Lag",
+        AggOp::FirstSeen(_) => "FirstSeen",
+        AggOp::LastSeen(_) => "LastSeen",
+        AggOp::Age(_) => "Age",
+        AggOp::HasSeen(_) => "HasSeen",
+        AggOp::TimeSince(_) => "TimeSince",
+        AggOp::TimeSinceLastN(_) => "TimeSinceLastN",
+        AggOp::Streak(_) => "Streak",
+        AggOp::MaxStreak(_) => "MaxStreak",
+        AggOp::NegativeStreak(_) => "NegativeStreak",
+        AggOp::FirstSeenInWindow(_) => "FirstSeenInWindow",
+        AggOp::Ewma(_) => "Ewma",
+        AggOp::EwVar(_) => "EwVar",
+        AggOp::EwZScore(_) => "EwZScore",
+        AggOp::DecayedSum(_) => "DecayedSum",
+        AggOp::DecayedCount(_) => "DecayedCount",
+        AggOp::Twa(_) => "Twa",
+        AggOp::RateOfChange(_) => "RateOfChange",
+        AggOp::InterArrivalStats(_) => "InterArrivalStats",
+        AggOp::BurstCount(_) => "BurstCount",
+        AggOp::DeltaFromPrev(_) => "DeltaFromPrev",
+        AggOp::Trend(_) => "Trend",
+        AggOp::TrendResidual(_) => "TrendResidual",
+        AggOp::OutlierCount(_) => "OutlierCount",
+        AggOp::ValueChangeCount(_) => "ValueChangeCount",
+        AggOp::ZScore(_) => "ZScore",
+        AggOp::Histogram(_) => "Histogram",
+        AggOp::HourOfDayHistogram(_) => "HourOfDayHistogram",
+        AggOp::DowHourHistogram(_) => "DowHourHistogram",
+        AggOp::SeasonalDeviation(_) => "SeasonalDeviation",
+        AggOp::EventTypeMix(_) => "EventTypeMix",
+        AggOp::MostRecentN(_) => "MostRecentN",
+        AggOp::ReservoirSample(_) => "ReservoirSample",
+        AggOp::GeoVelocity(_) => "GeoVelocity",
+        AggOp::GeoDistance(_) => "GeoDistance",
+        AggOp::GeoSpread(_) => "GeoSpread",
+        AggOp::DistanceFromHome(_) => "DistanceFromHome",
+    }
+    .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::agg_op::{AggKind, AggOp, AggOpDescriptor};
+    use crate::row::{Row, Value};
+
+    #[test]
+    fn mem_usage_total_bytes_adds_stack_and_heap() {
+        let mut profile = MemProfile::new("sample", 80);
+        profile.add_breakdown("vec", 32, "Vec", "test");
+        profile.add_breakdown("box", 16, "Box", "test");
+        assert_eq!(profile.total_bytes(), 128);
+    }
+
+    #[test]
+    fn mem_usage_scalar_aggop_reports_enum_stack_slot() {
+        let profile = AggOp::Count(Default::default()).mem_profile();
+        assert_eq!(profile.stack_bytes, size_of::<AggOp>());
+    }
+
+    #[test]
+    fn mem_usage_boxed_sketch_reports_box_breakdown() {
+        let profile = AggOp::new(&AggOpDescriptor {
+            kind: AggKind::Percentile,
+            ..Default::default()
+        })
+        .mem_profile();
+        assert!(profile.breakdown.iter().any(|b| b.label.contains("Box")));
+    }
+
+    #[test]
+    fn mem_usage_vector_backed_state_reports_capacity_bytes() {
+        let mut op = AggOp::new(&AggOpDescriptor {
+            kind: AggKind::FirstN,
+            field: Some("merchant_id".into()),
+            n: Some(5),
+            ..Default::default()
+        });
+        let row = Row::new().with_field("merchant_id", Value::Str("m1".into()));
+        op.update(&row, 1, Some("merchant_id"), true);
+        let profile = op.mem_profile();
+        assert!(profile
+            .breakdown
+            .iter()
+            .any(|b| b.label == "FirstN values" && b.bytes >= size_of::<Value>()));
+    }
+
+    #[test]
+    fn mem_usage_windowed_state_reports_nested_bucket() {
+        let mut op = AggOp::new(&AggOpDescriptor {
+            kind: AggKind::Sum,
+            field: Some("amount".into()),
+            window_ms: Some(60_000),
+            ..Default::default()
+        });
+        let row = Row::new().with_field("amount", Value::F64(42.0));
+        op.update(&row, 1_000, Some("amount"), true);
+        let profile = op.mem_profile();
+        assert!(profile
+            .breakdown
+            .iter()
+            .any(|b| b.label.contains("Windowed bucket 0 Box<AggOp>")));
+    }
+
+    #[test]
+    fn mem_usage_map_backed_state_labels_estimate() {
+        let mut op = AggOp::new(&AggOpDescriptor {
+            kind: AggKind::EventTypeMix,
+            field: Some("mcc".into()),
+            ..Default::default()
+        });
+        let row = Row::new().with_field("mcc", Value::Str("5411".into()));
+        op.update(&row, 1, Some("mcc"), true);
+        let profile = op.mem_profile();
+        assert!(profile
+            .breakdown
+            .iter()
+            .any(|b| b.note.contains("estimated")));
+    }
+
+    #[test]
+    fn mem_usage_sort_profiles_desc_orders_by_total_bytes() {
+        let mut rows = vec![MemProfile::new("small", 1), MemProfile::new("large", 10)];
+        sort_profiles_desc(&mut rows);
+        assert_eq!(rows[0].label, "large");
+    }
+
+    #[test]
+    fn serde_profile_estimate_is_deterministic() {
+        let profile = serde_profile("value", &serde_json::json!({"a": 1}));
+        assert!(profile.heap_bytes > 0);
+    }
+}
