@@ -107,6 +107,31 @@ impl UDDSketch {
     }
 
     #[inline]
+    pub fn positive_bucket_capacity(&self) -> usize {
+        self.pos_buckets.capacity()
+    }
+
+    #[inline]
+    pub fn negative_bucket_capacity(&self) -> usize {
+        self.neg_buckets.capacity()
+    }
+
+    #[inline]
+    pub fn positive_bucket_len(&self) -> usize {
+        self.pos_buckets.len()
+    }
+
+    #[inline]
+    pub fn negative_bucket_len(&self) -> usize {
+        self.neg_buckets.len()
+    }
+
+    #[inline]
+    pub fn zero_count(&self) -> u64 {
+        self.zero_count
+    }
+
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.total_count == 0
     }

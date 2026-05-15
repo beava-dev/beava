@@ -11,7 +11,7 @@ fn memprofile_smoke_writes_required_sections() {
             "--workload",
             "fraud",
             "--events",
-            "5",
+            "50",
             "--output",
             output.to_str().expect("utf8 path"),
         ])
@@ -24,4 +24,10 @@ fn memprofile_smoke_writes_required_sections() {
     assert!(report.contains("## Top 5 Offenders"));
     assert!(report.contains("## Metrics Coherence"));
     assert!(report.contains("Aggregate features discovered: `111`"));
+    assert!(report.contains("| Rank | Op | Shape |"));
+    assert!(report.contains("`windowed`"));
+    assert!(report.contains("`lifetime`"));
+    assert!(report.contains("- Breakdown rollup:"));
+    assert!(report.contains("Windowed wrapper overhead"));
+    assert!(!report.contains("CountDistinct owned internals"));
 }

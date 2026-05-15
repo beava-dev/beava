@@ -50,6 +50,9 @@ impl BloomFilter {
     pub fn num_hashes(&self) -> u32 {
         self.num_hashes
     }
+    pub fn word_capacity(&self) -> usize {
+        self.words.capacity()
+    }
 
     fn base_hashes(&self, value: &str) -> (u64, u64) {
         // Use process-static RandomState instead of per-call

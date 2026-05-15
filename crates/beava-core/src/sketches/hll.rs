@@ -105,6 +105,10 @@ impl Hll {
         Self::default()
     }
 
+    pub fn register_capacity(&self) -> usize {
+        self.registers.capacity()
+    }
+
     /// SplitMix64 — improves the avalanche / uniform-distribution properties
     /// of the input hash, which is critical for HLL accuracy when callers
     /// pass hashes from a non-cryptographic hasher (ahash etc.).

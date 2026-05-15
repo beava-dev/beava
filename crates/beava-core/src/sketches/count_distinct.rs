@@ -88,6 +88,13 @@ impl CountDistinctState {
         }
     }
 
+    pub fn hash_set_capacity(&self) -> Option<usize> {
+        match self {
+            CountDistinctState::HashSet { hashes } => Some(hashes.capacity()),
+            _ => None,
+        }
+    }
+
     /// Insert a precomputed u64 hash. Promotes mode if threshold exceeded.
     ///
     /// The input u64 is expected to come from a FxHasher-backed hasher;

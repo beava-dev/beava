@@ -2,7 +2,7 @@
 
 use anyhow::{anyhow, Context, Result};
 use beava_core::agg_op::{AggExtParams, AggKind, AggOp, AggOpDescriptor, SketchParams};
-use beava_core::mem_usage::{sort_profiles_desc, MemBreakdown, MemProfile, MemUsage};
+use beava_core::mem_usage::{MemBreakdown, MemProfile, MemUsage};
 use beava_core::row::{Row, Value};
 use clap::Parser;
 use serde_json::Value as JsonValue;
@@ -38,8 +38,32 @@ struct ProfileRow {
     derivation: String,
     feature: String,
     op_name: String,
+    shape: ProfileShape,
+    window_ms: Option<u64>,
     profile: MemProfile,
     recommendation: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum ProfileShape {
+    Lifetime,
+    Windowed,
+}
+
+impl ProfileShape {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Lifetime => "lifetime",
+            Self::Windowed => "windowed",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct OpTotal {
+    op_name: String,
+    shape: ProfileShape,
+    profile: MemProfile,
 }
 
 struct ReportInput<'a> {
@@ -48,7 +72,7 @@ struct ReportInput<'a> {
     derivation_count: usize,
     feature_count: usize,
     rows: &'a [ProfileRow],
-    op_totals: &'a [MemProfile],
+    op_totals: &'a [OpTotal],
     per_entity_total: usize,
     metrics_placeholder: u64,
     tolerance: f64,
@@ -77,11 +101,14 @@ fn build_report(args: &Args) -> Result<String> {
         }
         let mut profile = op.mem_profile();
         profile.label = format!("{}::{} ({})", spec.derivation, spec.feature, spec.op_name);
+        let shape = profile_shape(&spec.desc);
         rows.push(ProfileRow {
             derivation: spec.derivation.clone(),
             feature: spec.feature.clone(),
             op_name: spec.op_name.clone(),
-            recommendation: recommendation_for(&spec.op_name, &profile),
+            shape,
+            window_ms: spec.desc.window_ms,
+            recommendation: recommendation_for(&spec.op_name, shape, &profile),
             profile,
         });
     }
@@ -93,26 +120,36 @@ fn build_report(args: &Args) -> Result<String> {
             .then_with(|| a.profile.label.cmp(&b.profile.label))
     });
 
-    let mut grouped: BTreeMap<String, Vec<MemProfile>> = BTreeMap::new();
+    let mut grouped: BTreeMap<(String, ProfileShape), Vec<MemProfile>> = BTreeMap::new();
     for row in &rows {
         grouped
-            .entry(row.op_name.clone())
+            .entry((row.op_name.clone(), row.shape))
             .or_default()
             .push(row.profile.clone());
     }
-    let mut op_totals: Vec<MemProfile> = grouped
+    let mut op_totals: Vec<OpTotal> = grouped
         .into_iter()
-        .map(|(op, profiles)| {
-            let mut total = MemProfile::new(op, 0);
+        .map(|((op_name, shape), profiles)| {
+            let mut total = MemProfile::new(op_name.clone(), 0);
             for profile in profiles {
                 total.stack_bytes += profile.stack_bytes;
                 total.heap_bytes += profile.heap_bytes;
                 total.breakdown.extend(profile.breakdown);
             }
-            total
+            OpTotal {
+                op_name,
+                shape,
+                profile: total,
+            }
         })
         .collect();
-    sort_profiles_desc(&mut op_totals);
+    op_totals.sort_by(|a, b| {
+        b.profile
+            .total_bytes()
+            .cmp(&a.profile.total_bytes())
+            .then_with(|| a.op_name.cmp(&b.op_name))
+            .then_with(|| a.shape.cmp(&b.shape))
+    });
 
     let per_entity_total: usize = rows.iter().map(|r| r.profile.total_bytes()).sum();
     Ok(render_markdown(ReportInput {
@@ -148,16 +185,17 @@ fn render_markdown(input: ReportInput<'_>) -> String {
     ));
 
     out.push_str("## Sorted Op Table\n\n");
-    out.push_str("| Rank | Op | Stack bytes | Heap bytes | Total bytes |\n");
-    out.push_str("|------|----|-------------|------------|-------------|\n");
+    out.push_str("| Rank | Op | Shape | Stack bytes | Heap bytes | Total bytes |\n");
+    out.push_str("|------|----|-------|-------------|------------|-------------|\n");
     for (idx, profile) in input.op_totals.iter().enumerate() {
         out.push_str(&format!(
-            "| {} | `{}` | {} | {} | {} |\n",
+            "| {} | `{}` | `{}` | {} | {} | {} |\n",
             idx + 1,
-            profile.label,
-            profile.stack_bytes,
-            profile.heap_bytes,
-            profile.total_bytes()
+            profile.op_name,
+            profile.shape.as_str(),
+            profile.profile.stack_bytes,
+            profile.profile.heap_bytes,
+            profile.profile.total_bytes()
         ));
     }
 
@@ -176,8 +214,24 @@ fn render_markdown(input: ReportInput<'_>) -> String {
             row.profile.heap_bytes,
             row.profile.total_bytes()
         ));
+        out.push_str(&format!(
+            "- Shape: `{}`{}\n",
+            row.shape.as_str(),
+            format_window_suffix(row.window_ms)
+        ));
         out.push_str(&format!("- Recommendation: {}\n", row.recommendation));
-        out.push_str("- Breakdown:\n");
+        if row.shape == ProfileShape::Windowed {
+            out.push_str("- Breakdown rollup:\n");
+            for entry in windowed_rollup(&row.profile.breakdown) {
+                out.push_str(&format!(
+                    "  - `{}`: {} bytes ({}, {})\n",
+                    entry.label, entry.bytes, entry.kind, entry.note
+                ));
+            }
+            out.push_str("- Raw breakdown:\n");
+        } else {
+            out.push_str("- Breakdown:\n");
+        }
         for entry in top_breakdown(&row.profile.breakdown, 8) {
             out.push_str(&format!(
                 "  - `{}`: {} bytes ({}, {})\n",
@@ -225,21 +279,96 @@ fn top_breakdown(entries: &[MemBreakdown], limit: usize) -> Vec<MemBreakdown> {
     entries
 }
 
-fn recommendation_for(op_name: &str, profile: &MemProfile) -> String {
-    match op_name {
-        "quantile" | "n_unique" | "top_k" | "bloom_member" | "entropy" => {
-            "keep for now; quantify sparse-to-dense sketch options next".to_string()
+fn windowed_rollup(entries: &[MemBreakdown]) -> Vec<MemBreakdown> {
+    let mut grouped: BTreeMap<String, MemBreakdown> = BTreeMap::new();
+    for entry in entries {
+        let Some((label, kind, note)) = windowed_rollup_bucket(entry) else {
+            continue;
+        };
+        let slot = grouped.entry(label.clone()).or_insert(MemBreakdown {
+            label,
+            bytes: 0,
+            kind,
+            note,
+        });
+        slot.bytes = slot.bytes.saturating_add(entry.bytes);
+    }
+    let mut rolled = grouped.into_values().collect::<Vec<_>>();
+    rolled.sort_by(|a, b| b.bytes.cmp(&a.bytes).then_with(|| a.label.cmp(&b.label)));
+    rolled
+}
+
+fn windowed_rollup_bucket(entry: &MemBreakdown) -> Option<(String, String, String)> {
+    if entry.label == "Box<WindowedOp>" || entry.label == "WindowedOp spilled bucket SmallVec" {
+        return Some((
+            "Windowed wrapper overhead".to_string(),
+            "WindowedOp".to_string(),
+            "summed boxed WindowedOp payload and spilled bucket storage".to_string(),
+        ));
+    }
+    if entry.label.starts_with("Windowed bucket ") && entry.label.ends_with(" Box<AggOp>") {
+        return Some((
+            "Windowed bucket shell overhead".to_string(),
+            "Box".to_string(),
+            "summed boxed AggOp enum slots across active buckets".to_string(),
+        ));
+    }
+    let (_, nested) = entry.label.split_once(" / ")?;
+    Some((
+        format!("{nested} across buckets"),
+        entry.kind.clone(),
+        "summed across active window buckets".to_string(),
+    ))
+}
+
+fn recommendation_for(op_name: &str, shape: ProfileShape, profile: &MemProfile) -> String {
+    match (op_name, shape) {
+        ("n_unique", ProfileShape::Windowed) => {
+            "keep for now; quantify sketch precision and window bucket fanout separately"
+                .to_string()
         }
-        "burst_count" | "trend_residual" if profile.stack_bytes >= 80 => {
+        ("count" | "sum" | "mean", ProfileShape::Windowed) => {
+            "keep scalar core; quantify whether wrapper and bucket fanout are the real cost"
+                .to_string()
+        }
+        (
+            "quantile" | "n_unique" | "top_k" | "bloom_member" | "entropy",
+            ProfileShape::Lifetime,
+        ) => "keep for now; quantify sparse-to-dense sketch options next".to_string(),
+        ("burst_count" | "trend_residual", _) if profile.stack_bytes >= 80 => {
             "box smaller if the report confirms broad per-entity prevalence".to_string()
         }
-        "count" | "sum" | "mean" if profile.heap_bytes == 0 => {
+        ("count" | "sum" | "mean", _) if profile.heap_bytes == 0 => {
             "keep; scalar state spends only the shared AggOp slot".to_string()
         }
-        _ if op_name.contains("window") || profile.label.contains("Windowed") => {
+        (_, ProfileShape::Windowed) => {
             "restructure only if lazy bucket materialization still dominates".to_string()
         }
         _ => "keep; no targeted restructuring until workload ranking justifies it".to_string(),
+    }
+}
+
+fn profile_shape(desc: &AggOpDescriptor) -> ProfileShape {
+    if desc.window_ms.is_some() {
+        ProfileShape::Windowed
+    } else {
+        ProfileShape::Lifetime
+    }
+}
+
+fn format_window_suffix(window_ms: Option<u64>) -> String {
+    window_ms
+        .map(|ms| format!(" ({})", format_duration_ms(ms)))
+        .unwrap_or_default()
+}
+
+fn format_duration_ms(ms: u64) -> String {
+    match ms {
+        ms if ms % 86_400_000 == 0 => format!("{}d", ms / 86_400_000),
+        ms if ms % 3_600_000 == 0 => format!("{}h", ms / 3_600_000),
+        ms if ms % 60_000 == 0 => format!("{}m", ms / 60_000),
+        ms if ms % 1_000 == 0 => format!("{}s", ms / 1_000),
+        ms => format!("{ms}ms"),
     }
 }
 
@@ -509,5 +638,6 @@ mod tests {
         assert!(report.contains("## Top 5 Offenders"));
         assert!(report.contains("## Metrics Coherence"));
         assert!(report.contains("Aggregate features discovered: `111`"));
+        assert!(report.contains("| Rank | Op | Shape |"));
     }
 }

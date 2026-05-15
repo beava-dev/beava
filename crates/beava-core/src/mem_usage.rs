@@ -6,7 +6,15 @@
 //! map overhead estimates.
 
 use crate::agg_op::AggOp;
+use crate::agg_state::{
+    BloomMemberStateWrap, CountDistinctStateWrap, EntropyStateWrap, PercentileStateWrap,
+    TopKStateWrap,
+};
 use crate::row::Value;
+use crate::sketches::cms::TopKValue;
+use crate::sketches::count_distinct::CountDistinctState;
+use crate::sketches::percentile::PercentileState;
+use crate::sketches::top_k::TopKState;
 use serde::Serialize;
 use std::collections::VecDeque;
 use std::mem::{size_of, size_of_val};
@@ -139,6 +147,160 @@ fn value_deque_breakdown(profile: &mut MemProfile, label: &str, values: &VecDequ
         vecdeque_heap_bytes(values),
         "VecDeque",
         "capacity * size_of::<Value>()",
+    );
+}
+
+fn add_box_allocation(
+    profile: &mut MemProfile,
+    label: impl Into<String>,
+    bytes: usize,
+    note: impl Into<String>,
+) {
+    profile.add_breakdown(label, bytes, "Box", note);
+}
+
+fn add_count_distinct_breakdown(profile: &mut MemProfile, state: &CountDistinctStateWrap) {
+    add_box_allocation(
+        profile,
+        "Box<CountDistinctStateWrap>",
+        size_of_val(state),
+        "heap allocation for boxed CountDistinct wrapper",
+    );
+    match &state.inner {
+        CountDistinctState::ExactArray { values } => profile.add_breakdown(
+            "CountDistinct exact-array values",
+            vec_heap_bytes(values),
+            "Vec",
+            "capacity * size_of::<u64>() for exact distinct hashes",
+        ),
+        CountDistinctState::HashSet { .. } => profile.add_breakdown(
+            "CountDistinct hash-set slots",
+            state
+                .inner
+                .hash_set_capacity()
+                .unwrap_or(0)
+                .saturating_mul(16),
+            "HashSet",
+            "estimated hashbrown slot cost for u64 distinct hashes",
+        ),
+        CountDistinctState::Hll { sketch } => profile.add_breakdown(
+            "CountDistinct HLL registers",
+            sketch.register_capacity().saturating_mul(size_of::<u8>()),
+            "Vec",
+            "capacity * size_of::<u8>() for dense HLL registers",
+        ),
+    }
+}
+
+fn add_percentile_breakdown(profile: &mut MemProfile, state: &PercentileStateWrap) {
+    add_box_allocation(
+        profile,
+        "Box<PercentileStateWrap>",
+        size_of_val(state),
+        "heap allocation for boxed Percentile wrapper",
+    );
+    match &state.inner {
+        PercentileState::Exact { values, .. } => profile.add_breakdown(
+            "Percentile exact samples",
+            vec_heap_bytes(values),
+            "Vec",
+            "capacity * size_of::<f64>() for exact percentile samples",
+        ),
+        PercentileState::Sketch { sketch } => {
+            profile.add_breakdown(
+                "UDDSketch positive buckets",
+                sketch
+                    .positive_bucket_capacity()
+                    .saturating_mul(size_of::<(i32, u64)>()),
+                "Vec",
+                "capacity * size_of::<(i32, u64)>() for positive UDDSketch buckets",
+            );
+            profile.add_breakdown(
+                "UDDSketch negative buckets",
+                sketch
+                    .negative_bucket_capacity()
+                    .saturating_mul(size_of::<(i32, u64)>()),
+                "Vec",
+                "capacity * size_of::<(i32, u64)>() for negative UDDSketch buckets",
+            );
+        }
+    }
+}
+
+fn add_top_k_breakdown(profile: &mut MemProfile, state: &TopKStateWrap) {
+    add_box_allocation(
+        profile,
+        "Box<TopKStateWrap>",
+        size_of_val(state),
+        "heap allocation for boxed TopK wrapper",
+    );
+    match &state.inner {
+        TopKState::Exact { counts, .. } => profile.add_breakdown(
+            "TopK exact BTreeMap entries",
+            estimated_btree_map_heap_bytes(counts.len(), 64),
+            "BTreeMap",
+            "estimated node overhead plus TopKValue/u64 payloads",
+        ),
+        TopKState::Hybrid { cms, heap, .. } => {
+            profile.add_breakdown(
+                "TopK count-min counters",
+                cms.counter_capacity().saturating_mul(size_of::<i64>()),
+                "Vec",
+                "capacity * size_of::<i64>() for count-min sketch counters",
+            );
+            profile.add_breakdown(
+                "TopK heap entries",
+                heap.heap_capacity()
+                    .saturating_mul(size_of::<(u64, TopKValue)>()),
+                "Vec",
+                "capacity * size_of::<(u64, TopKValue)>() for bounded top-k heap entries",
+            );
+            profile.add_breakdown(
+                "TopK heap index map",
+                estimated_hash_map_heap_bytes(
+                    heap.index_capacity_estimate(),
+                    size_of::<(TopKValue, usize)>(),
+                ),
+                "AHashMap",
+                "estimated slot cost for TopK heap-position side index",
+            );
+        }
+    }
+}
+
+fn add_bloom_breakdown(profile: &mut MemProfile, state: &BloomMemberStateWrap) {
+    add_box_allocation(
+        profile,
+        "Box<BloomMemberStateWrap>",
+        size_of_val(state),
+        "heap allocation for boxed Bloom wrapper",
+    );
+    profile.add_breakdown(
+        "Bloom filter words",
+        state.inner.word_capacity().saturating_mul(size_of::<u64>()),
+        "Vec",
+        "capacity * size_of::<u64>() for bloom bit-array storage",
+    );
+}
+
+fn add_entropy_breakdown(profile: &mut MemProfile, state: &EntropyStateWrap) {
+    add_box_allocation(
+        profile,
+        "Box<EntropyStateWrap>",
+        size_of_val(state),
+        "heap allocation for boxed Entropy wrapper",
+    );
+    profile.add_breakdown(
+        "Entropy category map entries",
+        estimated_btree_map_heap_bytes(state.inner.category_count(), 48),
+        "BTreeMap",
+        "estimated node overhead plus String/u64 category payloads",
+    );
+    profile.add_breakdown(
+        "Entropy category string capacity",
+        state.inner.key_capacity_bytes(),
+        "String",
+        "sum of tracked category string capacities",
     );
 }
 
@@ -276,11 +438,11 @@ impl MemUsage for AggOp {
                 );
             }
 
-            AggOp::CountDistinct(s) => add_boxed_serialized(&mut profile, "CountDistinct", &**s),
-            AggOp::Percentile(s) => add_boxed_serialized(&mut profile, "Percentile", &**s),
-            AggOp::TopK(s) => add_boxed_serialized(&mut profile, "TopK", &**s),
-            AggOp::BloomMember(s) => add_boxed_serialized(&mut profile, "BloomMember", &**s),
-            AggOp::Entropy(s) => add_boxed_serialized(&mut profile, "Entropy", &**s),
+            AggOp::CountDistinct(s) => add_count_distinct_breakdown(&mut profile, s),
+            AggOp::Percentile(s) => add_percentile_breakdown(&mut profile, s),
+            AggOp::TopK(s) => add_top_k_breakdown(&mut profile, s),
+            AggOp::BloomMember(s) => add_bloom_breakdown(&mut profile, s),
+            AggOp::Entropy(s) => add_entropy_breakdown(&mut profile, s),
 
             AggOp::Windowed(w) => {
                 profile.add_breakdown(
@@ -426,6 +588,102 @@ mod tests {
         })
         .mem_profile();
         assert!(profile.breakdown.iter().any(|b| b.label.contains("Box")));
+    }
+
+    #[test]
+    fn mem_usage_count_distinct_reports_mode_specific_components() {
+        let mut op = AggOp::new(&AggOpDescriptor {
+            kind: AggKind::CountDistinct,
+            field: Some("merchant_id".into()),
+            ..Default::default()
+        });
+        for i in 0..32 {
+            let row = Row::new().with_field("merchant_id", Value::Str(format!("m{i}").into()));
+            op.update(&row, i as i64, Some("merchant_id"), true);
+        }
+        let profile = op.mem_profile();
+        assert!(profile
+            .breakdown
+            .iter()
+            .any(|b| b.label == "CountDistinct hash-set slots"));
+    }
+
+    #[test]
+    fn mem_usage_percentile_sketch_reports_uddsketch_vectors() {
+        let mut op = AggOp::new(&AggOpDescriptor {
+            kind: AggKind::Percentile,
+            field: Some("amount".into()),
+            ..Default::default()
+        });
+        for i in 0..300 {
+            let row = Row::new().with_field("amount", Value::F64(i as f64 + 1.0));
+            op.update(&row, i as i64, Some("amount"), true);
+        }
+        let profile = op.mem_profile();
+        assert!(profile
+            .breakdown
+            .iter()
+            .any(|b| b.label == "UDDSketch positive buckets"));
+    }
+
+    #[test]
+    fn mem_usage_top_k_hybrid_reports_cms_and_heap_components() {
+        let mut op = AggOp::new(&AggOpDescriptor {
+            kind: AggKind::TopK,
+            field: Some("merchant_id".into()),
+            ..Default::default()
+        });
+        for i in 0..1100 {
+            let row = Row::new().with_field("merchant_id", Value::Str(format!("m{i}").into()));
+            op.update(&row, i as i64, Some("merchant_id"), true);
+        }
+        let profile = op.mem_profile();
+        assert!(profile
+            .breakdown
+            .iter()
+            .any(|b| b.label == "TopK count-min counters"));
+        assert!(profile
+            .breakdown
+            .iter()
+            .any(|b| b.label == "TopK heap index map"));
+    }
+
+    #[test]
+    fn mem_usage_bloom_reports_filter_words() {
+        let mut op = AggOp::new(&AggOpDescriptor {
+            kind: AggKind::BloomMember,
+            field: Some("email_domain".into()),
+            ..Default::default()
+        });
+        let row = Row::new().with_field("email_domain", Value::Str("risk.test".into()));
+        op.update(&row, 1, Some("email_domain"), true);
+        let profile = op.mem_profile();
+        assert!(profile
+            .breakdown
+            .iter()
+            .any(|b| b.label == "Bloom filter words"));
+    }
+
+    #[test]
+    fn mem_usage_entropy_reports_category_map_components() {
+        let mut op = AggOp::new(&AggOpDescriptor {
+            kind: AggKind::Entropy,
+            field: Some("mcc".into()),
+            ..Default::default()
+        });
+        for value in ["5411", "5732", "5812"] {
+            let row = Row::new().with_field("mcc", Value::Str(value.into()));
+            op.update(&row, 1, Some("mcc"), true);
+        }
+        let profile = op.mem_profile();
+        assert!(profile
+            .breakdown
+            .iter()
+            .any(|b| b.label == "Entropy category map entries"));
+        assert!(profile
+            .breakdown
+            .iter()
+            .any(|b| b.label == "Entropy category string capacity"));
     }
 
     #[test]
