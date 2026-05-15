@@ -316,14 +316,18 @@ pub fn is_network_fs(path: &Path) -> bool {
             return false;
         }
 
-        // Known Linux NFS/SMB/FUSE f_type magic numbers.
-        const NFS_SUPER_MAGIC: i64 = 0x6969;
-        const SMB_SUPER_MAGIC: i64 = 0x517B;
-        const CIFS_MAGIC_NUMBER: i64 = 0xFF534D42;
-        const FUSE_SUPER_MAGIC: i64 = 0x65735546;
+        // Known Linux NFS/SMB/FUSE f_type magic numbers. `stat.f_type` is
+        // `__fsword_t` (i64) on linux-gnu and `c_ulong` (u64) on linux-musl;
+        // cast to u64 so the match is portable across both.
+        const NFS_SUPER_MAGIC: u64 = 0x6969;
+        const SMB_SUPER_MAGIC: u64 = 0x517B;
+        const CIFS_MAGIC_NUMBER: u64 = 0xFF534D42;
+        const FUSE_SUPER_MAGIC: u64 = 0x65735546;
 
+        #[allow(clippy::unnecessary_cast)]
+        let f_type = stat.f_type as u64;
         matches!(
-            stat.f_type,
+            f_type,
             NFS_SUPER_MAGIC | SMB_SUPER_MAGIC | CIFS_MAGIC_NUMBER | FUSE_SUPER_MAGIC
         )
     }
