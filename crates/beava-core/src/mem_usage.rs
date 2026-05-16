@@ -31,6 +31,9 @@ pub struct MemBreakdown {
 pub struct MemProfile {
     pub label: String,
     pub stack_bytes: usize,
+    pub enum_slot_bytes: usize,
+    pub payload_bytes: usize,
+    pub slack_bytes: usize,
     pub heap_bytes: usize,
     pub breakdown: Vec<MemBreakdown>,
 }
@@ -40,9 +43,20 @@ impl MemProfile {
         Self {
             label: label.into(),
             stack_bytes,
+            enum_slot_bytes: stack_bytes,
+            payload_bytes: stack_bytes,
+            slack_bytes: 0,
             heap_bytes: 0,
             breakdown: Vec::new(),
         }
+    }
+
+    pub fn with_stack_composition(mut self, enum_slot_bytes: usize, payload_bytes: usize) -> Self {
+        self.stack_bytes = enum_slot_bytes;
+        self.enum_slot_bytes = enum_slot_bytes;
+        self.payload_bytes = payload_bytes;
+        self.slack_bytes = enum_slot_bytes.saturating_sub(payload_bytes);
+        self
     }
 
     pub fn total_bytes(&self) -> usize {
@@ -306,7 +320,9 @@ fn add_entropy_breakdown(profile: &mut MemProfile, state: &EntropyStateWrap) {
 
 impl MemUsage for AggOp {
     fn mem_profile(&self) -> MemProfile {
-        let mut profile = MemProfile::new(aggop_label(self), size_of::<AggOp>());
+        let enum_slot_bytes = size_of::<AggOp>();
+        let mut profile = MemProfile::new(aggop_label(self), enum_slot_bytes)
+            .with_stack_composition(enum_slot_bytes, aggop_payload_bytes(self));
         match self {
             AggOp::Count(_)
             | AggOp::Sum(_)
@@ -484,6 +500,66 @@ impl MemUsage for AggOp {
     }
 }
 
+fn aggop_payload_bytes(op: &AggOp) -> usize {
+    match op {
+        AggOp::Count(s) => size_of_val(s),
+        AggOp::Sum(s) => size_of_val(s),
+        AggOp::Avg(s) => size_of_val(s),
+        AggOp::Min(s) => size_of_val(s),
+        AggOp::Max(s) => size_of_val(s),
+        AggOp::Variance(s) => size_of_val(s),
+        AggOp::StdDev(s) => size_of_val(s),
+        AggOp::Ratio(s) => size_of_val(s),
+        AggOp::CountDistinct(s) => size_of_val(s),
+        AggOp::Percentile(s) => size_of_val(s),
+        AggOp::TopK(s) => size_of_val(s),
+        AggOp::BloomMember(s) => size_of_val(s),
+        AggOp::Entropy(s) => size_of_val(s),
+        AggOp::Windowed(s) => size_of_val(s),
+        AggOp::First(s) => size_of_val(s),
+        AggOp::Last(s) => size_of_val(s),
+        AggOp::FirstN(s) => size_of_val(s),
+        AggOp::LastN(s) => size_of_val(s),
+        AggOp::Lag(s) => size_of_val(s),
+        AggOp::FirstSeen(s) => size_of_val(s),
+        AggOp::LastSeen(s) => size_of_val(s),
+        AggOp::Age(s) => size_of_val(s),
+        AggOp::HasSeen(s) => size_of_val(s),
+        AggOp::TimeSince(s) => size_of_val(s),
+        AggOp::TimeSinceLastN(s) => size_of_val(s),
+        AggOp::Streak(s) => size_of_val(s),
+        AggOp::MaxStreak(s) => size_of_val(s),
+        AggOp::NegativeStreak(s) => size_of_val(s),
+        AggOp::FirstSeenInWindow(s) => size_of_val(s),
+        AggOp::Ewma(s) => size_of_val(s),
+        AggOp::EwVar(s) => size_of_val(s),
+        AggOp::EwZScore(s) => size_of_val(s),
+        AggOp::DecayedSum(s) => size_of_val(s),
+        AggOp::DecayedCount(s) => size_of_val(s),
+        AggOp::Twa(s) => size_of_val(s),
+        AggOp::RateOfChange(s) => size_of_val(s),
+        AggOp::InterArrivalStats(s) => size_of_val(s),
+        AggOp::BurstCount(s) => size_of_val(s),
+        AggOp::DeltaFromPrev(s) => size_of_val(s),
+        AggOp::Trend(s) => size_of_val(s),
+        AggOp::TrendResidual(s) => size_of_val(s),
+        AggOp::OutlierCount(s) => size_of_val(s),
+        AggOp::ValueChangeCount(s) => size_of_val(s),
+        AggOp::ZScore(s) => size_of_val(s),
+        AggOp::Histogram(s) => size_of_val(s),
+        AggOp::HourOfDayHistogram(s) => size_of_val(s),
+        AggOp::DowHourHistogram(s) => size_of_val(s),
+        AggOp::SeasonalDeviation(s) => size_of_val(s),
+        AggOp::EventTypeMix(s) => size_of_val(s),
+        AggOp::MostRecentN(s) => size_of_val(s),
+        AggOp::ReservoirSample(s) => size_of_val(s),
+        AggOp::GeoVelocity(s) => size_of_val(s),
+        AggOp::GeoDistance(s) => size_of_val(s),
+        AggOp::GeoSpread(s) => size_of_val(s),
+        AggOp::DistanceFromHome(s) => size_of_val(s),
+    }
+}
+
 fn add_boxed_serialized<T: Serialize>(profile: &mut MemProfile, label: &str, value: &T) {
     profile.add_breakdown(
         format!("Box<{label}>"),
@@ -564,6 +640,8 @@ fn aggop_label(op: &AggOp) -> String {
 mod tests {
     use super::*;
     use crate::agg_op::{AggKind, AggOp, AggOpDescriptor};
+    use crate::agg_state::{CountDistinctStateWrap, CountState, SumState};
+    use crate::agg_state_velocity::TrendResidualState;
     use crate::row::{Row, Value};
 
     #[test]
@@ -578,6 +656,54 @@ mod tests {
     fn mem_usage_scalar_aggop_reports_enum_stack_slot() {
         let profile = AggOp::Count(Default::default()).mem_profile();
         assert_eq!(profile.stack_bytes, size_of::<AggOp>());
+    }
+
+    #[test]
+    fn mem_usage_stack_composition_tracks_payload_and_slack() {
+        let profile = MemProfile::new("sample", 80).with_stack_composition(80, 8);
+        assert_eq!(profile.stack_bytes, 80);
+        assert_eq!(profile.enum_slot_bytes, 80);
+        assert_eq!(profile.payload_bytes, 8);
+        assert_eq!(profile.slack_bytes, 72);
+        assert_eq!(profile.total_bytes(), 80);
+    }
+
+    #[test]
+    fn mem_usage_aggop_payload_size_uses_active_variant_payload() {
+        let count = AggOp::Count(CountState::default()).mem_profile();
+        assert_eq!(count.stack_bytes, size_of::<AggOp>());
+        assert_eq!(count.enum_slot_bytes, size_of::<AggOp>());
+        assert_eq!(count.payload_bytes, size_of::<CountState>());
+        assert_eq!(
+            count.slack_bytes,
+            size_of::<AggOp>() - size_of::<CountState>()
+        );
+
+        let sum = AggOp::Sum(SumState::default()).mem_profile();
+        assert_eq!(sum.payload_bytes, size_of::<SumState>());
+        assert!(sum.slack_bytes > 0);
+
+        let trend_residual = AggOp::TrendResidual(TrendResidualState::default()).mem_profile();
+        assert_eq!(
+            trend_residual.payload_bytes,
+            size_of::<TrendResidualState>()
+        );
+    }
+
+    #[test]
+    fn mem_usage_boxed_aggop_payload_is_pointer_not_pointee() {
+        let profile =
+            AggOp::CountDistinct(Box::new(CountDistinctStateWrap::default())).mem_profile();
+        assert_eq!(profile.stack_bytes, size_of::<AggOp>());
+        assert_eq!(
+            profile.payload_bytes,
+            size_of::<Box<CountDistinctStateWrap>>()
+        );
+        assert!(profile.slack_bytes > 0);
+        assert!(profile
+            .breakdown
+            .iter()
+            .any(|b| b.label == "Box<CountDistinctStateWrap>"));
     }
 
     #[test]

@@ -192,6 +192,9 @@ fn build_report(args: &Args) -> Result<String> {
             let mut total = MemProfile::new(op_name.clone(), 0);
             for row in &rows {
                 total.stack_bytes += row.profile.stack_bytes;
+                total.enum_slot_bytes += row.profile.enum_slot_bytes;
+                total.payload_bytes += row.profile.payload_bytes;
+                total.slack_bytes += row.profile.slack_bytes;
                 total.heap_bytes += row.profile.heap_bytes;
                 total.breakdown.extend(row.profile.breakdown.clone());
             }
@@ -259,15 +262,18 @@ fn render_markdown(input: ReportInput<'_>) -> String {
     ));
 
     out.push_str("## Sorted Op Table\n\n");
-    out.push_str("| Rank | Op | Shape | Stack bytes | Heap bytes | Total bytes |\n");
-    out.push_str("|------|----|-------|-------------|------------|-------------|\n");
+    out.push_str("| Rank | Op | Shape | Stack bytes | enum_slot_bytes | payload_bytes | slack_bytes | Heap bytes | Total bytes |\n");
+    out.push_str("|------|----|-------|-------------|-----------------|---------------|-------------|------------|-------------|\n");
     for (idx, profile) in input.op_totals.iter().enumerate() {
         out.push_str(&format!(
-            "| {} | `{}` | `{}` | {} | {} | {} |\n",
+            "| {} | `{}` | `{}` | {} | {} | {} | {} | {} | {} |\n",
             idx + 1,
             profile.op_name,
             profile.shape.as_str(),
             profile.profile.stack_bytes,
+            profile.profile.enum_slot_bytes,
+            profile.profile.payload_bytes,
+            profile.profile.slack_bytes,
             profile.profile.heap_bytes,
             profile.profile.total_bytes()
         ));
@@ -282,11 +288,11 @@ fn render_markdown(input: ReportInput<'_>) -> String {
             total.op_name,
             total.shape.as_str()
         ));
-        out.push_str("| Parent rank | Source event | Derivation | Feature | Key path | Events applied | Stack bytes | Heap bytes | Total bytes | Parent % |\n");
-        out.push_str("|-------------|--------------|------------|---------|----------|----------------|-------------|------------|-------------|----------|\n");
+        out.push_str("| Parent rank | Source event | Derivation | Feature | Key path | Events applied | Stack bytes | enum_slot_bytes | payload_bytes | slack_bytes | Heap bytes | Total bytes | Parent % |\n");
+        out.push_str("|-------------|--------------|------------|---------|----------|----------------|-------------|-----------------|---------------|-------------|------------|-------------|----------|\n");
         for row in &total.rows {
             out.push_str(&format!(
-                "| {} | `{}` | `{}` | `{}` | `{}` | {} | {} | {} | {} | {:.1}% |\n",
+                "| {} | `{}` | `{}` | `{}` | `{}` | {} | {} | {} | {} | {} | {} | {} | {:.1}% |\n",
                 idx + 1,
                 format_sources(&row.source_events),
                 row.derivation,
@@ -294,6 +300,9 @@ fn render_markdown(input: ReportInput<'_>) -> String {
                 format_key_path(&row.key_path),
                 row.events_applied,
                 row.profile.stack_bytes,
+                row.profile.enum_slot_bytes,
+                row.profile.payload_bytes,
+                row.profile.slack_bytes,
                 row.profile.heap_bytes,
                 row.profile.total_bytes(),
                 percent_of(row.profile.total_bytes(), total.profile.total_bytes())
@@ -326,8 +335,11 @@ fn render_markdown(input: ReportInput<'_>) -> String {
         ));
         out.push_str(&format!("- Events applied: `{}`\n", row.events_applied));
         out.push_str(&format!(
-            "- Bytes: stack={} heap={} total={}\n",
+            "- Bytes: stack={} (enum_slot_bytes={} payload_bytes={} slack_bytes={}) heap={} total={}\n",
             row.profile.stack_bytes,
+            row.profile.enum_slot_bytes,
+            row.profile.payload_bytes,
+            row.profile.slack_bytes,
             row.profile.heap_bytes,
             row.profile.total_bytes()
         ));
@@ -385,6 +397,9 @@ fn render_markdown(input: ReportInput<'_>) -> String {
 
     out.push_str("\n## Notes\n\n");
     out.push_str("- `stack_bytes` is the inline `AggOp` enum slot for each feature.\n");
+    out.push_str("- `enum_slot_bytes` is the fixed-size `AggOp` enum slot charged to a row; parent rows sum this across child paths.\n");
+    out.push_str("- `payload_bytes` is the active variant payload inside the enum slot. For boxed variants this is the inline `Box<T>` pointer, while the boxed pointee remains in `heap_bytes`.\n");
+    out.push_str("- `slack_bytes` is unused capacity in the fixed-size `AggOp` enum slot: `enum_slot_bytes - payload_bytes`.\n");
     out.push_str("- Heap entries are deterministic structural counts; map/table allocator overhead is labeled as an estimate.\n");
     out.push_str("- Path grain is `source_event -> derivation -> feature -> op -> shape`; path detail rows are children of the op/shape rollups above.\n");
     out
