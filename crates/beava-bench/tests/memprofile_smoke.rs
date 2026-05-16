@@ -20,11 +20,24 @@ fn memprofile_smoke_writes_required_sections() {
 
     let report = std::fs::read_to_string(output).expect("read report");
     assert!(report.contains("# AggOp Memory Profile: fraud-team"));
+    assert!(report.contains("Events requested from generator: `50`"));
+    assert!(report.contains("Events replayed from generator: `50`"));
+    assert!(report.contains("  - `Txn`: `50`"));
+    assert!(!report.contains("Events replayed per op"));
     assert!(report.contains("## Sorted Op Table"));
+    assert!(report.contains("## Sorted Op Path Details"));
     assert!(report.contains("## Top 5 Offenders"));
     assert!(report.contains("## Metrics Coherence"));
     assert!(report.contains("Aggregate features discovered: `111`"));
     assert!(report.contains("| Rank | Op | Shape |"));
+    assert!(report.contains(
+        "| Parent rank | Source event | Derivation | Feature | Key path | Events applied |"
+    ));
+    assert!(
+        report.contains("| `Login` | `LoginByUser` | `ips_distinct_login_1h` | `user_id` | 0 |")
+    );
+    assert!(report.contains("- Path: `Txn` ->"));
+    assert!(report.contains("- Events applied: `50`"));
     assert!(report.contains("`windowed`"));
     assert!(report.contains("`lifetime`"));
     assert!(report.contains("- Breakdown rollup:"));

@@ -3,7 +3,7 @@
 use anyhow::{anyhow, Context, Result};
 use beava_core::agg_op::{AggExtParams, AggKind, AggOp, AggOpDescriptor, SketchParams};
 use beava_core::mem_usage::{MemBreakdown, MemProfile, MemUsage};
-use beava_core::row::{Row, Value};
+use beava_core::row::{json_value_to_beava_value, Row};
 use clap::Parser;
 use serde_json::Value as JsonValue;
 use std::collections::BTreeMap;
@@ -27,17 +27,22 @@ struct Args {
 
 #[derive(Debug, Clone)]
 struct FeatureSpec {
+    source_events: Vec<String>,
     derivation: String,
     feature: String,
     op_name: String,
+    key_path: Vec<String>,
     desc: AggOpDescriptor,
 }
 
 #[derive(Debug, Clone)]
 struct ProfileRow {
+    source_events: Vec<String>,
     derivation: String,
     feature: String,
     op_name: String,
+    key_path: Vec<String>,
+    events_applied: u64,
     shape: ProfileShape,
     window_ms: Option<u64>,
     profile: MemProfile,
@@ -64,11 +69,14 @@ struct OpTotal {
     op_name: String,
     shape: ProfileShape,
     profile: MemProfile,
+    rows: Vec<ProfileRow>,
 }
 
 struct ReportInput<'a> {
     workload: &'a str,
-    events: u64,
+    events_requested: u64,
+    events_generated: u64,
+    events_by_source: &'a BTreeMap<String, u64>,
     derivation_count: usize,
     feature_count: usize,
     rows: &'a [ProfileRow],
@@ -76,6 +84,23 @@ struct ReportInput<'a> {
     per_entity_total: usize,
     metrics_placeholder: u64,
     tolerance: f64,
+}
+
+struct ProfileSlot {
+    spec: FeatureSpec,
+    op: AggOp,
+    events_applied: u64,
+}
+
+impl ProfileSlot {
+    fn matches_source(&self, event_name: &str) -> bool {
+        self.spec.source_events.is_empty()
+            || self
+                .spec
+                .source_events
+                .iter()
+                .any(|source| source == event_name)
+    }
 }
 
 fn main() -> Result<()> {
@@ -90,25 +115,59 @@ fn build_report(args: &Args) -> Result<String> {
     let workload = beava_bench::workloads::load_by_name(&args.workload)
         .with_context(|| format!("load workload {:?}", args.workload))?;
     let features = feature_specs_from_register(&workload.register_payload)?;
-    let mut rows = Vec::with_capacity(features.len());
+    let feature_count = features.len();
 
-    for spec in &features {
-        let mut op = AggOp::new(&spec.desc);
-        let field = spec.desc.field.as_deref();
-        for i in 0..args.events {
-            let row = synthetic_row(i);
-            op.update(&row, 1_000_000 + i as i64 * 1_000, field, true);
+    let mut slots = features
+        .into_iter()
+        .map(|spec| ProfileSlot {
+            op: AggOp::new(&spec.desc),
+            spec,
+            events_applied: 0,
+        })
+        .collect::<Vec<_>>();
+
+    let mut events_generated = 0;
+    let mut events_by_source = BTreeMap::new();
+    for (idx, event) in (workload.event_generator)(args.events).enumerate() {
+        events_generated += 1;
+        *events_by_source
+            .entry(event.event_name.clone())
+            .or_insert(0) += 1;
+        let now_ms = event_time_ms(&event.fields).unwrap_or(1_000_000 + idx as i64 * 1_000);
+        let row = row_from_fields(event.fields);
+        for slot in slots
+            .iter_mut()
+            .filter(|slot| slot.matches_source(&event.event_name))
+        {
+            let field = slot.spec.desc.field.as_deref();
+            slot.op.update(&row, now_ms, field, true);
+            slot.events_applied += 1;
         }
-        let mut profile = op.mem_profile();
-        profile.label = format!("{}::{} ({})", spec.derivation, spec.feature, spec.op_name);
+    }
+
+    let mut rows = Vec::with_capacity(slots.len());
+    for slot in slots {
+        let spec = slot.spec;
+        let mut profile = slot.op.mem_profile();
+        profile.label = format!(
+            "{}::{}::{} ({})",
+            format_sources(&spec.source_events),
+            spec.derivation,
+            spec.feature,
+            spec.op_name
+        );
         let shape = profile_shape(&spec.desc);
+        let recommendation = recommendation_for(&spec.op_name, shape, &profile);
         rows.push(ProfileRow {
-            derivation: spec.derivation.clone(),
-            feature: spec.feature.clone(),
-            op_name: spec.op_name.clone(),
+            source_events: spec.source_events,
+            derivation: spec.derivation,
+            feature: spec.feature,
+            op_name: spec.op_name,
+            key_path: spec.key_path,
+            events_applied: slot.events_applied,
             shape,
             window_ms: spec.desc.window_ms,
-            recommendation: recommendation_for(&spec.op_name, shape, &profile),
+            recommendation,
             profile,
         });
     }
@@ -120,26 +179,28 @@ fn build_report(args: &Args) -> Result<String> {
             .then_with(|| a.profile.label.cmp(&b.profile.label))
     });
 
-    let mut grouped: BTreeMap<(String, ProfileShape), Vec<MemProfile>> = BTreeMap::new();
+    let mut grouped: BTreeMap<(String, ProfileShape), Vec<ProfileRow>> = BTreeMap::new();
     for row in &rows {
         grouped
             .entry((row.op_name.clone(), row.shape))
             .or_default()
-            .push(row.profile.clone());
+            .push(row.clone());
     }
     let mut op_totals: Vec<OpTotal> = grouped
         .into_iter()
-        .map(|((op_name, shape), profiles)| {
+        .map(|((op_name, shape), mut rows)| {
             let mut total = MemProfile::new(op_name.clone(), 0);
-            for profile in profiles {
-                total.stack_bytes += profile.stack_bytes;
-                total.heap_bytes += profile.heap_bytes;
-                total.breakdown.extend(profile.breakdown);
+            for row in &rows {
+                total.stack_bytes += row.profile.stack_bytes;
+                total.heap_bytes += row.profile.heap_bytes;
+                total.breakdown.extend(row.profile.breakdown.clone());
             }
+            rows.sort_by(compare_profile_rows);
             OpTotal {
                 op_name,
                 shape,
                 profile: total,
+                rows,
             }
         })
         .collect();
@@ -154,9 +215,11 @@ fn build_report(args: &Args) -> Result<String> {
     let per_entity_total: usize = rows.iter().map(|r| r.profile.total_bytes()).sum();
     Ok(render_markdown(ReportInput {
         workload: &args.workload,
-        events: args.events,
+        events_requested: args.events,
+        events_generated,
+        events_by_source: &events_by_source,
         derivation_count: workload.derivations.len(),
-        feature_count: features.len(),
+        feature_count,
         rows: &rows,
         op_totals: &op_totals,
         per_entity_total,
@@ -170,7 +233,18 @@ fn render_markdown(input: ReportInput<'_>) -> String {
     out.push_str("# AggOp Memory Profile: fraud-team\n\n");
     out.push_str("## Workload Summary\n\n");
     out.push_str(&format!("- Workload: `{}`\n", input.workload));
-    out.push_str(&format!("- Events replayed per op: `{}`\n", input.events));
+    out.push_str(&format!(
+        "- Events requested from generator: `{}`\n",
+        input.events_requested
+    ));
+    out.push_str(&format!(
+        "- Events replayed from generator: `{}`\n",
+        input.events_generated
+    ));
+    out.push_str("- Events by source:\n");
+    for (source, count) in input.events_by_source {
+        out.push_str(&format!("  - `{source}`: `{count}`\n"));
+    }
     out.push_str(&format!(
         "- Derivations discovered: `{}`\n",
         input.derivation_count
@@ -199,15 +273,58 @@ fn render_markdown(input: ReportInput<'_>) -> String {
         ));
     }
 
-    out.push_str("\n## Top 5 Offenders\n\n");
+    out.push_str("\n## Sorted Op Path Details\n\n");
+    out.push_str("Rows with `0` events applied show constructor footprint only; the workload generator did not emit an event for that path's upstream source.\n\n");
+    for (idx, total) in input.op_totals.iter().enumerate() {
+        out.push_str(&format!(
+            "### {}. `{}` / `{}` paths\n\n",
+            idx + 1,
+            total.op_name,
+            total.shape.as_str()
+        ));
+        out.push_str("| Parent rank | Source event | Derivation | Feature | Key path | Events applied | Stack bytes | Heap bytes | Total bytes | Parent % |\n");
+        out.push_str("|-------------|--------------|------------|---------|----------|----------------|-------------|------------|-------------|----------|\n");
+        for row in &total.rows {
+            out.push_str(&format!(
+                "| {} | `{}` | `{}` | `{}` | `{}` | {} | {} | {} | {} | {:.1}% |\n",
+                idx + 1,
+                format_sources(&row.source_events),
+                row.derivation,
+                row.feature,
+                format_key_path(&row.key_path),
+                row.events_applied,
+                row.profile.stack_bytes,
+                row.profile.heap_bytes,
+                row.profile.total_bytes(),
+                percent_of(row.profile.total_bytes(), total.profile.total_bytes())
+            ));
+        }
+        out.push('\n');
+    }
+
+    out.push_str("## Top 5 Offenders\n\n");
     for (idx, row) in input.rows.iter().take(5).enumerate() {
         out.push_str(&format!(
-            "### {}. `{}` / `{}` / `{}`\n\n",
+            "### {}. `{}` / `{}` / `{}` / `{}`\n\n",
             idx + 1,
+            format_sources(&row.source_events),
             row.derivation,
             row.feature,
             row.op_name
         ));
+        out.push_str(&format!(
+            "- Path: `{}` -> `{}` -> `{}` -> `{}` -> `{}`\n",
+            format_sources(&row.source_events),
+            row.derivation,
+            row.feature,
+            row.op_name,
+            row.shape.as_str()
+        ));
+        out.push_str(&format!(
+            "- Key path: `{}`\n",
+            format_key_path(&row.key_path)
+        ));
+        out.push_str(&format!("- Events applied: `{}`\n", row.events_applied));
         out.push_str(&format!(
             "- Bytes: stack={} heap={} total={}\n",
             row.profile.stack_bytes,
@@ -269,7 +386,32 @@ fn render_markdown(input: ReportInput<'_>) -> String {
     out.push_str("\n## Notes\n\n");
     out.push_str("- `stack_bytes` is the inline `AggOp` enum slot for each feature.\n");
     out.push_str("- Heap entries are deterministic structural counts; map/table allocator overhead is labeled as an estimate.\n");
+    out.push_str("- Path grain is `source_event -> derivation -> feature -> op -> shape`; path detail rows are children of the op/shape rollups above.\n");
     out
+}
+
+fn percent_of(part: usize, total: usize) -> f64 {
+    if total == 0 {
+        0.0
+    } else {
+        (part as f64 / total as f64) * 100.0
+    }
+}
+
+fn format_sources(sources: &[String]) -> String {
+    if sources.is_empty() {
+        "*".to_string()
+    } else {
+        sources.join("+")
+    }
+}
+
+fn format_key_path(keys: &[String]) -> String {
+    if keys.is_empty() {
+        "-".to_string()
+    } else {
+        keys.join("+")
+    }
 }
 
 fn top_breakdown(entries: &[MemBreakdown], limit: usize) -> Vec<MemBreakdown> {
@@ -277,6 +419,17 @@ fn top_breakdown(entries: &[MemBreakdown], limit: usize) -> Vec<MemBreakdown> {
     entries.sort_by(|a, b| b.bytes.cmp(&a.bytes).then_with(|| a.label.cmp(&b.label)));
     entries.truncate(limit);
     entries
+}
+
+fn compare_profile_rows(a: &ProfileRow, b: &ProfileRow) -> std::cmp::Ordering {
+    b.profile
+        .total_bytes()
+        .cmp(&a.profile.total_bytes())
+        .then_with(|| b.events_applied.cmp(&a.events_applied))
+        .then_with(|| format_sources(&a.source_events).cmp(&format_sources(&b.source_events)))
+        .then_with(|| a.derivation.cmp(&b.derivation))
+        .then_with(|| a.feature.cmp(&b.feature))
+        .then_with(|| a.op_name.cmp(&b.op_name))
 }
 
 fn windowed_rollup(entries: &[MemBreakdown]) -> Vec<MemBreakdown> {
@@ -387,12 +540,19 @@ fn feature_specs_from_register(register: &JsonValue) -> Result<Vec<FeatureSpec>>
             .and_then(JsonValue::as_str)
             .unwrap_or("unknown_derivation")
             .to_string();
+        let source_events = string_array_field(node, "upstreams");
+        let table_key_path = string_array_field(node, "table_primary_key");
         let Some(ops) = node.get("ops").and_then(JsonValue::as_array) else {
             continue;
         };
         for step in ops {
             let Some(agg) = step.get("agg").and_then(JsonValue::as_object) else {
                 continue;
+            };
+            let key_path = if table_key_path.is_empty() {
+                string_array_field(step, "keys")
+            } else {
+                table_key_path.clone()
             };
             for (feature, spec) in agg {
                 let op_name = spec
@@ -402,10 +562,12 @@ fn feature_specs_from_register(register: &JsonValue) -> Result<Vec<FeatureSpec>>
                     .to_string();
                 let params = spec.get("params").unwrap_or(&JsonValue::Null);
                 out.push(FeatureSpec {
+                    source_events: source_events.clone(),
                     derivation: derivation.clone(),
                     feature: feature.clone(),
                     desc: descriptor_from_op(&op_name, params)?,
                     op_name,
+                    key_path: key_path.clone(),
                 });
             }
         }
@@ -509,42 +671,28 @@ fn agg_kind_from_name(name: &str) -> Result<AggKind> {
     Ok(kind)
 }
 
-fn synthetic_row(i: u64) -> Row {
-    let key = format!("k{:08}", i % 100_000);
-    Row::new()
-        .with_field("event_time", Value::I64(1_000_000 + i as i64 * 1_000))
-        .with_field("user_id", Value::Str(key.clone().into()))
-        .with_field("card_fp", Value::Str(format!("card{}", i % 2_048).into()))
-        .with_field("device_id", Value::Str(format!("dev{}", i % 4_096).into()))
-        .with_field(
-            "ip_address",
-            Value::Str(format!("10.0.{}.{}", (i / 255) % 255, i % 255).into()),
-        )
-        .with_field("merchant_id", Value::Str(format!("m{}", i % 512).into()))
-        .with_field("mcc", Value::Str(format!("{}", 5000 + i % 120).into()))
-        .with_field("amount", Value::F64(((i % 10_000) as f64) / 3.0 + 1.0))
-        .with_field(
-            "card_country",
-            Value::Str((if i % 3 == 0 { "US" } else { "CA" }).into()),
-        )
-        .with_field(
-            "ip_country",
-            Value::Str((if i % 5 == 0 { "GB" } else { "US" }).into()),
-        )
-        .with_field("billing_country", Value::Str("US".into()))
-        .with_field("lat", Value::F64(37.0 + (i % 100) as f64 * 0.001))
-        .with_field("lon", Value::F64(-122.0 - (i % 100) as f64 * 0.001))
-        .with_field("declined", Value::I64((i % 7 == 0) as i64))
-        .with_field("success", Value::I64((i % 11 != 0) as i64))
-        .with_field("is_chargeback", Value::I64((i % 13 == 0) as i64))
-        .with_field("user_agent", Value::Str(format!("ua{}", i % 64).into()))
-        .with_field("email", Value::Str(format!("u{}@x.test", i % 2048).into()))
-        .with_field(
-            "email_domain",
-            Value::Str(format!("d{}.test", i % 64).into()),
-        )
-        .with_field("ssn_hash", Value::Str(format!("ssn{}", i % 8192).into()))
-        .with_field("__expr", Value::Str(format!("cell{}", i % 4096).into()))
+fn row_from_fields(fields: serde_json::Map<String, JsonValue>) -> Row {
+    fields.into_iter().fold(Row::new(), |row, (field, value)| {
+        row.with_field(&field, json_value_to_beava_value(value))
+    })
+}
+
+fn event_time_ms(fields: &serde_json::Map<String, JsonValue>) -> Option<i64> {
+    fields.get("event_time").and_then(JsonValue::as_i64)
+}
+
+fn string_array_field(value: &JsonValue, key: &str) -> Vec<String> {
+    value
+        .get(key)
+        .and_then(JsonValue::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(JsonValue::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn string_param(params: &JsonValue, key: &str) -> Option<String> {
@@ -634,10 +782,21 @@ mod tests {
         };
         let report = build_report(&args).unwrap();
         assert!(report.contains("# AggOp Memory Profile: fraud-team"));
+        assert!(report.contains("Events requested from generator: `5`"));
+        assert!(report.contains("Events replayed from generator: `5`"));
+        assert!(report.contains("  - `Txn`: `5`"));
+        assert!(!report.contains("Events replayed per op"));
         assert!(report.contains("## Sorted Op Table"));
+        assert!(report.contains("## Sorted Op Path Details"));
         assert!(report.contains("## Top 5 Offenders"));
         assert!(report.contains("## Metrics Coherence"));
         assert!(report.contains("Aggregate features discovered: `111`"));
         assert!(report.contains("| Rank | Op | Shape |"));
+        assert!(report.contains(
+            "| Parent rank | Source event | Derivation | Feature | Key path | Events applied |"
+        ));
+        assert!(report
+            .contains("| `Login` | `LoginByUser` | `ips_distinct_login_1h` | `user_id` | 0 |"));
+        assert!(report.contains("- Events applied: `5`"));
     }
 }
