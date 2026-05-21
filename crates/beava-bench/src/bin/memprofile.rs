@@ -3,7 +3,7 @@
 use anyhow::{anyhow, Context, Result};
 use beava_core::agg_op::{AggExtParams, AggKind, AggOp, AggOpDescriptor, SketchParams};
 use beava_core::mem_usage::{MemBreakdown, MemProfile, MemUsage};
-use beava_core::row::{json_value_to_beava_value, Row};
+use beava_core::row::{json_value_to_beava_value, Row, Value};
 use clap::Parser;
 use serde_json::Value as JsonValue;
 use std::collections::BTreeMap;
@@ -39,6 +39,8 @@ struct FeatureSpec {
 struct ProfileRow {
     source_events: Vec<String>,
     derivation: String,
+    entity_key: String,
+    entity_events: u64,
     feature: String,
     op_name: String,
     key_path: Vec<String>,
@@ -79,11 +81,32 @@ struct ReportInput<'a> {
     events_by_source: &'a BTreeMap<String, u64>,
     derivation_count: usize,
     feature_count: usize,
+    active_entity_count: usize,
+    table_profiles: &'a [TableProfile],
     rows: &'a [ProfileRow],
     op_totals: &'a [OpTotal],
-    per_entity_total: usize,
+    bytes_per_entity_p99: usize,
     metrics_placeholder: u64,
     tolerance: f64,
+}
+
+#[derive(Debug, Clone)]
+struct TableSpec {
+    source_events: Vec<String>,
+    derivation: String,
+    key_path: Vec<String>,
+    features: Vec<FeatureSpec>,
+}
+
+struct TableState {
+    spec: TableSpec,
+    entities: BTreeMap<String, EntityState>,
+    events_applied: u64,
+}
+
+struct EntityState {
+    events_applied: u64,
+    features: Vec<ProfileSlot>,
 }
 
 struct ProfileSlot {
@@ -93,14 +116,65 @@ struct ProfileSlot {
 }
 
 impl ProfileSlot {
-    fn matches_source(&self, event_name: &str) -> bool {
-        self.spec.source_events.is_empty()
-            || self
-                .spec
-                .source_events
-                .iter()
-                .any(|source| source == event_name)
+    fn new(spec: FeatureSpec) -> Self {
+        Self {
+            op: AggOp::new(&spec.desc),
+            spec,
+            events_applied: 0,
+        }
     }
+}
+
+impl EntityState {
+    fn new(features: &[FeatureSpec]) -> Self {
+        Self {
+            events_applied: 0,
+            features: features.iter().cloned().map(ProfileSlot::new).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct EntityProfile {
+    entity_key: String,
+    events_applied: u64,
+    profile: MemProfile,
+    features: Vec<ProfileRow>,
+}
+
+#[derive(Debug, Clone)]
+struct FeatureSummary {
+    feature: String,
+    op_name: String,
+    shape: ProfileShape,
+    stack_bytes: usize,
+    heap_p50: usize,
+    heap_p99: usize,
+    heap_max: usize,
+    total_p50: usize,
+    total_p99: usize,
+    total_max: usize,
+}
+
+#[derive(Debug, Clone)]
+struct TableProfile {
+    source_events: Vec<String>,
+    derivation: String,
+    key_path: Vec<String>,
+    configured_features: usize,
+    active_entities: usize,
+    events_applied: u64,
+    stack_p50: usize,
+    stack_p99: usize,
+    stack_max: usize,
+    heap_p50: usize,
+    heap_p99: usize,
+    heap_max: usize,
+    total_p50: usize,
+    total_p99: usize,
+    total_max: usize,
+    feature_summaries: Vec<FeatureSummary>,
+    entities: Vec<EntityProfile>,
 }
 
 fn main() -> Result<()> {
@@ -116,15 +190,7 @@ fn build_report(args: &Args) -> Result<String> {
         .with_context(|| format!("load workload {:?}", args.workload))?;
     let features = feature_specs_from_register(&workload.register_payload)?;
     let feature_count = features.len();
-
-    let mut slots = features
-        .into_iter()
-        .map(|spec| ProfileSlot {
-            op: AggOp::new(&spec.desc),
-            spec,
-            events_applied: 0,
-        })
-        .collect::<Vec<_>>();
+    let mut tables = table_states_from_features(features)?;
 
     let mut events_generated = 0;
     let mut events_by_source = BTreeMap::new();
@@ -135,49 +201,30 @@ fn build_report(args: &Args) -> Result<String> {
             .or_insert(0) += 1;
         let now_ms = event_time_ms(&event.fields).unwrap_or(1_000_000 + idx as i64 * 1_000);
         let row = row_from_fields(event.fields);
-        for slot in slots
+        for table in tables
             .iter_mut()
-            .filter(|slot| slot.matches_source(&event.event_name))
+            .filter(|table| matches_source(&table.spec.source_events, &event.event_name))
         {
-            let field = slot.spec.desc.field.as_deref();
-            slot.op.update(&row, now_ms, field, true);
-            slot.events_applied += 1;
+            let Some(entity_key) = entity_key_from_row(&row, &table.spec.key_path) else {
+                continue;
+            };
+            let entity = table
+                .entities
+                .entry(entity_key)
+                .or_insert_with(|| EntityState::new(&table.spec.features));
+            entity.events_applied += 1;
+            table.events_applied += 1;
+            for slot in &mut entity.features {
+                let field = slot.spec.desc.field.as_deref();
+                slot.op.update(&row, now_ms, field, true);
+                slot.events_applied += 1;
+            }
         }
     }
 
-    let mut rows = Vec::with_capacity(slots.len());
-    for slot in slots {
-        let spec = slot.spec;
-        let mut profile = slot.op.mem_profile();
-        profile.label = format!(
-            "{}::{}::{} ({})",
-            format_sources(&spec.source_events),
-            spec.derivation,
-            spec.feature,
-            spec.op_name
-        );
-        let shape = profile_shape(&spec.desc);
-        let recommendation = recommendation_for(&spec.op_name, shape, &profile);
-        rows.push(ProfileRow {
-            source_events: spec.source_events,
-            derivation: spec.derivation,
-            feature: spec.feature,
-            op_name: spec.op_name,
-            key_path: spec.key_path,
-            events_applied: slot.events_applied,
-            shape,
-            window_ms: spec.desc.window_ms,
-            recommendation,
-            profile,
-        });
-    }
+    let (mut table_profiles, mut rows) = collect_table_profiles(tables);
 
-    rows.sort_by(|a, b| {
-        b.profile
-            .total_bytes()
-            .cmp(&a.profile.total_bytes())
-            .then_with(|| a.profile.label.cmp(&b.profile.label))
-    });
+    rows.sort_by(compare_profile_rows);
 
     let mut grouped: BTreeMap<(String, ProfileShape), Vec<ProfileRow>> = BTreeMap::new();
     for row in &rows {
@@ -215,7 +262,18 @@ fn build_report(args: &Args) -> Result<String> {
             .then_with(|| a.shape.cmp(&b.shape))
     });
 
-    let per_entity_total: usize = rows.iter().map(|r| r.profile.total_bytes()).sum();
+    table_profiles.sort_by(compare_table_profiles);
+    let active_entity_count = table_profiles.iter().map(|t| t.active_entities).sum();
+    let all_entity_totals = table_profiles
+        .iter()
+        .flat_map(|table| {
+            table
+                .entities
+                .iter()
+                .map(|entity| entity.profile.total_bytes())
+        })
+        .collect::<Vec<_>>();
+    let bytes_per_entity_p99 = percentile_usize(all_entity_totals, 0.99);
     Ok(render_markdown(ReportInput {
         workload: &args.workload,
         events_requested: args.events,
@@ -223,9 +281,11 @@ fn build_report(args: &Args) -> Result<String> {
         events_by_source: &events_by_source,
         derivation_count: workload.derivations.len(),
         feature_count,
+        active_entity_count,
+        table_profiles: &table_profiles,
         rows: &rows,
         op_totals: &op_totals,
-        per_entity_total,
+        bytes_per_entity_p99,
         metrics_placeholder: args.metrics_bytes_per_entity_p99,
         tolerance: args.tolerance,
     }))
@@ -257,9 +317,119 @@ fn render_markdown(input: ReportInput<'_>) -> String {
         input.feature_count
     ));
     out.push_str(&format!(
-        "- Per-entity structural estimate: `{}` bytes\n\n",
-        input.per_entity_total
+        "- Active entity rows profiled: `{}`\n",
+        input.active_entity_count
     ));
+    out.push_str(&format!(
+        "- Bytes per active entity row p99: `{}` bytes\n\n",
+        input.bytes_per_entity_p99
+    ));
+
+    out.push_str("## Per-Entity Table Footprint\n\n");
+    out.push_str("| Rank | Table | Source | group_by key | Active entities | Features/entity | Events applied | Stack p50 | Stack p99 | Stack max | Heap p50 | Heap p99 | Heap max | Total p50 | Total p99 | Total max | Top contributor |\n");
+    out.push_str("|------|-------|--------|--------------|-----------------|-----------------|----------------|-----------|-----------|-----------|----------|----------|----------|-----------|-----------|-----------|-----------------|\n");
+    for (idx, table) in input.table_profiles.iter().enumerate() {
+        out.push_str(&format!(
+            "| {} | `{}` | `{}` | `{}` | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | `{}` |\n",
+            idx + 1,
+            table.derivation,
+            format_sources(&table.source_events),
+            format_key_path(&table.key_path),
+            table.active_entities,
+            table.configured_features,
+            table.events_applied,
+            table.stack_p50,
+            table.stack_p99,
+            table.stack_max,
+            table.heap_p50,
+            table.heap_p99,
+            table.heap_max,
+            table.total_p50,
+            table.total_p99,
+            table.total_max,
+            table
+                .feature_summaries
+                .first()
+                .map(|feature| feature.feature.as_str())
+                .unwrap_or("-")
+        ));
+    }
+
+    out.push_str("\n## Per-Table Entity Details\n\n");
+    for table in input.table_profiles {
+        out.push_str(&format!(
+            "### `{}` (`{}` by `{}`)\n\n",
+            table.derivation,
+            format_sources(&table.source_events),
+            format_key_path(&table.key_path)
+        ));
+        if table.active_entities == 0 {
+            out.push_str(&format!(
+                "No active entity rows. Configured features: `{}`. The workload generator emitted no events for this table's source.\n\n",
+                table.configured_features
+            ));
+            continue;
+        }
+
+        out.push_str("#### Feature Columns Across Entities\n\n");
+        out.push_str("| Feature | Op | Shape | Stack bytes | Heap p50 | Heap p99 | Heap max | Total p50 | Total p99 | Total max |\n");
+        out.push_str("|---------|----|-------|-------------|----------|----------|----------|-----------|-----------|-----------|\n");
+        for feature in &table.feature_summaries {
+            out.push_str(&format!(
+                "| `{}` | `{}` | `{}` | {} | {} | {} | {} | {} | {} | {} |\n",
+                feature.feature,
+                feature.op_name,
+                feature.shape.as_str(),
+                feature.stack_bytes,
+                feature.heap_p50,
+                feature.heap_p99,
+                feature.heap_max,
+                feature.total_p50,
+                feature.total_p99,
+                feature.total_max
+            ));
+        }
+
+        out.push_str("\n#### Largest Entity Rows\n\n");
+        out.push_str("| Entity key | Events | Stack bytes | Heap bytes | Total bytes | Top feature contributors |\n");
+        out.push_str("|------------|--------|-------------|------------|-------------|--------------------------|\n");
+        for entity in table.entities.iter().take(5) {
+            out.push_str(&format!(
+                "| `{}` | {} | {} | {} | {} | {} |\n",
+                entity.entity_key,
+                entity.events_applied,
+                entity.profile.stack_bytes,
+                entity.profile.heap_bytes,
+                entity.profile.total_bytes(),
+                format_top_features(&entity.features, 3)
+            ));
+        }
+
+        if let Some(entity) = table.entities.first() {
+            out.push_str(&format!(
+                "\n#### Feature Breakdown For Largest Entity `{}`\n\n",
+                entity.entity_key
+            ));
+            out.push_str("| Feature | Op | Shape | Events applied | Stack bytes | enum_slot_bytes | payload_bytes | slack_bytes | Heap bytes | Total bytes |\n");
+            out.push_str("|---------|----|-------|----------------|-------------|-----------------|---------------|-------------|------------|-------------|\n");
+            for feature in &entity.features {
+                out.push_str(&format!(
+                    "| `{}` | `{}` | `{}` | {} | {} | {} | {} | {} | {} | {} |\n",
+                    feature.feature,
+                    feature.op_name,
+                    feature.shape.as_str(),
+                    feature.events_applied,
+                    feature.profile.stack_bytes,
+                    feature.profile.enum_slot_bytes,
+                    feature.profile.payload_bytes,
+                    feature.profile.slack_bytes,
+                    feature.profile.heap_bytes,
+                    feature.profile.total_bytes()
+                ));
+            }
+        }
+        out.push('\n');
+    }
 
     out.push_str("## Sorted Op Table\n\n");
     out.push_str("| Rank | Op | Shape | Stack bytes | enum_slot_bytes | payload_bytes | slack_bytes | Heap bytes | Total bytes |\n");
@@ -279,23 +449,24 @@ fn render_markdown(input: ReportInput<'_>) -> String {
         ));
     }
 
-    out.push_str("\n## Sorted Op Path Details\n\n");
-    out.push_str("Rows with `0` events applied show constructor footprint only; the workload generator did not emit an event for that path's upstream source.\n\n");
+    out.push_str("\n## Sorted Op Entity-Feature Details\n\n");
+    out.push_str("Secondary diagnostic view: top entity-feature contributors under each op/shape parent. The table/entity sections above are the primary bytes-per-entity view.\n\n");
     for (idx, total) in input.op_totals.iter().enumerate() {
         out.push_str(&format!(
-            "### {}. `{}` / `{}` paths\n\n",
+            "### {}. `{}` / `{}` entity-feature rows\n\n",
             idx + 1,
             total.op_name,
             total.shape.as_str()
         ));
-        out.push_str("| Parent rank | Source event | Derivation | Feature | Key path | Events applied | Stack bytes | enum_slot_bytes | payload_bytes | slack_bytes | Heap bytes | Total bytes | Parent % |\n");
-        out.push_str("|-------------|--------------|------------|---------|----------|----------------|-------------|-----------------|---------------|-------------|------------|-------------|----------|\n");
-        for row in &total.rows {
+        out.push_str("| Parent rank | Source event | Derivation | Entity key | Feature | Key path | Events applied | Stack bytes | enum_slot_bytes | payload_bytes | slack_bytes | Heap bytes | Total bytes | Parent % |\n");
+        out.push_str("|-------------|--------------|------------|------------|---------|----------|----------------|-------------|-----------------|---------------|-------------|------------|-------------|----------|\n");
+        for row in total.rows.iter().take(20) {
             out.push_str(&format!(
-                "| {} | `{}` | `{}` | `{}` | `{}` | {} | {} | {} | {} | {} | {} | {} | {:.1}% |\n",
+                "| {} | `{}` | `{}` | `{}` | `{}` | `{}` | {} | {} | {} | {} | {} | {} | {} | {:.1}% |\n",
                 idx + 1,
                 format_sources(&row.source_events),
                 row.derivation,
+                row.entity_key,
                 row.feature,
                 format_key_path(&row.key_path),
                 row.events_applied,
@@ -306,6 +477,12 @@ fn render_markdown(input: ReportInput<'_>) -> String {
                 row.profile.heap_bytes,
                 row.profile.total_bytes(),
                 percent_of(row.profile.total_bytes(), total.profile.total_bytes())
+            ));
+        }
+        if total.rows.len() > 20 {
+            out.push_str(&format!(
+                "\nShowing top 20 of `{}` entity-feature rows for this op/shape.\n",
+                total.rows.len()
             ));
         }
         out.push('\n');
@@ -329,6 +506,8 @@ fn render_markdown(input: ReportInput<'_>) -> String {
             row.op_name,
             row.shape.as_str()
         ));
+        out.push_str(&format!("- Entity key: `{}`\n", row.entity_key));
+        out.push_str(&format!("- Entity events: `{}`\n", row.entity_events));
         out.push_str(&format!(
             "- Key path: `{}`\n",
             format_key_path(&row.key_path)
@@ -372,7 +551,7 @@ fn render_markdown(input: ReportInput<'_>) -> String {
 
     out.push_str("## Metrics Coherence\n\n");
     let target = input.metrics_placeholder as f64;
-    let observed = input.per_entity_total as f64;
+    let observed = input.bytes_per_entity_p99 as f64;
     let delta = (observed - target).abs();
     let allowed = target * input.tolerance;
     out.push_str(&format!(
@@ -380,8 +559,8 @@ fn render_markdown(input: ReportInput<'_>) -> String {
         input.metrics_placeholder
     ));
     out.push_str(&format!(
-        "- Profile per-entity estimate: `{}` bytes\n",
-        input.per_entity_total
+        "- Profile bytes-per-active-entity-row p99: `{}` bytes\n",
+        input.bytes_per_entity_p99
     ));
     out.push_str(&format!("- Tolerance: `{:.1}%`\n", input.tolerance * 100.0));
     if delta <= allowed {
@@ -401,7 +580,7 @@ fn render_markdown(input: ReportInput<'_>) -> String {
     out.push_str("- `payload_bytes` is the active variant payload inside the enum slot. For boxed variants this is the inline `Box<T>` pointer, while the boxed pointee remains in `heap_bytes`.\n");
     out.push_str("- `slack_bytes` is unused capacity in the fixed-size `AggOp` enum slot: `enum_slot_bytes - payload_bytes`.\n");
     out.push_str("- Heap entries are deterministic structural counts; map/table allocator overhead is labeled as an estimate.\n");
-    out.push_str("- Path grain is `source_event -> derivation -> feature -> op -> shape`; path detail rows are children of the op/shape rollups above.\n");
+    out.push_str("- Primary grain is `derivation table -> entity row -> feature column`; op/shape rows remain as secondary diagnostics for implementation-level hotspots.\n");
     out
 }
 
@@ -410,6 +589,239 @@ fn percent_of(part: usize, total: usize) -> f64 {
         0.0
     } else {
         (part as f64 / total as f64) * 100.0
+    }
+}
+
+fn table_states_from_features(features: Vec<FeatureSpec>) -> Result<Vec<TableState>> {
+    let mut grouped: BTreeMap<String, TableSpec> = BTreeMap::new();
+    for feature in features {
+        let entry = grouped
+            .entry(feature.derivation.clone())
+            .or_insert_with(|| TableSpec {
+                source_events: feature.source_events.clone(),
+                derivation: feature.derivation.clone(),
+                key_path: feature.key_path.clone(),
+                features: Vec::new(),
+            });
+        if entry.source_events != feature.source_events || entry.key_path != feature.key_path {
+            return Err(anyhow!(
+                "derivation {:?} has inconsistent source/key path",
+                feature.derivation
+            ));
+        }
+        entry.features.push(feature);
+    }
+    Ok(grouped
+        .into_values()
+        .map(|mut spec| {
+            spec.features.sort_by(|a, b| a.feature.cmp(&b.feature));
+            TableState {
+                spec,
+                entities: BTreeMap::new(),
+                events_applied: 0,
+            }
+        })
+        .collect())
+}
+
+fn collect_table_profiles(tables: Vec<TableState>) -> (Vec<TableProfile>, Vec<ProfileRow>) {
+    let mut all_rows = Vec::new();
+    let mut table_profiles = Vec::new();
+    for table in tables {
+        let mut entities = Vec::new();
+        for (entity_key, entity) in table.entities {
+            let mut entity_profile = MemProfile::new(entity_key.clone(), 0);
+            let mut feature_rows = Vec::with_capacity(entity.features.len());
+            for slot in entity.features {
+                let spec = slot.spec;
+                let mut profile = slot.op.mem_profile();
+                profile.label = format!(
+                    "{}::{}[{}]::{} ({})",
+                    format_sources(&spec.source_events),
+                    spec.derivation,
+                    entity_key,
+                    spec.feature,
+                    spec.op_name
+                );
+                add_profile_totals(&mut entity_profile, &profile);
+                let shape = profile_shape(&spec.desc);
+                let recommendation = recommendation_for(&spec.op_name, shape, &profile);
+                let row = ProfileRow {
+                    source_events: spec.source_events,
+                    derivation: spec.derivation,
+                    entity_key: entity_key.clone(),
+                    entity_events: entity.events_applied,
+                    feature: spec.feature,
+                    op_name: spec.op_name,
+                    key_path: spec.key_path,
+                    events_applied: slot.events_applied,
+                    window_ms: spec.desc.window_ms,
+                    recommendation,
+                    shape,
+                    profile,
+                };
+                feature_rows.push(row.clone());
+                all_rows.push(row);
+            }
+            feature_rows.sort_by(compare_profile_rows);
+            entities.push(EntityProfile {
+                entity_key,
+                events_applied: entity.events_applied,
+                profile: entity_profile,
+                features: feature_rows,
+            });
+        }
+        entities.sort_by(compare_entity_profiles);
+        let feature_summaries = feature_summaries_for_table(&entities);
+        let stack_values = entities
+            .iter()
+            .map(|entity| entity.profile.stack_bytes)
+            .collect::<Vec<_>>();
+        let heap_values = entities
+            .iter()
+            .map(|entity| entity.profile.heap_bytes)
+            .collect::<Vec<_>>();
+        let total_values = entities
+            .iter()
+            .map(|entity| entity.profile.total_bytes())
+            .collect::<Vec<_>>();
+        table_profiles.push(TableProfile {
+            source_events: table.spec.source_events,
+            derivation: table.spec.derivation,
+            key_path: table.spec.key_path,
+            configured_features: table.spec.features.len(),
+            active_entities: entities.len(),
+            events_applied: table.events_applied,
+            stack_p50: percentile_usize(stack_values.clone(), 0.50),
+            stack_p99: percentile_usize(stack_values.clone(), 0.99),
+            stack_max: stack_values.into_iter().max().unwrap_or(0),
+            heap_p50: percentile_usize(heap_values.clone(), 0.50),
+            heap_p99: percentile_usize(heap_values.clone(), 0.99),
+            heap_max: heap_values.into_iter().max().unwrap_or(0),
+            total_p50: percentile_usize(total_values.clone(), 0.50),
+            total_p99: percentile_usize(total_values.clone(), 0.99),
+            total_max: total_values.into_iter().max().unwrap_or(0),
+            feature_summaries,
+            entities,
+        });
+    }
+    (table_profiles, all_rows)
+}
+
+fn feature_summaries_for_table(entities: &[EntityProfile]) -> Vec<FeatureSummary> {
+    let mut grouped: BTreeMap<(String, String, ProfileShape), Vec<&ProfileRow>> = BTreeMap::new();
+    for entity in entities {
+        for feature in &entity.features {
+            grouped
+                .entry((
+                    feature.feature.clone(),
+                    feature.op_name.clone(),
+                    feature.shape,
+                ))
+                .or_default()
+                .push(feature);
+        }
+    }
+    let mut summaries = grouped
+        .into_iter()
+        .map(|((feature, op_name, shape), rows)| {
+            let stack_values = rows
+                .iter()
+                .map(|row| row.profile.stack_bytes)
+                .collect::<Vec<_>>();
+            let heap_values = rows
+                .iter()
+                .map(|row| row.profile.heap_bytes)
+                .collect::<Vec<_>>();
+            let total_values = rows
+                .iter()
+                .map(|row| row.profile.total_bytes())
+                .collect::<Vec<_>>();
+            FeatureSummary {
+                feature,
+                op_name,
+                shape,
+                stack_bytes: percentile_usize(stack_values, 0.99),
+                heap_p50: percentile_usize(heap_values.clone(), 0.50),
+                heap_p99: percentile_usize(heap_values.clone(), 0.99),
+                heap_max: heap_values.into_iter().max().unwrap_or(0),
+                total_p50: percentile_usize(total_values.clone(), 0.50),
+                total_p99: percentile_usize(total_values.clone(), 0.99),
+                total_max: total_values.into_iter().max().unwrap_or(0),
+            }
+        })
+        .collect::<Vec<_>>();
+    summaries.sort_by(|a, b| {
+        b.total_p99
+            .cmp(&a.total_p99)
+            .then_with(|| b.heap_p99.cmp(&a.heap_p99))
+            .then_with(|| a.feature.cmp(&b.feature))
+    });
+    summaries
+}
+
+fn add_profile_totals(total: &mut MemProfile, profile: &MemProfile) {
+    total.stack_bytes += profile.stack_bytes;
+    total.enum_slot_bytes += profile.enum_slot_bytes;
+    total.payload_bytes += profile.payload_bytes;
+    total.slack_bytes += profile.slack_bytes;
+    total.heap_bytes += profile.heap_bytes;
+    total.breakdown.extend(profile.breakdown.clone());
+}
+
+fn percentile_usize(mut values: Vec<usize>, q: f64) -> usize {
+    if values.is_empty() {
+        return 0;
+    }
+    values.sort_unstable();
+    let rank = ((values.len() as f64) * q).ceil() as usize;
+    let idx = rank.saturating_sub(1).min(values.len() - 1);
+    values[idx]
+}
+
+fn compare_table_profiles(a: &TableProfile, b: &TableProfile) -> std::cmp::Ordering {
+    b.total_p99
+        .cmp(&a.total_p99)
+        .then_with(|| b.heap_p99.cmp(&a.heap_p99))
+        .then_with(|| b.active_entities.cmp(&a.active_entities))
+        .then_with(|| a.derivation.cmp(&b.derivation))
+}
+
+fn compare_entity_profiles(a: &EntityProfile, b: &EntityProfile) -> std::cmp::Ordering {
+    b.profile
+        .total_bytes()
+        .cmp(&a.profile.total_bytes())
+        .then_with(|| b.events_applied.cmp(&a.events_applied))
+        .then_with(|| a.entity_key.cmp(&b.entity_key))
+}
+
+fn matches_source(sources: &[String], event_name: &str) -> bool {
+    sources.is_empty() || sources.iter().any(|source| source == event_name)
+}
+
+fn entity_key_from_row(row: &Row, key_path: &[String]) -> Option<String> {
+    if key_path.is_empty() {
+        return Some("<global>".to_string());
+    }
+    key_path
+        .iter()
+        .map(|key| row.get(key).map(value_key_part))
+        .collect::<Option<Vec<_>>>()
+        .map(|parts| parts.join("|"))
+}
+
+fn value_key_part(value: &Value) -> String {
+    match value {
+        Value::Null => "null".to_string(),
+        Value::Str(s) => s.to_string(),
+        Value::I64(v) => v.to_string(),
+        Value::F64(v) => format!("{v}"),
+        Value::Bool(v) => v.to_string(),
+        Value::Bytes(bytes) => format!("<{} bytes>", bytes.len()),
+        Value::Datetime(v) => v.to_string(),
+        Value::Json(v) => v.to_string(),
+        Value::List(values) => format!("<list:{}>", values.len()),
+        Value::Map(values) => format!("<map:{}>", values.len()),
     }
 }
 
@@ -429,6 +841,21 @@ fn format_key_path(keys: &[String]) -> String {
     }
 }
 
+fn format_top_features(features: &[ProfileRow], limit: usize) -> String {
+    features
+        .iter()
+        .take(limit)
+        .map(|feature| {
+            format!(
+                "`{}`={} bytes",
+                feature.feature,
+                feature.profile.total_bytes()
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 fn top_breakdown(entries: &[MemBreakdown], limit: usize) -> Vec<MemBreakdown> {
     let mut entries = entries.to_vec();
     entries.sort_by(|a, b| b.bytes.cmp(&a.bytes).then_with(|| a.label.cmp(&b.label)));
@@ -443,6 +870,7 @@ fn compare_profile_rows(a: &ProfileRow, b: &ProfileRow) -> std::cmp::Ordering {
         .then_with(|| b.events_applied.cmp(&a.events_applied))
         .then_with(|| format_sources(&a.source_events).cmp(&format_sources(&b.source_events)))
         .then_with(|| a.derivation.cmp(&b.derivation))
+        .then_with(|| a.entity_key.cmp(&b.entity_key))
         .then_with(|| a.feature.cmp(&b.feature))
         .then_with(|| a.op_name.cmp(&b.op_name))
 }
@@ -801,17 +1229,33 @@ mod tests {
         assert!(report.contains("Events replayed from generator: `5`"));
         assert!(report.contains("  - `Txn`: `5`"));
         assert!(!report.contains("Events replayed per op"));
+        assert!(report.contains("Active entity rows profiled:"));
+        assert!(report.contains("Bytes per active entity row p99:"));
+        assert!(report.contains("## Per-Entity Table Footprint"));
+        assert!(report.contains(
+            "| Rank | Table | Source | group_by key | Active entities | Features/entity | Events applied | Stack p50 | Stack p99 | Stack max | Heap p50 | Heap p99 | Heap max | Total p50 | Total p99 | Total max | Top contributor |"
+        ));
+        assert!(report.contains("`TxnByUser` | `Txn` | `user_id`"));
+        assert!(report.contains("## Per-Table Entity Details"));
+        assert!(report.contains("### `TxnByUser` (`Txn` by `user_id`)"));
+        assert!(report.contains("#### Feature Columns Across Entities"));
+        assert!(report.contains("#### Largest Entity Rows"));
+        assert!(report.contains("#### Feature Breakdown For Largest Entity"));
+        assert!(
+            report.contains("The workload generator emitted no events for this table's source.")
+        );
         assert!(report.contains("## Sorted Op Table"));
-        assert!(report.contains("## Sorted Op Path Details"));
+        assert!(report.contains("## Sorted Op Entity-Feature Details"));
         assert!(report.contains("## Top 5 Offenders"));
         assert!(report.contains("## Metrics Coherence"));
         assert!(report.contains("Aggregate features discovered: `111`"));
         assert!(report.contains("| Rank | Op | Shape |"));
         assert!(report.contains(
-            "| Parent rank | Source event | Derivation | Feature | Key path | Events applied |"
+            "| Parent rank | Source event | Derivation | Entity key | Feature | Key path | Events applied |"
         ));
-        assert!(report
-            .contains("| `Login` | `LoginByUser` | `ips_distinct_login_1h` | `user_id` | 0 |"));
-        assert!(report.contains("- Events applied: `5`"));
+        assert!(report.contains("`txn_count_lifetime` | `user_id` | 1 |"));
+        assert!(report.contains("- Entity key:"));
+        assert!(report.contains("- Entity events:"));
+        assert!(report.contains("- Events applied: `1`"));
     }
 }
