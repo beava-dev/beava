@@ -101,7 +101,8 @@ class Txn:
 Field types come from the [shared.md § Field types](../sdk-api/shared.md#field-types)
 vocabulary: `str`, `i64` (Python `int`), `f64` (Python `float`), `bool`,
 `bytes`, `datetime`. `event_time` fields are **rejected at decoration time**
-per `project_redis_shaped_no_event_time_ever` — beava is processing-time only;
+per `project_redis_shaped_no_event_time_ever` (post-2026-05-19: partially
+overturned by ADR-004 for v0.1 bucketing) — beava is processing-time only;
 the server stamps wall-clock arrival time on every push.
 
 ### Function form (derived event)
@@ -242,14 +243,20 @@ surfaces are out of scope:
   state at the table layer (e.g., `AStats` reads `A`, `BStats` reads `B`, and
   `CStats` reads the shared source `Txn` to act as a union).
 - **Joins** (`event ↔ event`, `event ↔ table`, `table ↔ table`) — permanently
-  killed per `project_redis_shaped_no_event_time_ever`. Compose via push/get
+  killed per `project_redis_shaped_no_event_time_ever` (post-2026-05-19:
+  partially overturned by ADR-004 for v0.1 bucketing). Compose via push/get
   patterns + entity-key sharding instead. Returns alongside tables in v0.1+
   if/when justified by demand.
 - **`bv.union`** — deferred with joins.
 - **Event-time / watermarks / `event_time_field` / `tolerate_delay`** —
-  permanently killed per the same architectural lock. The server stamps
-  wall-clock arrival time on every push; `agg_windowed` operators bucket on
-  that.
+  permanently killed per the same architectural lock (post-2026-05-19:
+  partially overturned by ADR-004 for v0.1 bucketing). ADR-004 introduces
+  pragmatic event-time bucketing via a reserved `_ts` field for v0.1, meaning
+  event-time is no longer "permanently killed" but is supported in a limited,
+  pragmatic form. However, the broader event-time features like watermarks,
+  out-of-order buffering, and stream-stream joins remain OUT of scope. The
+  server stamps wall-clock arrival time on every push; `agg_windowed` operators
+  bucket on that.
 - **Session windows** (`bv.session(gap_ms=..., inner=...)`) — out of v0 + v0.1
   per `.planning/ideas/session-windows-v0.1.md`.
 - **Table mutation surface** (`app.upsert / app.delete / app.retract`) —
