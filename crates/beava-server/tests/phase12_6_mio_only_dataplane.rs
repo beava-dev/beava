@@ -11,7 +11,8 @@
 //! `crates/beava-server/src/recovery.rs::replay_handrolled_wal_dir` plus
 //! `replay_wal_from_lsn` (cold-path WAL replay on boot). Any third caller is
 //! an architectural regression per `project_phase18_no_dual_runtime` +
-//! `project_redis_shaped_no_event_time_ever`.
+//! `project_redis_shaped_no_event_time_ever`
+//! (post-2026-05-19: partially overturned by ADR-004 for v0.1 bucketing).
 //!
 //! **2. axum is restricted to the admin sidecar.**
 //! `axum::Router`, `axum::Json`, `axum::Extension`, `axum::extract::*`,
@@ -145,7 +146,8 @@ fn only_apply_shard_and_recovery_call_apply_event_to_aggregations() {
         violations.is_empty(),
         "Architectural regression: only `apply_shard.rs::dispatch_push_sync` (mio data plane) \
          and `recovery.rs::replay_*` (WAL replay) may call `apply_event_to_aggregations`. \
-         Per `project_phase18_no_dual_runtime` + `project_redis_shaped_no_event_time_ever`, \
+         Per `project_phase18_no_dual_runtime` + `project_redis_shaped_no_event_time_ever` \
+         (post-2026-05-19: partially overturned by ADR-004 for v0.1 bucketing), \
          the mio event loop is the SOLE data-plane runtime. Any third caller is a regression.\n\
          Violations:\n{}",
         violations.join("\n")
