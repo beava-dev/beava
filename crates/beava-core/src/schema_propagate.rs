@@ -1439,10 +1439,48 @@ mod tests {
         );
         match r {
             Err(PropagationError::TypeMismatch { reason, .. }) => {
-                assert!(
-                    reason.contains("foo"),
-                    "error reason should mention 'foo', got: {reason}"
-                );
+                assert!(reason.contains("foo"), "got: {reason}");
+                assert!(reason.contains("unknown function"), "got: {reason}");
+                // Pin removal of the stale "Phase 4" / "only cast and isnull" tail
+                // — closed by Step 7 collapsing `infer_call_type`.
+                assert!(!reason.contains("Phase 4"), "got: {reason}");
+                assert!(!reason.contains("only 'cast' and 'isnull'"), "got: {reason}");
+            }
+            other => panic!("expected TypeMismatch, got {other:?}"),
+        }
+    }
+
+    // ── Test 29: quadkey returns I64 ──────────────────────────────────────────
+
+    #[test]
+    fn infer_expr_type_quadkey_returns_i64() {
+        let s = schema_with(&[
+            ("lat", FieldType::F64),
+            ("lon", FieldType::F64),
+            ("zoom", FieldType::I64),
+        ]);
+        let r = parse_and_infer("quadkey(lat, lon, zoom)", &s).expect("should not error");
+        assert_eq!(r, InferredType::Known(FieldType::I64));
+    }
+
+    // ── Test 30: quadkey rejects non-numeric ──────────────────────────────────
+
+    #[test]
+    fn infer_expr_type_quadkey_rejects_non_numeric() {
+        let s = schema_with(&[
+            ("lat", FieldType::Str),
+            ("lon", FieldType::F64),
+            ("zoom", FieldType::I64),
+        ]);
+        let r = parse_and_infer("quadkey(lat, lon, zoom)", &s);
+        assert!(r.is_err(), "expected TypeMismatch, got {r:?}");
+        match r {
+            Err(PropagationError::TypeMismatch { reason, .. }) => {
+                assert!(reason.contains("quadkey"), "got: {reason}");
+                // Pin removal of the `_ => "unhandled"` fall-through in `infer_call_type`
+                // — closed by Step 7. Without this, the test passes today against
+                // the wrong error.
+                assert!(!reason.contains("unhandled"), "got: {reason}");
             }
             other => panic!("expected TypeMismatch, got {other:?}"),
         }
