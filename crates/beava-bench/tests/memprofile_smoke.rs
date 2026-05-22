@@ -37,19 +37,16 @@ fn memprofile_smoke_writes_required_sections() {
     assert!(report.contains("#### Largest Entity Rows"));
     assert!(report.contains("#### Feature Breakdown For Largest Entity"));
     assert!(report.contains("The workload generator emitted no events for this table's source."));
-    assert!(report.contains("## Sorted Op Table"));
-    assert!(report.contains("## Sorted Op Entity-Feature Details"));
+    assert!(!report.contains("## Sorted Op Table"));
+    assert!(!report.contains("## Sorted Op Entity-Feature Details"));
     assert!(report.contains("## Top 5 Offenders"));
     assert!(report.contains("## Metrics Coherence"));
     assert!(report.contains("Aggregate features discovered: `111`"));
-    assert!(report.contains("| Rank | Op | Shape | Stack bytes | enum_slot_bytes | payload_bytes | slack_bytes | Heap bytes | Total bytes |"));
     assert!(report.contains("enum_slot_bytes"));
     assert!(report.contains("payload_bytes"));
     assert!(report.contains("slack_bytes"));
-    assert!(report.contains(
-        "| Parent rank | Source event | Derivation | Entity key | Feature | Key path | Events applied | Stack bytes | enum_slot_bytes | payload_bytes | slack_bytes |"
-    ));
-    assert!(report.contains("`txn_count_lifetime` | `user_id` | 1 | 80 | 80 | 8 | 72 | 0 | 80 |"));
+    assert!(report
+        .contains("`txn_count_lifetime` | `count` | `lifetime` | 1 | 80 | 80 | 8 | 72 | 0 | 80 |"));
     assert!(report.contains("- Path: `Txn` ->"));
     assert!(report.contains("- Entity key:"));
     assert!(report.contains("- Entity events:"));
