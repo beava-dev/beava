@@ -932,6 +932,11 @@ async fn build_runtime_state_with_persistence(
                 interval: Duration::from_millis(snapshot_interval_ms.max(1)),
                 snapshot_dir: snapshot_dir.clone(),
                 retain: 2,
+                // Read env once at boot — these are the SOLE legitimate
+                // env-read sites. Tests pass config fields directly per
+                // `phase13_5_3_no_env_var_pokes_in_tests`.
+                min_events_per_snapshot: crate::snapshot_task::min_events_from_env(),
+                use_fork_snapshot: crate::snapshot_fork::fork_enabled(),
             },
             Arc::clone(&app_state),
             wal_sink.clone(),

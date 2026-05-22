@@ -26,7 +26,7 @@
 //! and would mislead the projection.
 
 use beava_core::agg_op::AggOp;
-use beava_core::agg_state::{CountDistinctStateWrap, CountState};
+use beava_core::agg_state::CountState;
 use beava_core::agg_state_table::{AggStateTable, EntityKey};
 use beava_core::row::Value;
 use compact_str::CompactString;
@@ -46,9 +46,7 @@ impl OpShape {
     fn build(self, n: u64) -> AggOp {
         match self {
             OpShape::Count => AggOp::Count(CountState { n }),
-            OpShape::CountDistinctHll1024 => {
-                AggOp::CountDistinct(Box::new(CountDistinctStateWrap::default()))
-            }
+            OpShape::CountDistinctHll1024 => AggOp::CountDistinct(Box::default()),
         }
     }
     fn label(self) -> &'static str {

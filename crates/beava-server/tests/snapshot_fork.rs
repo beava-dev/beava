@@ -25,7 +25,7 @@ use beava_core::row::Value;
 use beava_core::snapshot_body::SnapshotBody;
 use beava_persistence::SnapshotReader;
 use beava_server::registry_debug::DevAggState;
-use beava_server::snapshot_fork::{do_snapshot_via_fork, fork_enabled, ChildExit};
+use beava_server::snapshot_fork::{do_snapshot_via_fork, ChildExit};
 use beava_server::AppState;
 use compact_str::CompactString;
 use smallvec::smallvec;
@@ -73,33 +73,13 @@ fn build_app_state(n_entities: usize) -> AppState {
     AppState::new(dev_agg, wal_sink, idem_cache)
 }
 
-/// Env vars are process-global; this single test exercises every truthy/
-/// falsey case in sequence so cargo's parallel-test scheduler can't race two
-/// env-touching tests against each other.
-#[tokio::test(flavor = "current_thread")]
-async fn fork_env_gate() {
-    let prev = std::env::var("BEAVA_SNAPSHOT_FORK").ok();
-
-    std::env::remove_var("BEAVA_SNAPSHOT_FORK");
-    assert!(!fork_enabled(), "fork must be opt-in (env unset)");
-
-    for v in ["1", "true", "TRUE", "yes"] {
-        std::env::set_var("BEAVA_SNAPSHOT_FORK", v);
-        assert!(fork_enabled(), "BEAVA_SNAPSHOT_FORK={v} must enable fork");
-    }
-
-    for v in ["0", "false", "no", ""] {
-        std::env::set_var("BEAVA_SNAPSHOT_FORK", v);
-        assert!(!fork_enabled(), "BEAVA_SNAPSHOT_FORK={v} must disable fork");
-    }
-
-    std::env::remove_var("BEAVA_SNAPSHOT_FORK");
-    assert!(!fork_enabled(), "env unset must disable fork");
-
-    if let Some(v) = prev {
-        std::env::set_var("BEAVA_SNAPSHOT_FORK", v);
-    }
-}
+// NOTE: env-gate test was previously here but violated the Phase 13.5.3
+// architectural rule (`phase13_5_3_no_env_var_pokes_in_tests`) — process-env
+// pokes pollute parallel test runs. Production reads `BEAVA_SNAPSHOT_FORK`
+// once at boot in `server.rs` via `snapshot_fork::fork_enabled()`; tests
+// drive the fork path by calling `do_snapshot_via_fork` directly (below)
+// or by setting `SnapshotTaskConfig.use_fork_snapshot = true` (see
+// `tests/snapshot_conditional.rs`).
 
 #[cfg(unix)]
 #[tokio::test(flavor = "current_thread")]

@@ -21,6 +21,34 @@ pub struct SnapshotTaskConfig {
     pub interval: Duration,
     pub snapshot_dir: PathBuf,
     pub retain: usize,
+    /// Minimum number of WAL events written since the previous successful
+    /// snapshot that must have accumulated before the next interval tick
+    /// fires a snapshot. `0` (default) preserves the legacy "always snapshot
+    /// on every tick" behavior; any value > 0 enables Redis-style
+    /// conditional snapshotting — idle minutes don't write a snapshot.
+    ///
+    /// Computed as `current_wal_lsn - last_snapshot_lsn`. The check is
+    /// applied to interval ticks only; a manual `force_snapshot_now`
+    /// trigger always runs regardless of threshold.
+    ///
+    /// Wired from env `BEAVA_SNAPSHOT_MIN_EVENTS`.
+    pub min_events_per_snapshot: u64,
+    /// Whether to use the fork+COW snapshot path (drops apply-thread
+    /// lock-hold from seconds to microseconds). Resolved once at boot in
+    /// `server.rs` from `BEAVA_SNAPSHOT_FORK=1`; tests construct
+    /// `SnapshotTaskConfig` with this field set directly to avoid
+    /// process-env pollution (per the Phase 13.5.3 architectural rule
+    /// in `phase13_5_3_no_env_var_pokes_in_tests`).
+    pub use_fork_snapshot: bool,
+}
+
+/// Read `BEAVA_SNAPSHOT_MIN_EVENTS` as a u64. Returns `0` if the env is
+/// unset or unparseable (preserves legacy behavior).
+pub fn min_events_from_env() -> u64 {
+    std::env::var("BEAVA_SNAPSHOT_MIN_EVENTS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(0)
 }
 
 /// Trigger channel sender for `force_snapshot_now`.
@@ -44,11 +72,20 @@ pub fn spawn_snapshot_task(
 ) -> (JoinHandle<()>, SnapshotTriggerTx) {
     let (trigger_tx, mut trigger_rx) = mpsc::channel::<oneshot::Sender<Result<(), String>>>(8);
     let join = tokio::spawn(async move {
+        // Read last_snapshot_lsn BEFORE consuming the first interval tick.
+        // The first tick is "immediate" (Tokio docs) but may still yield to
+        // the runtime to set up the timer — yielding here would let
+        // concurrent appends advance the LSN before we observe the
+        // baseline, causing the first real tick to see `delta = 0` and
+        // skip even though events DID accumulate.
+        let mut last_snapshot_lsn: u64 = wal_sink.durable_lsn();
+
         let mut iv = tokio::time::interval(cfg.interval);
         iv.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         // First interval tick fires immediately; skip it so boot doesn't
         // race a snapshot before the WAL has any records.
         iv.tick().await;
+
         loop {
             tokio::select! {
                 biased;
@@ -61,18 +98,51 @@ pub fn spawn_snapshot_task(
                     return;
                 }
                 Some(ack) = trigger_rx.recv() => {
+                    // Manual trigger always runs regardless of threshold.
+                    // Tests + operators use this to force a snapshot.
                     let res = do_snapshot(&cfg, &app_state, &wal_sink).await;
+                    if res.is_ok() {
+                        last_snapshot_lsn = wal_sink.durable_lsn();
+                    }
                     let mapped = res.map_err(|e| e.to_string());
                     let _ = ack.send(mapped);
                 }
                 _ = iv.tick() => {
-                    if let Err(e) = do_snapshot(&cfg, &app_state, &wal_sink).await {
-                        tracing::warn!(
-                            target: "beava.snapshot",
-                            kind = "snapshot.tick_failed",
-                            error = %e,
-                            "scheduled snapshot failed"
-                        );
+                    // Redis-style conditional skip. When
+                    // `min_events_per_snapshot > 0`, an interval tick is a
+                    // no-op if fewer than `min` WAL events have committed
+                    // since the previous successful snapshot. This avoids
+                    // the production write-amplification class where an
+                    // idle beava still writes a multi-hundred-MB snapshot
+                    // every 30-60 s. Default `0` preserves legacy behavior.
+                    if cfg.min_events_per_snapshot > 0 {
+                        let current_lsn = wal_sink.durable_lsn();
+                        let delta = current_lsn.saturating_sub(last_snapshot_lsn);
+                        if delta < cfg.min_events_per_snapshot {
+                            tracing::debug!(
+                                target: "beava.snapshot",
+                                kind = "snapshot.skipped_below_threshold",
+                                events_since_last = delta,
+                                threshold = cfg.min_events_per_snapshot,
+                                current_lsn,
+                                last_snapshot_lsn,
+                                "skipping snapshot — below event-count threshold"
+                            );
+                            continue;
+                        }
+                    }
+                    match do_snapshot(&cfg, &app_state, &wal_sink).await {
+                        Ok(()) => {
+                            last_snapshot_lsn = wal_sink.durable_lsn();
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                target: "beava.snapshot",
+                                kind = "snapshot.tick_failed",
+                                error = %e,
+                                "scheduled snapshot failed"
+                            );
+                        }
                     }
                 }
             }
@@ -100,7 +170,7 @@ async fn do_snapshot(
     // peak during the child's serialize+write window. See `snapshot_fork`
     // for the safety analysis. Default (env unset) is the legacy in-process
     // path below.
-    if crate::snapshot_fork::fork_enabled() {
+    if cfg.use_fork_snapshot {
         match crate::snapshot_fork::do_snapshot_via_fork(&cfg.snapshot_dir, snapshot_lsn, app_state)
             .await
         {
