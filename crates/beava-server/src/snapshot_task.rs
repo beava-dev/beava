@@ -94,6 +94,46 @@ async fn do_snapshot(
     // records are idempotent through `apply_event_to_aggregations`,
     // RegistryBump records are additive.
     let snapshot_lsn = wal_sink.durable_lsn();
+
+    // Dispatch on `BEAVA_SNAPSHOT_FORK=1` — the fork+COW path drops apply-
+    // thread lock-hold from ~seconds to ~µs at the cost of a brief 2× memory
+    // peak during the child's serialize+write window. See `snapshot_fork`
+    // for the safety analysis. Default (env unset) is the legacy in-process
+    // path below.
+    if crate::snapshot_fork::fork_enabled() {
+        match crate::snapshot_fork::do_snapshot_via_fork(&cfg.snapshot_dir, snapshot_lsn, app_state)
+            .await
+        {
+            Ok(crate::snapshot_fork::ChildExit::Success) => {
+                if snapshot_lsn > 0 {
+                    wal_sink.truncate_up_to(snapshot_lsn).await?;
+                }
+                let removed = prune_old_snapshots(&cfg.snapshot_dir, cfg.retain)?;
+                let registry_version = app_state.dev_agg.registry.version();
+                tracing::info!(
+                    target: "beava.snapshot",
+                    kind = "snapshot.written",
+                    snapshot_lsn,
+                    registry_version,
+                    retained = cfg.retain,
+                    removed,
+                    via = "fork",
+                    "snapshot written via fork + WAL truncated + old snapshots pruned"
+                );
+                return Ok(());
+            }
+            Ok(crate::snapshot_fork::ChildExit::Failure { code, message }) => {
+                return Err(SnapshotTaskError::Encode(format!(
+                    "fork-snapshot child failed (code={code}): {message}"
+                )));
+            }
+            Err(e) => {
+                return Err(SnapshotTaskError::Encode(format!("fork-snapshot: {e}")));
+            }
+        }
+    }
+
+    // Legacy in-process path (default).
     let next_event_id = app_state.dev_agg.next_event_id.load(Ordering::Relaxed);
     let query_time_ms = app_state.dev_agg.query_time_ms.load(Ordering::Relaxed) as i64;
 
