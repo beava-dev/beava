@@ -6,8 +6,10 @@
 //! frozen view of `state_tables`. Apply-thread blocking drops from
 //! ~seconds to ~microseconds.
 //!
-//! Opt-in via `BEAVA_SNAPSHOT_FORK=1`. Default behaviour (without the env)
-//! is the in-process synchronous snapshot in `snapshot_task::do_snapshot`.
+//! Default ON on unix (linux/macos). Set `BEAVA_SNAPSHOT_FORK=0` (or
+//! `false`/`no`) to opt back into the legacy in-process synchronous
+//! snapshot in `snapshot_task::do_snapshot`. On non-unix targets the
+//! fork path is unavailable and the in-process path is always used.
 //!
 //! ## Safety / fork-correctness notes
 //!
@@ -69,12 +71,19 @@ pub enum SnapshotForkError {
     Persist(#[from] PersistError),
 }
 
-/// Whether the fork path is enabled via env var. Reads `BEAVA_SNAPSHOT_FORK`
-/// on every call (cold path; cost is negligible vs. a snapshot cycle).
+/// Whether the fork path is enabled. Default ON on unix (linux/macos);
+/// callers can opt out by setting `BEAVA_SNAPSHOT_FORK` to `0`, `false`,
+/// `no`, or empty. Any other value (or unset) keeps the fork path on.
+/// Reads the env on every call (cold path; cost is negligible vs. a
+/// snapshot cycle). Always `false` on non-unix targets — fork(2) is
+/// unavailable there.
 pub fn fork_enabled() -> bool {
-    matches!(
+    if !cfg!(unix) {
+        return false;
+    }
+    !matches!(
         std::env::var("BEAVA_SNAPSHOT_FORK").as_deref(),
-        Ok("1") | Ok("true") | Ok("TRUE") | Ok("yes")
+        Ok("0") | Ok("false") | Ok("FALSE") | Ok("no") | Ok("")
     )
 }
 

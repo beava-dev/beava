@@ -322,6 +322,12 @@ impl ServerV18 {
         tcp_addr: std::net::SocketAddr,
         admin_addr: std::net::SocketAddr,
     ) -> Result<Self, ServerError> {
+        // Opt this process out of Transparent Huge Pages (Linux), warn if
+        // the system default is `[always]`. THP makes fork()-snapshot COW
+        // granularity 2 MB instead of 4 KB — a 500× amplifier on COW
+        // memory overhead during BGSAVE-style work. See crate::thp.
+        crate::thp::detect_and_opt_out();
+
         // Bind event-plane listeners (std::net — they'll be handed to mio later).
         let http_listener =
             std::net::TcpListener::bind(http_addr).map_err(|e| ServerError::Bind {
