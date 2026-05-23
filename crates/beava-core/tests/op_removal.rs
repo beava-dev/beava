@@ -11,7 +11,7 @@
 //! GREEN commit: after Task 1.b, all 4 tests pass.
 
 use beava_core::agg_compile::compile_aggregations_from_nodes;
-use beava_core::builtins::{lookup_builtin, Arity};
+use beava_core::builtins::{Arity, BuiltinFn};
 use beava_core::op_node::{AggSpec, OpNode};
 use beava_core::registry::{DerivationDescriptor, EventDescriptor, OutputKind, RegistryInner};
 use beava_core::registry_diff::PayloadNode;
@@ -139,13 +139,13 @@ fn test_geo_entropy_register_rejected() {
 /// Before Task 1.b it returns None → RED.
 #[test]
 fn test_quadkey_builtin_exists() {
-    let b = lookup_builtin("quadkey");
+    let b = BuiltinFn::from_name("quadkey");
     assert!(
         b.is_some(),
-        "quadkey builtin not found in BUILTINS table; Task 1.b must add it"
+        "quadkey builtin not found in BuiltinFn enum; Task 1.b must add it"
     );
     assert_eq!(
-        b.unwrap().arity,
+        b.unwrap().arity(),
         Arity::Fixed(3),
         "quadkey must have arity Fixed(3) — args: (lat, lon, zoom)"
     );
@@ -159,14 +159,14 @@ fn test_quadkey_builtin_exists() {
 fn test_quadkey_returns_deterministic_cell_id() {
     use beava_core::row::Value;
 
-    let b = lookup_builtin("quadkey").expect("quadkey builtin must exist after Task 1.b");
+    let b = BuiltinFn::from_name("quadkey").expect("quadkey builtin must exist after Task 1.b");
 
     // Determinism: same args → same output.
     let lat = Value::F64(40.0);
     let lon = Value::F64(-74.0);
     let zoom = Value::I64(7);
-    let r1 = (b.eval)(&[lat.clone(), lon.clone(), zoom.clone()]);
-    let r2 = (b.eval)(&[lat.clone(), lon.clone(), zoom.clone()]);
+    let r1 = b.eval(&[lat.clone(), lon.clone(), zoom.clone()]);
+    let r2 = b.eval(&[lat.clone(), lon.clone(), zoom.clone()]);
     assert_eq!(r1, r2, "quadkey must be deterministic");
     assert!(
         matches!(r1, Value::I64(_)),
@@ -175,7 +175,7 @@ fn test_quadkey_returns_deterministic_cell_id() {
 
     // Nearby coords share a tile at zoom=7 (~150 km cell).
     let lon_near = Value::F64(-74.001);
-    let r_near = (b.eval)(&[lat.clone(), lon_near, zoom.clone()]);
+    let r_near = b.eval(&[lat.clone(), lon_near, zoom.clone()]);
     assert_eq!(
         r1, r_near,
         "lat=40.0, lon=-74.0 and lat=40.0, lon=-74.001 must map to the same zoom=7 tile"
@@ -183,20 +183,20 @@ fn test_quadkey_returns_deterministic_cell_id() {
 
     // Different zoom → different granularity → different cell id for same coords.
     let zoom12 = Value::I64(12);
-    let r_z12 = (b.eval)(&[lat.clone(), lon.clone(), zoom12]);
+    let r_z12 = b.eval(&[lat.clone(), lon.clone(), zoom12]);
     assert_ne!(
         r1, r_z12,
         "zoom=7 and zoom=12 must produce different cell ids for the same lat/lon"
     );
 
     // Null lat → Null output.
-    let r_null = (b.eval)(&[Value::Null, lon.clone(), zoom.clone()]);
+    let r_null = b.eval(&[Value::Null, lon.clone(), zoom.clone()]);
     assert_eq!(r_null, Value::Null, "null lat must return Null");
 
     // Out-of-range zoom (0 or 25) → Null.
-    let r_zoom0 = (b.eval)(&[lat.clone(), lon.clone(), Value::I64(0)]);
+    let r_zoom0 = b.eval(&[lat.clone(), lon.clone(), Value::I64(0)]);
     assert_eq!(r_zoom0, Value::Null, "zoom=0 must return Null");
-    let r_zoom25 = (b.eval)(&[lat, lon, Value::I64(25)]);
+    let r_zoom25 = b.eval(&[lat, lon, Value::I64(25)]);
     assert_eq!(
         r_zoom25,
         Value::Null,

@@ -37,7 +37,7 @@
 //!   `Value::Str("float")` — matching the builtin contract.
 
 use crate::expr::{Expr, Literal};
-use crate::builtins::lookup_builtin;
+use crate::builtins::BuiltinFn;
 use crate::row::{Row, Value};
 
 /// Maximum recursion depth for expression evaluation.
@@ -93,8 +93,8 @@ fn eval_depth(expr: &Expr, row: &Row, depth: usize) -> Value {
         Expr::Call { fn_name, args, .. } => {
             // Evaluate all args to Values first.
             let arg_vals: Vec<Value> = args.iter().map(|a| eval_depth(a, row, depth + 1)).collect();
-            match lookup_builtin(fn_name) {
-                Some(builtin) => (builtin.eval)(&arg_vals),
+            match BuiltinFn::from_name(fn_name) {
+                Some(builtin) => builtin.eval(&arg_vals),
                 // Unknown function → Null (register-time catches; runtime defensive).
                 None => Value::Null,
             }

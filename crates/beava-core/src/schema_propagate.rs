@@ -16,7 +16,7 @@
 use std::collections::BTreeMap;
 
 use crate::expr::{self, Expr, Literal, ParseError};
-use crate::builtins::lookup_builtin;
+use crate::builtins::BuiltinFn;
 use crate::op_node::OpNode;
 use crate::schema::{DerivedSchema, EventSchema, FieldType, TableSchema};
 
@@ -658,7 +658,7 @@ fn infer_call_type(
     errors: &mut Vec<PropagationError>,
 ) -> Option<InferredType> {
     // Look up builtin.
-    let builtin = match lookup_builtin(fn_name) {
+    let builtin = match BuiltinFn::from_name(fn_name) {
         Some(b) => b,
         None => {
             errors.push(PropagationError::TypeMismatch {
@@ -673,7 +673,7 @@ fn infer_call_type(
     };
 
     // Arity check.
-    let expected = match builtin.arity {
+    let expected = match builtin.arity() {
         crate::builtins::Arity::Fixed(n) => Some(n),
         crate::builtins::Arity::Variadic => None,
     };

@@ -21,7 +21,7 @@ use std::collections::BTreeMap;
 
 use crate::eval;
 use crate::expr::{self, Expr};
-use crate::builtins::lookup_builtin;
+use crate::builtins::BuiltinFn;
 use crate::op_node::OpNode;
 use crate::row::{Row, Value};
 use crate::schema_propagate::{propagate_schema, Schema};
@@ -234,9 +234,7 @@ impl OpChain {
                     for (field, target) in entries {
                         if let Some(field_val) = row.get(field).cloned() {
                             let args = [field_val, target.as_value_str()];
-                            let cast_result = lookup_builtin("cast")
-                                .map(|b| (b.eval)(&args))
-                                .unwrap_or(Value::Null);
+                            let cast_result = BuiltinFn::Cast.eval(&args);
                             row = row.with_field(field, cast_result);
                         }
                     }
