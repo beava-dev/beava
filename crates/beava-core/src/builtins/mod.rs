@@ -19,6 +19,8 @@
 //! - **str → int/float**: `str.parse::<i64/f64>()` — fails → `Null`, not panic.
 //! - **Bytes**: no implicit bytes-to-str without an encoding spec → `Null`.
 
+pub(crate) mod _inference;
+
 use crate::row::Value;
 
 // ─── Arity ────────────────────────────────────────────────────────────────────

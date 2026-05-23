@@ -29,7 +29,7 @@
 //!     which correctly returns `Bool(true/false)`.
 //!
 //! - **Builtins**: `Call` nodes dispatch through the `BUILTINS` table in
-//!   `expr_builtins.rs`. Unknown function names return `Null` (register-time
+//!   `builtins/mod.rs`. Unknown function names return `Null` (register-time
 //!   rejects these; runtime is defensive).
 //!
 //! - **`Literal::BareIdent`**: converted to `Value::Str` so that `cast`'s
@@ -37,7 +37,7 @@
 //!   `Value::Str("float")` — matching the builtin contract.
 
 use crate::expr::{Expr, Literal};
-use crate::expr_builtins::lookup_builtin;
+use crate::builtins::lookup_builtin;
 use crate::row::{Row, Value};
 
 /// Maximum recursion depth for expression evaluation.

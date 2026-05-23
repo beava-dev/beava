@@ -11,7 +11,7 @@
 //! GREEN commit: after Task 1.b, all 4 tests pass.
 
 use beava_core::agg_compile::compile_aggregations_from_nodes;
-use beava_core::expr_builtins::{lookup_builtin, Arity};
+use beava_core::builtins::{lookup_builtin, Arity};
 use beava_core::op_node::{AggSpec, OpNode};
 use beava_core::registry::{DerivationDescriptor, EventDescriptor, OutputKind, RegistryInner};
 use beava_core::registry_diff::PayloadNode;
@@ -134,7 +134,7 @@ fn test_geo_entropy_register_rejected() {
     );
 }
 
-/// After Plan 19.2-06 Task 1.b adds the quadkey builtin in expr_builtins.rs,
+/// After Plan 19.2-06 Task 1.b adds the quadkey builtin in builtins/mod.rs,
 /// lookup_builtin("quadkey") must return Some(_) with arity Fixed(3).
 /// Before Task 1.b it returns None → RED.
 #[test]

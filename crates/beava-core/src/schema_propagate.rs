@@ -16,7 +16,7 @@
 use std::collections::BTreeMap;
 
 use crate::expr::{self, Expr, Literal, ParseError};
-use crate::expr_builtins::lookup_builtin;
+use crate::builtins::lookup_builtin;
 use crate::op_node::OpNode;
 use crate::schema::{DerivedSchema, EventSchema, FieldType, TableSchema};
 
@@ -674,8 +674,8 @@ fn infer_call_type(
 
     // Arity check.
     let expected = match builtin.arity {
-        crate::expr_builtins::Arity::Fixed(n) => Some(n),
-        crate::expr_builtins::Arity::Variadic => None,
+        crate::builtins::Arity::Fixed(n) => Some(n),
+        crate::builtins::Arity::Variadic => None,
     };
     if let Some(n) = expected {
         if args.len() != n {

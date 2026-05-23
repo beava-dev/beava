@@ -21,7 +21,7 @@ use std::collections::BTreeMap;
 
 use crate::eval;
 use crate::expr::{self, Expr};
-use crate::expr_builtins::lookup_builtin;
+use crate::builtins::lookup_builtin;
 use crate::op_node::OpNode;
 use crate::row::{Row, Value};
 use crate::schema_propagate::{propagate_schema, Schema};
