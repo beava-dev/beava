@@ -6,7 +6,7 @@ use beava_core::mem_usage::{MemBreakdown, MemProfile, MemUsage};
 use beava_core::row::{json_value_to_beava_value, Row, Value};
 use clap::Parser;
 use serde_json::Value as JsonValue;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::PathBuf;
 
@@ -48,7 +48,6 @@ struct ProfileRow {
     shape: ProfileShape,
     window_ms: Option<u64>,
     profile: MemProfile,
-    recommendation: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -386,7 +385,8 @@ fn render_markdown(input: ReportInput<'_>) -> String {
     }
 
     out.push_str("## Top 5 Offenders\n\n");
-    for (idx, row) in input.rows.iter().take(5).enumerate() {
+    out.push_str("One heaviest entity-feature example per unique op.\n\n");
+    for (idx, row) in top_unique_op_rows(input.rows, 5).iter().enumerate() {
         out.push_str(&format!(
             "### {}. `{}` / `{}` / `{}` / `{}`\n\n",
             idx + 1,
@@ -424,7 +424,6 @@ fn render_markdown(input: ReportInput<'_>) -> String {
             row.shape.as_str(),
             format_window_suffix(row.window_ms)
         ));
-        out.push_str(&format!("- Recommendation: {}\n", row.recommendation));
         if row.shape == ProfileShape::Windowed {
             out.push_str("- Breakdown rollup:\n");
             for entry in windowed_rollup(&row.profile.breakdown) {
@@ -477,7 +476,7 @@ fn render_markdown(input: ReportInput<'_>) -> String {
     out.push_str("- `payload_bytes` is the active variant payload inside the enum slot. For boxed variants this is the inline `Box<T>` pointer, while the boxed pointee remains in `heap_bytes`.\n");
     out.push_str("- `slack_bytes` is unused capacity in the fixed-size `AggOp` enum slot: `enum_slot_bytes - payload_bytes`.\n");
     out.push_str("- Heap entries are deterministic structural counts; map/table allocator overhead is labeled as an estimate.\n");
-    out.push_str("- Primary grain is `derivation table -> entity row -> feature column`; op/shape rows remain as secondary diagnostics for implementation-level hotspots.\n");
+    out.push_str("- Primary grain is `derivation table -> entity row -> feature column`; top offenders list one concrete entity-feature row per unique op.\n");
     out
 }
 
@@ -534,7 +533,6 @@ fn collect_table_profiles(tables: Vec<TableState>) -> (Vec<TableProfile>, Vec<Pr
                 );
                 add_profile_totals(&mut entity_profile, &profile);
                 let shape = profile_shape(&spec.desc);
-                let recommendation = recommendation_for(&spec.op_name, shape, &profile);
                 let row = ProfileRow {
                     source_events: spec.source_events,
                     derivation: spec.derivation,
@@ -545,7 +543,6 @@ fn collect_table_profiles(tables: Vec<TableState>) -> (Vec<TableProfile>, Vec<Pr
                     key_path: spec.key_path,
                     events_applied: slot.events_applied,
                     window_ms: spec.desc.window_ms,
-                    recommendation,
                     shape,
                     profile,
                 };
@@ -764,6 +761,20 @@ fn compare_profile_rows(a: &ProfileRow, b: &ProfileRow) -> std::cmp::Ordering {
         .then_with(|| a.op_name.cmp(&b.op_name))
 }
 
+fn top_unique_op_rows(rows: &[ProfileRow], limit: usize) -> Vec<&ProfileRow> {
+    let mut seen = BTreeSet::new();
+    let mut out = Vec::new();
+    for row in rows {
+        if seen.insert(row.op_name.as_str()) {
+            out.push(row);
+            if out.len() == limit {
+                break;
+            }
+        }
+    }
+    out
+}
+
 fn windowed_rollup(entries: &[MemBreakdown]) -> Vec<MemBreakdown> {
     let mut grouped: BTreeMap<String, MemBreakdown> = BTreeMap::new();
     for entry in entries {
@@ -804,33 +815,6 @@ fn windowed_rollup_bucket(entry: &MemBreakdown) -> Option<(String, String, Strin
         entry.kind.clone(),
         "summed across active window buckets".to_string(),
     ))
-}
-
-fn recommendation_for(op_name: &str, shape: ProfileShape, profile: &MemProfile) -> String {
-    match (op_name, shape) {
-        ("n_unique", ProfileShape::Windowed) => {
-            "keep for now; quantify sketch precision and window bucket fanout separately"
-                .to_string()
-        }
-        ("count" | "sum" | "mean", ProfileShape::Windowed) => {
-            "keep scalar core; quantify whether wrapper and bucket fanout are the real cost"
-                .to_string()
-        }
-        (
-            "quantile" | "n_unique" | "top_k" | "bloom_member" | "entropy",
-            ProfileShape::Lifetime,
-        ) => "keep for now; quantify sparse-to-dense sketch options next".to_string(),
-        ("burst_count" | "trend_residual", _) if profile.stack_bytes >= 80 => {
-            "box smaller if the report confirms broad per-entity prevalence".to_string()
-        }
-        ("count" | "sum" | "mean", _) if profile.heap_bytes == 0 => {
-            "keep; scalar state spends only the shared AggOp slot".to_string()
-        }
-        (_, ProfileShape::Windowed) => {
-            "restructure only if lazy bucket materialization still dominates".to_string()
-        }
-        _ => "keep; no targeted restructuring until workload ranking justifies it".to_string(),
-    }
 }
 
 fn profile_shape(desc: &AggOpDescriptor) -> ProfileShape {
@@ -1136,6 +1120,8 @@ mod tests {
         assert!(!report.contains("## Sorted Op Table"));
         assert!(!report.contains("## Sorted Op Entity-Feature Details"));
         assert!(report.contains("## Top 5 Offenders"));
+        assert!(report.contains("One heaviest entity-feature example per unique op."));
+        assert!(!report.contains("- Recommendation:"));
         assert!(report.contains("## Metrics Coherence"));
         assert!(report.contains("Aggregate features discovered: `111`"));
         assert!(report.contains("`txn_count_lifetime` | `count` | `lifetime` | 1 |"));

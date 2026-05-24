@@ -40,6 +40,8 @@ fn memprofile_smoke_writes_required_sections() {
     assert!(!report.contains("## Sorted Op Table"));
     assert!(!report.contains("## Sorted Op Entity-Feature Details"));
     assert!(report.contains("## Top 5 Offenders"));
+    assert!(report.contains("One heaviest entity-feature example per unique op."));
+    assert!(!report.contains("- Recommendation:"));
     assert!(report.contains("## Metrics Coherence"));
     assert!(report.contains("Aggregate features discovered: `111`"));
     assert!(report.contains("enum_slot_bytes"));

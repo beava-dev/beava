@@ -173,6 +173,15 @@ fn add_box_allocation(
     profile.add_breakdown(label, bytes, "Box", note);
 }
 
+fn add_string_breakdown(profile: &mut MemProfile, label: impl Into<String>, value: &String) {
+    profile.add_breakdown(
+        label,
+        value.capacity(),
+        "String",
+        "capacity bytes for owned string buffer",
+    );
+}
+
 fn add_count_distinct_breakdown(profile: &mut MemProfile, state: &CountDistinctStateWrap) {
     add_box_allocation(
         profile,
@@ -430,15 +439,48 @@ impl MemUsage for AggOp {
                     );
                 }
             }
-            AggOp::HourOfDayHistogram(s) => {
-                add_boxed_serialized(&mut profile, "HourOfDayHistogram", &**s)
+            AggOp::HourOfDayHistogram(s) => add_box_allocation(
+                &mut profile,
+                "Box<HourOfDayHistogramState>",
+                size_of_val(&**s),
+                "heap allocation for fixed inline hour-of-day counts",
+            ),
+            AggOp::SeasonalDeviation(s) => add_box_allocation(
+                &mut profile,
+                "Box<SeasonalDeviationState>",
+                size_of_val(&**s),
+                "heap allocation for fixed inline per-hour buckets",
+            ),
+            AggOp::GeoVelocity(s) => {
+                add_box_allocation(
+                    &mut profile,
+                    "Box<GeoVelocityState>",
+                    size_of_val(&**s),
+                    "heap allocation for boxed payload",
+                );
+                add_string_breakdown(&mut profile, "GeoVelocity lat_field", &s.lat_field);
+                add_string_breakdown(&mut profile, "GeoVelocity lon_field", &s.lon_field);
             }
-            AggOp::SeasonalDeviation(s) => {
-                add_boxed_serialized(&mut profile, "SeasonalDeviation", &**s)
+            AggOp::GeoDistance(s) => {
+                add_box_allocation(
+                    &mut profile,
+                    "Box<GeoDistanceState>",
+                    size_of_val(&**s),
+                    "heap allocation for boxed payload",
+                );
+                add_string_breakdown(&mut profile, "GeoDistance lat_field", &s.lat_field);
+                add_string_breakdown(&mut profile, "GeoDistance lon_field", &s.lon_field);
             }
-            AggOp::GeoVelocity(s) => add_boxed_serialized(&mut profile, "GeoVelocity", &**s),
-            AggOp::GeoDistance(s) => add_boxed_serialized(&mut profile, "GeoDistance", &**s),
-            AggOp::GeoSpread(s) => add_boxed_serialized(&mut profile, "GeoSpread", &**s),
+            AggOp::GeoSpread(s) => {
+                add_box_allocation(
+                    &mut profile,
+                    "Box<GeoSpreadState>",
+                    size_of_val(&**s),
+                    "heap allocation for boxed payload",
+                );
+                add_string_breakdown(&mut profile, "GeoSpread lat_field", &s.lat_field);
+                add_string_breakdown(&mut profile, "GeoSpread lon_field", &s.lon_field);
+            }
             AggOp::DistanceFromHome(s) => {
                 profile.add_breakdown(
                     "Box<DistanceFromHomeState>",
@@ -560,21 +602,6 @@ fn aggop_payload_bytes(op: &AggOp) -> usize {
     }
 }
 
-fn add_boxed_serialized<T: Serialize>(profile: &mut MemProfile, label: &str, value: &T) {
-    profile.add_breakdown(
-        format!("Box<{label}>"),
-        size_of_val(value),
-        "Box",
-        "heap allocation for boxed payload",
-    );
-    profile.add_breakdown(
-        format!("{label} owned internals"),
-        serialized_heap_estimate(value),
-        "estimate",
-        "deterministic serialized-size proxy for private sketch/container internals",
-    );
-}
-
 fn aggop_label(op: &AggOp) -> String {
     match op {
         AggOp::Count(_) => "Count",
@@ -639,6 +666,8 @@ fn aggop_label(op: &AggOp) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agg_buffer::{HourOfDayHistogramState, SeasonalDeviationState};
+    use crate::agg_geo::{GeoDistanceState, GeoSpreadState, GeoVelocityState};
     use crate::agg_op::{AggKind, AggOp, AggOpDescriptor};
     use crate::agg_state::{CountDistinctStateWrap, CountState, SumState};
     use crate::agg_state_velocity::TrendResidualState;
@@ -714,6 +743,42 @@ mod tests {
         })
         .mem_profile();
         assert!(profile.breakdown.iter().any(|b| b.label.contains("Box")));
+    }
+
+    #[test]
+    fn mem_usage_fixed_boxed_ops_do_not_use_serialized_proxy() {
+        let ops = [
+            AggOp::HourOfDayHistogram(Box::<HourOfDayHistogramState>::default()),
+            AggOp::SeasonalDeviation(Box::<SeasonalDeviationState>::default()),
+            AggOp::GeoVelocity(Box::new(GeoVelocityState::with_fields(
+                "lat".into(),
+                "lon".into(),
+            ))),
+            AggOp::GeoDistance(Box::new(GeoDistanceState::with_fields(
+                "lat".into(),
+                "lon".into(),
+            ))),
+            AggOp::GeoSpread(Box::new(GeoSpreadState::with_fields(
+                "lat".into(),
+                "lon".into(),
+            ))),
+        ];
+        for op in ops {
+            let profile = op.mem_profile();
+            assert!(
+                !profile.breakdown.iter().any(|entry| {
+                    entry.kind == "estimate" || entry.label.contains("owned internals")
+                }),
+                "{} should use field-aware exact accounting: {:?}",
+                profile.label,
+                profile.breakdown
+            );
+            assert!(
+                profile.breakdown.iter().any(|entry| entry.kind == "Box"),
+                "{} should still report the boxed payload",
+                profile.label
+            );
+        }
     }
 
     #[test]
