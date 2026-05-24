@@ -55,40 +55,35 @@ pub enum Arity {
 /// borrow ceremony.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BuiltinFn {
-    /// `cast(value, type_name)` — type-conversion operator.
-    ///
-    /// **TRANSITIONAL**: this variant exists only while the codebase
-    /// still routes cast through `Call("cast", …)`. PR 1 Step 8
-    /// promotes cast to a dedicated `Expr::Cast` AST variant and
-    /// removes `Cast` from this enum. Cast is not value-shaped (its
-    /// second "argument" is a type, not a value), so its `infer` arm
-    /// returns a placeholder error and is unreachable in normal
-    /// operation — cast inference is handled by the `fn_name == "cast"`
-    /// arm in `schema_propagate.rs::infer_call_type` until Step 9
-    /// collapses that block (and by then Cast is gone from here).
-    Cast,
     /// `isnull(value)` — always returns `Bool(true/false)`, never `Null`.
     IsNull,
     /// `quadkey(lat, lon, zoom)` — geo cell ID. `lat`/`lon` numeric;
     /// `zoom` typed as numeric at register time (runtime requires
     /// strict `I64` in `1..=24`, otherwise `Null`).
     Quadkey,
+    // Note: `cast` is NOT a variant here. It's `Expr::Cast`, a dedicated
+    // AST node (RFC-001 §5.1). The parser detects `cast(...)` before
+    // reaching `BuiltinFn::from_name` and routes directly to Expr::Cast.
+    // `cast_eval` remains in this file as a pub(crate) free fn that the
+    // evaluator's Expr::Cast arm calls.
 }
 
 impl BuiltinFn {
     /// Wire-format name. `const fn` because it's a pure lookup.
     pub const fn name(self) -> &'static str {
         match self {
-            Self::Cast => "cast",
             Self::IsNull => "isnull",
             Self::Quadkey => "quadkey",
         }
     }
 
     /// Parse a wire-format name. `None` for unknown names.
+    ///
+    /// Note: `from_name("cast")` returns `None` by design — `cast` is an
+    /// `Expr::Cast` AST variant, not a `BuiltinFn`. The parser detects
+    /// the `"cast"` token before reaching this function.
     pub fn from_name(s: &str) -> Option<Self> {
         match s {
-            "cast" => Some(Self::Cast),
             "isnull" => Some(Self::IsNull),
             "quadkey" => Some(Self::Quadkey),
             _ => None,
@@ -99,7 +94,6 @@ impl BuiltinFn {
     pub const fn arity(self) -> Arity {
         match self {
             Self::IsNull => Arity::Fixed(1),
-            Self::Cast => Arity::Fixed(2),
             Self::Quadkey => Arity::Fixed(3),
         }
     }
@@ -108,7 +102,6 @@ impl BuiltinFn {
     /// evaluated to a `Value`.
     pub fn eval(self, args: &[Value]) -> Value {
         match self {
-            Self::Cast => cast_eval(args),
             Self::IsNull => isnull_eval(args),
             Self::Quadkey => quadkey_eval(args),
         }
@@ -117,20 +110,12 @@ impl BuiltinFn {
     /// Register-time type inference.
     ///
     /// Single-arg signature: no `&[Expr]` parameter, because no
-    /// value-shaped builtin needs AST access. The `Cast` arm is a
-    /// transitional placeholder; see the variant doc.
+    /// value-shaped builtin needs AST access. (Cast was the only one
+    /// that ever did, and it's an `Expr::Cast` variant now.)
     pub fn infer(self, arg_types: &[InferredType]) -> Result<InferredType, InferError> {
         match self {
             Self::IsNull => any_to_bool(arg_types),
             Self::Quadkey => quadkey_infer(arg_types),
-            // Unreachable until Step 9 collapses the per-name match in
-            // schema_propagate.rs (and by then Step 8 has removed Cast).
-            Self::Cast => Err(InferError::Custom {
-                reason: "cast inference handled by schema_propagate's \
-                         per-name match; this arm is transitional and \
-                         removed when cast moves to Expr::Cast (Step 8)"
-                    .to_string(),
-            }),
         }
     }
 
@@ -138,7 +123,7 @@ impl BuiltinFn {
     /// future iteration need (testing, doc generation).
     #[cfg(test)]
     pub const fn all() -> &'static [BuiltinFn] {
-        &[Self::Cast, Self::IsNull, Self::Quadkey]
+        &[Self::IsNull, Self::Quadkey]
     }
 }
 
@@ -189,7 +174,7 @@ fn quadkey_infer(arg_types: &[InferredType]) -> Result<InferredType, InferError>
 /// | Bool       | "true"/"false" | 1 / 0             | 1.0 / 0.0         | unchanged            |
 /// | Bytes      | Null           | Null              | Null              | Null                 |
 /// | Datetime   | i64.to_string  | I64(ms)           | F64(ms as f64)    | ms≠0→true            |
-fn cast_eval(args: &[Value]) -> Value {
+pub(crate) fn cast_eval(args: &[Value]) -> Value {
     // Arity guard: must be exactly 2 args.
     if args.len() != 2 {
         return Value::Null;
@@ -341,7 +326,6 @@ fn isnull_eval(args: &[Value]) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::builtins::_inference::InferError;
     use crate::row::Value;
     use crate::schema::FieldType;
     use crate::schema_propagate::InferredType;
@@ -349,11 +333,11 @@ mod tests {
     // ── Lookup tests ──────────────────────────────────────────────────────────
 
     #[test]
-    fn from_name_returns_cast() {
-        let b = BuiltinFn::from_name("cast").expect("cast must be a BuiltinFn variant");
-        assert_eq!(b, BuiltinFn::Cast);
-        assert_eq!(b.name(), "cast");
-        assert_eq!(b.arity(), Arity::Fixed(2));
+    fn from_name_returns_none_for_cast() {
+        // Cast is NOT a BuiltinFn variant — it's Expr::Cast. The parser
+        // routes "cast" through a special path before reaching from_name.
+        // If anyone calls from_name("cast") directly, they get None.
+        assert!(BuiltinFn::from_name("cast").is_none());
     }
 
     #[test]
@@ -397,7 +381,6 @@ mod tests {
 
     #[test]
     fn display_emits_wire_name() {
-        assert_eq!(format!("{}", BuiltinFn::Cast), "cast");
         assert_eq!(format!("{}", BuiltinFn::IsNull), "isnull");
         assert_eq!(format!("{}", BuiltinFn::Quadkey), "quadkey");
     }
@@ -407,14 +390,10 @@ mod tests {
     #[test]
     fn enum_eval_dispatches_to_underlying_fns() {
         // Spot-check that match-arm dispatch in BuiltinFn::eval reaches the
-        // same fn that the per-fn tests below verify in detail.
+        // same fn that the per-fn tests below verify in detail. Cast no
+        // longer goes through the enum (see Expr::Cast in eval.rs); the
+        // pub(crate) cast_eval fn is tested in detail below.
         assert_eq!(BuiltinFn::IsNull.eval(&[Value::Null]), Value::Bool(true));
-        assert_eq!(
-            BuiltinFn::Cast.eval(&[Value::I64(7), Value::Str("float".into())]),
-            Value::F64(7.0)
-        );
-        // Quadkey: just confirm it returns I64 for valid input (full eval
-        // tested in tests/op_removal.rs).
         let r = BuiltinFn::Quadkey.eval(&[Value::F64(40.0), Value::F64(-74.0), Value::I64(7)]);
         assert!(matches!(r, Value::I64(_)));
     }
@@ -438,11 +417,6 @@ mod tests {
             BuiltinFn::Quadkey.infer(&quadkey_args),
             Ok(InferredType::Known(FieldType::I64))
         );
-        // Cast → transitional placeholder → Custom error.
-        assert!(matches!(
-            BuiltinFn::Cast.infer(&[]),
-            Err(InferError::Custom { .. })
-        ));
     }
 
     // ── isnull tests ──────────────────────────────────────────────────────────

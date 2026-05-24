@@ -14,6 +14,14 @@
 //! Step 3 lands `InferError` and `TypeClass` here; Step 4 lands the
 //! primitives and helpers themselves.
 
+// PR 1 ships all helpers + primitives as one cohesive infra drop, but only
+// `any_to_bool` and `require_arg_class` are wired (used by `BuiltinFn::IsNull`
+// and `quadkey_infer`). The rest sit unused until PR 3 lands the v0 builtins
+// (`log1p`, `clip`, `lower`, `contains`, …). All are exercised by unit tests
+// in this module — the `dead_code` warnings are infrastructure-not-consumed,
+// not actually-dead.
+#![allow(dead_code)]
+
 use crate::schema::FieldType;
 use crate::schema_propagate::InferredType;
 
@@ -326,9 +334,7 @@ pub fn string_search_to_bool(arg_types: &[InferredType]) -> Result<InferredType,
 /// `coalesce`, `fill_null` — variadic; all args unify under strict equality
 /// with `NullLiteral` as the hole. All-null (including zero args) falls back
 /// to `Known(Str)` per the documented default.
-pub fn polymorphic_var0_unify(
-    arg_types: &[InferredType],
-) -> Result<InferredType, InferError> {
+pub fn polymorphic_var0_unify(arg_types: &[InferredType]) -> Result<InferredType, InferError> {
     let indices: Vec<usize> = (0..arg_types.len()).collect();
     unify_var0_strict(arg_types, &indices)
 }

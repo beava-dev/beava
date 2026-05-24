@@ -37,7 +37,8 @@
 //!   `Value::Str("float")` — matching the builtin contract.
 
 use crate::expr::{Expr, Literal};
-use crate::builtins::BuiltinFn;
+// BuiltinFn is reached via the `builtin` field on Expr::Call; the
+// evaluator calls its methods directly without needing a top-level import.
 use crate::row::{Row, Value};
 
 /// Maximum recursion depth for expression evaluation.
@@ -90,14 +91,28 @@ fn eval_depth(expr: &Expr, row: &Row, depth: usize) -> Value {
         } => eval_binop(op, left, right, row, depth),
 
         // ── Call (builtins) ───────────────────────────────────────────────────
-        Expr::Call { fn_name, args, .. } => {
-            // Evaluate all args to Values first.
+        //
+        // After Step 7, `builtin` is the resolved BuiltinFn variant (parser
+        // did the name lookup once at registration). Per-event dispatch is
+        // a direct `match self` jump table inside BuiltinFn::eval — no
+        // string compare, no slice scan.
+        Expr::Call { builtin, args, .. } => {
             let arg_vals: Vec<Value> = args.iter().map(|a| eval_depth(a, row, depth + 1)).collect();
-            match BuiltinFn::from_name(fn_name) {
-                Some(builtin) => builtin.eval(&arg_vals),
-                // Unknown function → Null (register-time catches; runtime defensive).
-                None => Value::Null,
-            }
+            builtin.eval(&arg_vals)
+        }
+
+        // ── Cast (dedicated AST node, RFC-001 §5.1) ───────────────────────────
+        //
+        // Cast is not a value-shaped function; it has its own AST shape with
+        // a typed operand + a literal target. Eval evaluates both subexprs
+        // (target evaluates to Value::Str via the BareIdent → Str conversion)
+        // and dispatches to the existing cast_eval implementation.
+        Expr::Cast {
+            operand, target, ..
+        } => {
+            let v = eval_depth(operand, row, depth + 1);
+            let t = eval_depth(target, row, depth + 1);
+            crate::builtins::cast_eval(&[v, t])
         }
     }
 }
@@ -346,8 +361,22 @@ mod tests {
     }
 
     fn call(fn_name: &str, args: Vec<Expr>) -> Expr {
+        // Cast routes to Expr::Cast; everything else resolves through BuiltinFn.
+        if fn_name == "cast" {
+            assert_eq!(args.len(), 2, "test helper: cast needs 2 args");
+            let mut args = args;
+            let target = args.remove(1);
+            let operand = args.remove(0);
+            return Expr::Cast {
+                operand: Box::new(operand),
+                target: Box::new(target),
+                span: span(),
+            };
+        }
+        let builtin = crate::builtins::BuiltinFn::from_name(fn_name)
+            .unwrap_or_else(|| panic!("test helper: unknown builtin {:?}", fn_name));
         Expr::Call {
-            fn_name: fn_name.to_string(),
+            builtin,
             args,
             span: span(),
         }
@@ -728,14 +757,24 @@ mod tests {
         assert_eq!(eval(&expr, &row), Value::Bool(false));
     }
 
-    // ── Test 19: unknown function → Null ─────────────────────────────────────
+    // ── Test 19: unknown function → ParseError at parse time ─────────────────
+    //
+    // Pre-Step-7: unknown names parsed as Call, evaluator returned Null at
+    // run time (defensive). Post-Step-7: parser resolves names eagerly via
+    // BuiltinFn::from_name, so unknown names never reach the evaluator at
+    // all. The evaluator's `Expr::Call` arm now only ever sees resolved
+    // BuiltinFn variants — there's nothing left for it to fail on.
 
     #[test]
-    fn eval_call_unknown_fn_is_null() {
+    fn parse_unknown_fn_fails_before_eval() {
         use crate::expr::parse;
-        let row = row_with(&[("amount", Value::I64(1))]);
-        let expr = parse("foobar(amount)").expect("should parse foobar call");
-        assert_eq!(eval(&expr, &row), Value::Null);
+        let err = parse("foobar(amount)").expect_err("foobar is unknown");
+        assert!(
+            err.reason.contains("unknown function"),
+            "got: {:?}",
+            err.reason
+        );
+        assert!(err.reason.contains("foobar"), "got: {:?}", err.reason);
     }
 
     // ── Test 20: (x == null) via parser rewrite ───────────────────────────────
@@ -761,8 +800,14 @@ mod tests {
         // The parse result MUST be Call("isnull", ...) — not BinOp("==") — due
         // to Plan 04-02's Pass B.
         assert!(
-            matches!(&expr, crate::expr::Expr::Call { fn_name, .. } if fn_name == "isnull"),
-            "parser must have rewritten (amount == null) to Call('isnull', ...), got {expr:?}"
+            matches!(
+                &expr,
+                crate::expr::Expr::Call {
+                    builtin: crate::builtins::BuiltinFn::IsNull,
+                    ..
+                }
+            ),
+            "parser must have rewritten (amount == null) to Call(IsNull, ...), got {expr:?}"
         );
 
         // Row where amount IS null → Bool(true)

@@ -15,8 +15,8 @@
 
 use std::collections::BTreeMap;
 
-use crate::expr::{self, Expr, Literal, ParseError};
 use crate::builtins::BuiltinFn;
+use crate::expr::{self, Expr, Literal, ParseError};
 use crate::op_node::OpNode;
 use crate::schema::{DerivedSchema, EventSchema, FieldType, TableSchema};
 
@@ -494,8 +494,46 @@ fn infer_expr_type_inner(
             op, left, right, ..
         } => infer_binop_type(op_index, op, left, right, schema, errors),
 
-        Expr::Call { fn_name, args, .. } => {
-            infer_call_type(op_index, fn_name, args, schema, errors)
+        Expr::Call { builtin, args, .. } => {
+            infer_call_type(op_index, *builtin, args, schema, errors)
+        }
+
+        Expr::Cast {
+            operand, target, ..
+        } => {
+            // Walk operand for FieldMissing side effects on its subexpressions.
+            let _ = infer_expr_type_inner(op_index, operand, schema, errors);
+
+            // Read the target type name from the literal carried in Expr::Cast.target.
+            // Parser already normalized Field("float") → Literal::BareIdent("float").
+            let target_name = match target.as_ref() {
+                Expr::Literal(Literal::BareIdent(s), _) | Expr::Literal(Literal::Str(s), _) => {
+                    s.as_str()
+                }
+                other => {
+                    errors.push(PropagationError::TypeMismatch {
+                        op_index,
+                        reason: format!(
+                            "cast second argument must be a type literal (str/int/float/bool), got {other:?}"
+                        ),
+                    });
+                    return None;
+                }
+            };
+
+            match parse_cast_target(target_name) {
+                Some(ft) => Some(InferredType::Known(ft)),
+                None => {
+                    errors.push(PropagationError::TypeMismatch {
+                        op_index,
+                        reason: format!(
+                            "unknown cast target type {:?}; must be one of: str, int, float, bool",
+                            target_name
+                        ),
+                    });
+                    None
+                }
+            }
         }
     }
 }
@@ -652,27 +690,13 @@ fn resolve_null_arithmetic(op: &str, other: &InferredType) -> Option<InferredTyp
 
 fn infer_call_type(
     op_index: usize,
-    fn_name: &str,
+    builtin: BuiltinFn,
     args: &[Expr],
     schema: &Schema,
     errors: &mut Vec<PropagationError>,
 ) -> Option<InferredType> {
-    // Look up builtin.
-    let builtin = match BuiltinFn::from_name(fn_name) {
-        Some(b) => b,
-        None => {
-            errors.push(PropagationError::TypeMismatch {
-                op_index,
-                reason: format!(
-                    "unknown function {:?}; only 'cast' and 'isnull' are supported in Phase 4",
-                    fn_name
-                ),
-            });
-            return None;
-        }
-    };
-
-    // Arity check.
+    // Arity check (caller already resolved the variant; unknown names are
+    // a ParseError now, not a typecheck error).
     let expected = match builtin.arity() {
         crate::builtins::Arity::Fixed(n) => Some(n),
         crate::builtins::Arity::Variadic => None,
@@ -683,7 +707,7 @@ fn infer_call_type(
                 op_index,
                 reason: format!(
                     "function {:?} expects {} argument(s), got {}",
-                    fn_name,
+                    builtin.name(),
                     n,
                     args.len()
                 ),
@@ -692,57 +716,47 @@ fn infer_call_type(
         }
     }
 
-    // Builtin-specific type inference.
-    match fn_name {
-        "isnull" => {
-            // isnull(x) → Bool for any input type.
-            // Still need to infer arg type for field-reference side effects.
-            let _ = infer_expr_type_inner(op_index, &args[0], schema, errors);
-            Some(InferredType::Known(FieldType::Bool))
+    // Walk arg subexprs for FieldMissing side effects, then collect types.
+    let mut arg_types: Vec<InferredType> = Vec::with_capacity(args.len());
+    for a in args {
+        match infer_expr_type_inner(op_index, a, schema, errors) {
+            Some(t) => arg_types.push(t),
+            None => return None,
         }
-        "cast" => {
-            // cast(x, type_str) → target FieldType.
-            // First arg can be any type.
-            let _ = infer_expr_type_inner(op_index, &args[0], schema, errors);
+    }
 
-            // Second arg must be a string literal with a valid cast target.
-            let target_str = match &args[1] {
-                Expr::Literal(Literal::BareIdent(s), _) => s.clone(),
-                Expr::Literal(Literal::Str(s), _) => s.clone(),
-                other => {
-                    errors.push(PropagationError::TypeMismatch {
-                        op_index,
-                        reason: format!(
-                            "cast second argument must be a type literal (str/int/float/bool), got {:?}",
-                            other
-                        ),
-                    });
-                    return None;
-                }
-            };
-
-            match parse_cast_target(&target_str) {
-                Some(ft) => Some(InferredType::Known(ft)),
-                None => {
-                    errors.push(PropagationError::TypeMismatch {
-                        op_index,
-                        reason: format!(
-                            "unknown cast target type {:?}; must be one of: str, int, float, bool",
-                            target_str
-                        ),
-                    });
-                    None
-                }
-            }
-        }
-        _ => {
-            // Should not reach here (already looked up in BUILTINS).
+    // Dispatch through the enum's infer method (single-arg signature).
+    match builtin.infer(&arg_types) {
+        Ok(t) => Some(t),
+        Err(e) => {
             errors.push(PropagationError::TypeMismatch {
                 op_index,
-                reason: format!("unhandled builtin {:?}", fn_name),
+                reason: render_infer_error(builtin.name(), &e),
             });
             None
         }
+    }
+}
+
+fn render_infer_error(fn_name: &str, e: &crate::builtins::_inference::InferError) -> String {
+    use crate::builtins::_inference::InferError;
+    match e {
+        InferError::Arity { expected, got } => format!(
+            "function {:?} expects {} argument(s), got {}",
+            fn_name, expected, got
+        ),
+        InferError::TypeMismatch {
+            arg_idx,
+            expected,
+            got,
+        } => format!(
+            "function {:?} arg {}: expected {}, got {:?}",
+            fn_name, arg_idx, expected, got
+        ),
+        InferError::Unify { reason } => {
+            format!("function {:?} type-mismatched args: {}", fn_name, reason)
+        }
+        InferError::Custom { reason } => format!("function {:?}: {}", fn_name, reason),
     }
 }
 
@@ -1427,27 +1441,32 @@ mod tests {
         );
     }
 
-    // ── Test 28: unknown function errors ──────────────────────────────────────
+    // ── Test 28: unknown function errors at PARSE time (moved from typecheck) ─
+    //
+    // Under Step 7, function names resolve to BuiltinFn variants at parse
+    // time. Unknown names surface as a ParseError there, never reaching
+    // infer_expr_type. The replacement test lives in expr.rs as
+    // `parse_unknown_function_name_fails` — this stub stays so the old test
+    // name doesn't reappear in CI logs as a regression.
 
     #[test]
-    fn infer_expr_type_unknown_function_errors() {
-        let s = schema_with(&[("amount", FieldType::I64)]);
-        let r = parse_and_infer("foo(amount)", &s);
+    fn infer_expr_type_unknown_function_errors_moved_to_parser() {
+        let err = crate::expr::parse("foo(amount)")
+            .expect_err("unknown function should fail at parse time");
         assert!(
-            r.is_err(),
-            "expected TypeMismatch for unknown function 'foo', got {r:?}"
+            err.reason.contains("unknown function"),
+            "got: {:?}",
+            err.reason
         );
-        match r {
-            Err(PropagationError::TypeMismatch { reason, .. }) => {
-                assert!(reason.contains("foo"), "got: {reason}");
-                assert!(reason.contains("unknown function"), "got: {reason}");
-                // Pin removal of the stale "Phase 4" / "only cast and isnull" tail
-                // — closed by Step 7 collapsing `infer_call_type`.
-                assert!(!reason.contains("Phase 4"), "got: {reason}");
-                assert!(!reason.contains("only 'cast' and 'isnull'"), "got: {reason}");
-            }
-            other => panic!("expected TypeMismatch, got {other:?}"),
-        }
+        assert!(err.reason.contains("foo"), "got: {:?}", err.reason);
+        // Pin removal of the stale Phase-4 / "only 'cast' and 'isnull'" tail
+        // — the per-name `match fn_name` in infer_call_type is gone.
+        assert!(!err.reason.contains("Phase 4"), "got: {:?}", err.reason);
+        assert!(
+            !err.reason.contains("only 'cast' and 'isnull'"),
+            "got: {:?}",
+            err.reason
+        );
     }
 
     // ── Test 29: quadkey returns I64 ──────────────────────────────────────────
