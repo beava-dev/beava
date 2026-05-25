@@ -22,6 +22,7 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Subcommands {
+    Fixed(beava_bench::cli::fixed::Args),
     /// Throughput mode (acks=1 best-effort EPS).
     Throughput(beava_bench::cli::throughput::ThroughputArgs),
     /// Mixed read+write ratio mode.
@@ -42,6 +43,7 @@ fn main() -> anyhow::Result<()> {
         .init();
     let cli = Cli::parse();
     match cli.command {
+        Some(Subcommands::Fixed(args)) => args.exec(),
         Some(Subcommands::Throughput(args)) => beava_bench::cli::throughput::run_throughput(args),
         Some(Subcommands::Mixed(args)) => beava_bench::cli::mixed::run_mixed(args),
         Some(Subcommands::Memory(args)) => beava_bench::cli::memory::run_memory(args),
