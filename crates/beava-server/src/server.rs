@@ -790,21 +790,45 @@ async fn build_runtime_state_with_persistence(
             .ok()
             .unwrap_or(0);
 
-        let persistence_lsn = if wal_dir.exists() {
+        let (persistence_lsn, applied_registry_bump_after_snapshot) = if wal_dir.exists() {
             match replay_wal_from_lsn(&wal_dir, snapshot_lsn, &dev_agg) {
-                Ok(outcome) => outcome.last_lsn,
-                Err(_) => snapshot_lsn,
+                Ok(outcome) => (
+                    outcome.last_lsn.max(snapshot_lsn),
+                    outcome.applied_registry_bump_after_snapshot,
+                ),
+                Err(_) => (snapshot_lsn, false),
             }
         } else {
-            snapshot_lsn
+            (snapshot_lsn, false)
         };
 
-        // Replay hand-rolled `*.wal` data-plane events. Setting
-        // `lsn_start = persistence_lsn + 1` keeps LSNs monotonic across
-        // the snapshot, persistence, and hand-rolled paths.
-        let handrolled_lsn_start = persistence_lsn + 1;
+        if applied_registry_bump_after_snapshot {
+            // A post-snapshot registry bump can rebuild aggregation ids. Snapshot
+            // tables are keyed by the pre-bump ids, so discard them and rebuild
+            // data-plane state from the hand-rolled WAL under the new registry.
+            let mut tables = dev_agg.state_tables.lock();
+            tables.clear();
+            beava_core::agg_state_table::ensure_capacity_for(
+                &mut tables,
+                dev_agg.registry.next_agg_id() as usize,
+            );
+            dev_agg
+                .next_event_id
+                .store(0, std::sync::atomic::Ordering::Relaxed);
+            dev_agg
+                .query_time_ms
+                .store(0, std::sync::atomic::Ordering::Relaxed);
+        }
+
+        // Replay hand-rolled `*.wal` data-plane events past the state already
+        // covered by the snapshot / legacy persistence WAL.
+        let handrolled_from_lsn = if applied_registry_bump_after_snapshot {
+            0
+        } else {
+            snapshot_lsn.max(persistence_lsn)
+        };
         let handrolled_outcome =
-            replay_handrolled_wal_dir(&wal_dir, handrolled_lsn_start, &dev_agg).unwrap_or_default();
+            replay_handrolled_wal_dir(&wal_dir, handrolled_from_lsn, &dev_agg).unwrap_or_default();
         let initial = handrolled_outcome
             .last_lsn
             .max(persistence_lsn)
@@ -872,7 +896,7 @@ async fn build_runtime_state_with_persistence(
         );
     }
 
-    let wal_lsn = Arc::new(WalLsn::new());
+    let wal_lsn = Arc::new(WalLsn::new_at(initial_start_lsn.saturating_sub(1)));
     // Resolve WAL config from explicit overrides — hot path never reads
     // env. Production resolves from `ServerV18Config::from_env()` at
     // boot; tests pass explicit values via `TestServerBuilder`. The

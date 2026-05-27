@@ -1,7 +1,7 @@
-//! Periodic snapshot task: captures `wal_sink.durable_lsn()`, encodes the
-//! live registry + state tables outside the lock, atomic-renames into the
-//! snapshot dir, then truncates the WAL up to the snapshot LSN and prunes
-//! old snapshots. A manual-trigger channel lets tests force an immediate
+//! Periodic snapshot task: captures the highest applied WAL watermark, captures
+//! live registry + state tables, encodes outside the apply lock, atomic-renames
+//! into the snapshot dir, then truncates the WAL up to the snapshot LSN and
+//! prunes old snapshots. A manual-trigger channel lets tests force an immediate
 //! snapshot via `TestServer::force_snapshot_now`.
 
 use crate::AppState;
@@ -78,7 +78,7 @@ pub fn spawn_snapshot_task(
         // concurrent appends advance the LSN before we observe the
         // baseline, causing the first real tick to see `delta = 0` and
         // skip even though events DID accumulate.
-        let mut last_snapshot_lsn: u64 = wal_sink.durable_lsn();
+        let mut last_snapshot_lsn: u64 = current_snapshot_lsn(&app_state, &wal_sink);
 
         let mut iv = tokio::time::interval(cfg.interval);
         iv.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -119,7 +119,7 @@ pub fn spawn_snapshot_task(
                     // idle beava still writes a multi-hundred-MB snapshot
                     // every 30-60 s. Default `0` preserves legacy behavior.
                     if cfg.min_events_per_snapshot > 0 {
-                        let current_lsn = wal_sink.durable_lsn();
+                        let current_lsn = current_snapshot_lsn(&app_state, &wal_sink);
                         let delta = current_lsn.saturating_sub(last_snapshot_lsn);
                         if delta < cfg.min_events_per_snapshot {
                             tracing::debug!(
@@ -162,11 +162,7 @@ async fn do_snapshot(
     #[cfg(any(feature = "testing", test))]
     maybe_crash_at("before-snapshot");
 
-    // Capture `durable_lsn` FIRST so `snapshot_lsn ≤ actual covered state`.
-    // Any WAL record past this LSN is safely re-applied on restart — Event
-    // records are idempotent through `apply_event_to_aggregations`,
-    // RegistryBump records are additive.
-    let snapshot_lsn = wal_sink.durable_lsn();
+    let legacy_snapshot_lsn = wal_sink.durable_lsn();
 
     // Dispatch on `BEAVA_SNAPSHOT_FORK=1` — the fork+COW path drops apply-
     // thread lock-hold from ~seconds to ~µs at the cost of a brief 2× memory
@@ -174,10 +170,14 @@ async fn do_snapshot(
     // for the safety analysis. Default (env unset) is the legacy in-process
     // path below.
     if cfg.use_fork_snapshot {
-        match crate::snapshot_fork::do_snapshot_via_fork(&cfg.snapshot_dir, snapshot_lsn, app_state)
-            .await
+        match crate::snapshot_fork::do_snapshot_via_fork(
+            &cfg.snapshot_dir,
+            legacy_snapshot_lsn,
+            app_state,
+        )
+        .await
         {
-            Ok(crate::snapshot_fork::ChildExit::Success) => {
+            Ok(crate::snapshot_fork::ChildExit::Success { snapshot_lsn }) => {
                 if snapshot_lsn > 0 {
                     wal_sink.truncate_up_to(snapshot_lsn).await?;
                 }
@@ -207,13 +207,14 @@ async fn do_snapshot(
     }
 
     // Legacy in-process path (default).
-    let next_event_id = app_state.dev_agg.next_event_id.load(Ordering::Relaxed);
-    let query_time_ms = app_state.dev_agg.query_time_ms.load(Ordering::Relaxed) as i64;
-
-    let body = {
+    let (snapshot_lsn, body) = {
         let registry_snap = app_state.dev_agg.registry.snapshot();
         let tables = app_state.dev_agg.state_tables.lock();
-        SnapshotBody::from_live(&registry_snap, &tables, next_event_id, query_time_ms)
+        let next_event_id = app_state.dev_agg.next_event_id.load(Ordering::Acquire);
+        let query_time_ms = app_state.dev_agg.query_time_ms.load(Ordering::Acquire) as i64;
+        let snapshot_lsn = legacy_snapshot_lsn.max(next_event_id);
+        let body = SnapshotBody::from_live(&registry_snap, &tables, next_event_id, query_time_ms);
+        (snapshot_lsn, body)
     };
     let registry_version = body.registry.version;
     let encoded = body
@@ -243,6 +244,12 @@ async fn do_snapshot(
         "snapshot written + WAL truncated + old snapshots pruned"
     );
     Ok(snapshot_lsn)
+}
+
+fn current_snapshot_lsn(app_state: &AppState, wal_sink: &WalSink) -> u64 {
+    wal_sink
+        .durable_lsn()
+        .max(app_state.dev_agg.next_event_id.load(Ordering::Acquire))
 }
 
 #[cfg(any(feature = "testing", test))]

@@ -1,5 +1,6 @@
-//! Default-running "extreme" fork test — 1M entries, asserts fork() lock-
-//! hold stays under 10 ms. Runs on every `cargo test`.
+//! Opt-in "extreme" fork test — 1M entries, asserts fork() lock-hold stays
+//! under 10 ms. This is ignored by default because it allocates ~700 MB and is
+//! timing-sensitive under shared CI runners.
 //!
 //! Lives in its own test binary so the process VM is fresh — sibling
 //! tests in other files can't bloat the allocator's reserved range and
@@ -8,8 +9,8 @@
 //! Memory: ~700 MB peak. Runtime: ~1 s release, ~10 s debug.
 //!
 //! Why 1M (and not 5M / 10M):
-//! - 1M is the "extreme" tier that runs cleanly in default CI (700 MB
-//!   peak, single-digit-second debug-mode build).
+//! - 1M is the "extreme" tier that remains useful as an opt-in regression
+//!   check without making default CI depend on 700 MB of spare memory.
 //! - 5M+ requires the `--ignored --release` opt-in tests in
 //!   `snapshot_big_state.rs` / `snapshot_fork_scaling.rs` /
 //!   `snapshot_fork_extreme.rs`.
@@ -73,6 +74,7 @@ fn measure_fork(app_state: &AppState) -> Duration {
 
 #[cfg(unix)]
 #[tokio::test(flavor = "current_thread")]
+#[ignore = "large timing test: allocates ~700 MB; run manually with --ignored"]
 async fn fork_at_extreme_state_under_10ms() {
     // 1M entries = ~700 MB RSS. On any modern hardware (Linux physical,
     // macOS arm64, modern EC2 HVM) fork should be well under 10 ms.

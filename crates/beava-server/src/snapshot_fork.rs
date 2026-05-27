@@ -1,10 +1,9 @@
 //! fork()+COW snapshot path — Valkey BGSAVE pattern adapted for beava.
 //!
-//! The parent acquires `state_tables.lock()` only across the `fork()` syscall
-//! (~µs), then immediately releases it. The child inherits a COW snapshot of
-//! the parent's address space and writes the snapshot file from its own
-//! frozen view of `state_tables`. Apply-thread blocking drops from
-//! ~seconds to ~microseconds.
+//! The parent acquires `state_tables.lock()` across the `fork()` syscall, then
+//! immediately releases it in the parent. The child inherits the held guard and
+//! reads through that guard without taking any new `parking_lot` locks. Apply-
+//! thread blocking drops from ~seconds to the fork syscall window.
 //!
 //! Default ON on unix (linux/macos). Set `BEAVA_SNAPSHOT_FORK=0` (or
 //! `false`/`no`) to opt back into the legacy in-process synchronous
@@ -57,7 +56,7 @@ use std::sync::atomic::Ordering;
 #[derive(Debug)]
 pub enum ChildExit {
     /// Child exited with status 0 — snapshot file is durable.
-    Success,
+    Success { snapshot_lsn: u64 },
     /// Child exited non-zero or with a signal. Snapshot file may be partial
     /// or absent.
     Failure { code: i32, message: String },
@@ -93,8 +92,9 @@ pub fn fork_enabled() -> bool {
 /// so the caller can gate WAL truncation on success.
 ///
 /// The caller is responsible for:
-/// - Capturing `snapshot_lsn` BEFORE this call (so the snapshot covers a
-///   well-defined LSN even if pushes land between this call and the fork).
+/// - Passing the legacy `WalSink` LSN. This function combines it with the
+///   applied data-plane watermark while holding `state_tables.lock()`, so the
+///   snapshot LSN matches the state snapshot the child inherits.
 /// - Truncating the WAL up to `snapshot_lsn` only on `ChildExit::Success`.
 ///
 /// `snapshot_dir` must exist (the in-process path creates it lazily; the
@@ -103,14 +103,10 @@ pub fn fork_enabled() -> bool {
 #[cfg(unix)]
 pub async fn do_snapshot_via_fork(
     snapshot_dir: &Path,
-    snapshot_lsn: u64,
+    legacy_snapshot_lsn: u64,
     app_state: &AppState,
 ) -> Result<ChildExit, SnapshotForkError> {
     use beava_persistence::SnapshotWriter;
-
-    let next_event_id = app_state.dev_agg.next_event_id.load(Ordering::Relaxed);
-    let query_time_ms = app_state.dev_agg.query_time_ms.load(Ordering::Relaxed) as i64;
-    let registry_snap = app_state.dev_agg.registry.snapshot();
 
     // Ensure the snapshot dir exists in the parent (cheap; idempotent). The
     // child cannot afford a mkdir failure.
@@ -118,7 +114,12 @@ pub async fn do_snapshot_via_fork(
         .map_err(|e| SnapshotForkError::Persist(PersistError::Io(e)))?;
 
     let snapshot_dir_owned = snapshot_dir.to_path_buf();
-    let app_state_arc = app_state.clone();
+    let registry_snap = app_state.dev_agg.registry.snapshot();
+
+    let state_lock = app_state.dev_agg.state_tables.lock();
+    let next_event_id = app_state.dev_agg.next_event_id.load(Ordering::Acquire);
+    let query_time_ms = app_state.dev_agg.query_time_ms.load(Ordering::Acquire) as i64;
+    let snapshot_lsn = legacy_snapshot_lsn.max(next_event_id);
 
     // Briefly take the state_tables lock so the fork sees a quiescent state
     // snapshot. The lock-hold spans only the fork syscall (~µs).
@@ -129,15 +130,12 @@ pub async fn do_snapshot_via_fork(
     //   noop, spawn_blocking workers) vanish in the child per POSIX.
     // - System malloc (glibc/libc) is fork-safe via pthread_atfork handlers,
     //   so `bincode::serialize` in the child allocates safely.
-    // - Child uses the pre-captured registry snapshot and only reads the
-    //   inherited state_tables snapshot from `app_state`; no registry RwLock,
+    // - Child uses the pre-captured registry snapshot and the inherited
+    //   `state_lock` guard; it takes no registry RwLock, no parking_lot Mutex,
     //   no tokio, no WAL, no admin sidecar.
     // - Child calls `libc::_exit` (async-signal-safe; skips at_exit
     //   handlers) rather than `std::process::exit`.
-    let pid = {
-        let _state_lock = app_state.dev_agg.state_tables.lock();
-        unsafe { libc::fork() }
-    };
+    let pid = unsafe { libc::fork() };
 
     if pid < 0 {
         return Err(SnapshotForkError::ForkFailed(
@@ -148,14 +146,10 @@ pub async fn do_snapshot_via_fork(
     if pid == 0 {
         // === CHILD ===
         // Build snapshot from our (now-frozen via COW) view of app_state.
-        // The state_tables lock that the parent held at fork time is locked
-        // in our address space too; since we're single-threaded, just read
-        // through the Mutex.
-        let tables = app_state_arc.dev_agg.state_tables.lock();
-        let body = SnapshotBody::from_live(&registry_snap, &tables, next_event_id, query_time_ms);
-        // Drop guard before encode — encoding allocates but doesn't need the
-        // guard live; matches parent-path discipline.
-        drop(tables);
+        // Do not lock or unlock `state_tables` in the child. The forking
+        // thread already held this guard, and `_exit` skips its destructor.
+        let body =
+            SnapshotBody::from_live(&registry_snap, &state_lock, next_event_id, query_time_ms);
 
         let encoded = match body.encode() {
             Ok(b) => b,
@@ -177,9 +171,11 @@ pub async fn do_snapshot_via_fork(
     }
 
     // === PARENT ===
+    drop(state_lock);
+
     // Wait on the child without blocking the tokio runtime: spawn_blocking
-    // a `waitpid` call. The lock is already released (the guard's scope
-    // ended at the `}` above; we ran `fork()` inside the scope).
+    // a `waitpid` call. The lock is already released in the parent; the child
+    // inherited its own copy of the guard and exits without dropping it.
     let exit = tokio::task::spawn_blocking(move || -> Result<ChildExit, std::io::Error> {
         let mut status: libc::c_int = 0;
         let waited = unsafe { libc::waitpid(pid, &mut status, 0) };
@@ -189,7 +185,7 @@ pub async fn do_snapshot_via_fork(
         if libc::WIFEXITED(status) {
             let code = libc::WEXITSTATUS(status);
             if code == 0 {
-                Ok(ChildExit::Success)
+                Ok(ChildExit::Success { snapshot_lsn })
             } else {
                 // Try to read the error sidecar the child wrote, best-effort.
                 let err_path =
@@ -223,7 +219,7 @@ pub async fn do_snapshot_via_fork(
 #[cfg(not(unix))]
 pub async fn do_snapshot_via_fork(
     _snapshot_dir: &Path,
-    _snapshot_lsn: u64,
+    _legacy_snapshot_lsn: u64,
     _app_state: &AppState,
 ) -> Result<ChildExit, SnapshotForkError> {
     Err(SnapshotForkError::ForkFailed(std::io::Error::new(

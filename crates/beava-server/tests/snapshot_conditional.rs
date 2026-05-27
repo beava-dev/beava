@@ -17,6 +17,9 @@
 //! - `manual_trigger_bypasses_threshold`
 //!   `force_snapshot_now` always runs regardless of threshold (operators
 //!   and tests need this escape hatch).
+//! - `nonzero_threshold_uses_applied_data_plane_lsn`
+//!   Production push traffic advances the applied data-plane watermark, not
+//!   the legacy `WalSink` watermark.
 
 use beava_core::agg_descriptor::{AggregationDescriptor, NamedAggOp};
 use beava_core::agg_op::{AggKind, AggOp, AggOpDescriptor, FIELD_IDX_NONE};
@@ -35,6 +38,7 @@ use beava_server::AppState;
 use compact_str::CompactString;
 use smallvec::smallvec;
 use std::collections::BTreeMap;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -269,6 +273,40 @@ async fn nonzero_threshold_fires_when_met() {
     // with no new appends should NOT fire. We don't strictly assert the
     // exact count (timing-sensitive) but the test above proves the skip
     // path works.
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn nonzero_threshold_uses_applied_data_plane_lsn() {
+    let tmp = TempDir::new().unwrap();
+    let (app_state, wal_sink, _wal_join) = build_registered_app_state(10);
+
+    let cfg = SnapshotTaskConfig {
+        interval: Duration::from_millis(TICK_MS),
+        snapshot_dir: tmp.path().to_path_buf(),
+        retain: 10,
+        min_events_per_snapshot: 3,
+        use_fork_snapshot: false,
+    };
+    let cancel = CancellationToken::new();
+    let app_state = Arc::new(app_state);
+    let (snap_join, _trigger) =
+        spawn_snapshot_task(cfg, Arc::clone(&app_state), wal_sink, cancel.clone());
+
+    tokio::time::sleep(Duration::from_millis(TICK_MS / 2)).await;
+    app_state.dev_agg.next_event_id.store(5, Ordering::Release);
+    tokio::time::sleep(Duration::from_millis(TICK_MS * 4)).await;
+    cancel.cancel();
+    let _ = snap_join.await;
+
+    let lsns: Vec<u64> = list_snapshots(tmp.path())
+        .expect("list snapshots")
+        .into_iter()
+        .map(|(lsn, _)| lsn)
+        .collect();
+    assert!(
+        lsns.contains(&5),
+        "data-plane applied watermark should trigger snapshot at LSN 5; got {lsns:?}"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]

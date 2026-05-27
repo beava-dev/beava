@@ -167,7 +167,7 @@ async fn fork_snapshot_writes_decodable_file() {
         .expect("fork-snapshot must not error");
 
     match exit {
-        ChildExit::Success => {}
+        ChildExit::Success { .. } => {}
         ChildExit::Failure { code, message } => {
             panic!("child failed: code={code} message={message}");
         }
@@ -222,7 +222,7 @@ async fn fork_snapshot_with_zero_state() {
     let exit = do_snapshot_via_fork(tmp.path(), 7, &app_state)
         .await
         .unwrap();
-    assert!(matches!(exit, ChildExit::Success));
+    assert!(matches!(exit, ChildExit::Success { .. }));
 
     let path = tmp.path().join(format!("snapshot-{:016x}.bvs", 7u64));
     let (header, body) = SnapshotReader::open(&path).expect("zero-state snapshot must decode");

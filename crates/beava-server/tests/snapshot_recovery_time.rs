@@ -198,7 +198,7 @@ async fn fork_and_in_process_produce_identical_format() {
     let exit = do_snapshot_via_fork(tmp_fork.path(), 99, &app_state)
         .await
         .expect("fork-snapshot");
-    matches!(exit, ChildExit::Success);
+    assert!(matches!(exit, ChildExit::Success { .. }));
     let fork_path = tmp_fork.path().join(format!("snapshot-{:016x}.bvs", 99u64));
 
     // Build the SAME SnapshotBody in-process and write via SnapshotWriter.

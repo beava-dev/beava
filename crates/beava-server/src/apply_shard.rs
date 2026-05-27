@@ -1032,6 +1032,16 @@ impl ApplyShard {
                 &mut tables,
                 descriptor.cold_after_ms,
             );
+            self.state
+                .dev_agg
+                .next_event_id
+                .fetch_max(ack_lsn, Ordering::Release);
+            if now_ms > 0 {
+                self.state
+                    .dev_agg
+                    .query_time_ms
+                    .fetch_max(now_ms, Ordering::Release);
+            }
             // Refresh the process-static `beava_entity_count_resident`
             // gauge under the lock we already hold. O(N_tables) sum of
             // three `HashMap.len()` reads; typically < 30 tables (one
@@ -1042,20 +1052,9 @@ impl ApplyShard {
         }
         let t_agg = t0.map(|t| t.elapsed());
 
-        // 9. Bump monotonic event counters. `query_time_ms` is fed
-        //    `now_ms` (server wall-clock at apply); the GET path's
-        //    `compute_query_time_ms` reads this watermark to surface a
-        //    meaningful query time for windowed-op queries.
-        self.state
-            .dev_agg
-            .next_event_id
-            .fetch_max(ack_lsn, Ordering::Relaxed);
-        if now_ms > 0 {
-            self.state
-                .dev_agg
-                .query_time_ms
-                .fetch_max(now_ms, Ordering::Relaxed);
-        }
+        // 9. Monotonic counters were bumped while holding `state_tables`, so a
+        //    snapshot cannot observe applied table state without the matching
+        //    applied LSN/query-time watermark.
         let t_bk_counters = t0.map(|t| t.elapsed());
 
         // `t_bk_evid` keeps the trace shape stable; the per-stage delta

@@ -27,6 +27,7 @@ pub struct RecoveryOutcome {
     pub snapshot_lsn: Lsn,
     pub replay_event_count: u64,
     pub replay_registry_bumps: u64,
+    pub applied_registry_bump_after_snapshot: bool,
     pub last_lsn: Lsn,
 }
 
@@ -129,6 +130,7 @@ struct WalEventPayload {
 
 /// A single decoded v=2 record from the hand-rolled WAL file.
 struct V2Record {
+    lsn: Lsn,
     body_format: u8,
     // reason: parsed from the v=2 record header for completeness; recovery
     // doesn't depend on the per-record registry version.
@@ -146,7 +148,7 @@ struct V2Record {
 ///
 /// Stops at first byte that is not 0x02 (unknown version) or if bytes are
 /// insufficient (truncated record — treat as EOF).
-fn parse_v2_records(data: &[u8]) -> Vec<V2Record> {
+fn parse_v2_records(data: &[u8], base_lsn: Lsn) -> Vec<V2Record> {
     let mut records = Vec::new();
     let mut pos = 0usize;
 
@@ -195,6 +197,7 @@ fn parse_v2_records(data: &[u8]) -> Vec<V2Record> {
         pos += body_len;
 
         records.push(V2Record {
+            lsn: base_lsn.saturating_add(pos as u64),
             body_format,
             rv,
             et_ms,
@@ -211,15 +214,15 @@ fn parse_v2_records(data: &[u8]) -> Vec<V2Record> {
 /// Hand-rolled WAL files are written by `WalBufferRing` + `WalWriter` in the
 /// v=2 binary record format (see `dispatch_push_sync` in `apply_shard`),
 /// distinct from the `beava-persistence` `WalSink` format (`*.log`). Returns
-/// recovery counters; assigns monotonic LSNs starting from `lsn_start`.
+/// recovery counters and replays only records with `lsn > from_lsn_exclusive`.
 pub fn replay_handrolled_wal_dir(
     wal_dir: &Path,
-    lsn_start: Lsn,
+    from_lsn_exclusive: Lsn,
     dev_agg: &DevAggState,
 ) -> Result<RecoveryOutcome, std::io::Error> {
     use beava_core::wire::CT_MSGPACK;
     let mut outcome = RecoveryOutcome {
-        snapshot_lsn: lsn_start.saturating_sub(1),
+        snapshot_lsn: from_lsn_exclusive,
         ..Default::default()
     };
 
@@ -235,15 +238,17 @@ pub fn replay_handrolled_wal_dir(
         .collect();
     wal_files.sort();
 
-    let mut next_lsn = lsn_start;
+    let mut base_lsn = 0;
 
     for wal_file in &wal_files {
         let data = std::fs::read(wal_file)?;
-        let records = parse_v2_records(&data);
+        let records = parse_v2_records(&data, base_lsn);
+        base_lsn = base_lsn.saturating_add(data.len() as u64);
 
         for rec in records {
-            let lsn = next_lsn;
-            next_lsn += 1;
+            if rec.lsn <= from_lsn_exclusive {
+                continue;
+            }
 
             let row: Row = if rec.body_format == CT_MSGPACK {
                 match rmp_serde::from_slice::<Row>(&rec.body) {
@@ -252,7 +257,7 @@ pub fn replay_handrolled_wal_dir(
                         tracing::warn!(
                             target: "beava.recovery",
                             kind = "recovery.v2_msgpack_decode_failed",
-                            lsn = lsn,
+                            lsn = rec.lsn,
                             error = %e,
                             "v=2 msgpack body decode failed; skipping"
                         );
@@ -266,7 +271,7 @@ pub fn replay_handrolled_wal_dir(
                         tracing::warn!(
                             target: "beava.recovery",
                             kind = "recovery.v2_json_decode_failed",
-                            lsn = lsn,
+                            lsn = rec.lsn,
                             error = %e,
                             "v=2 JSON body decode failed; skipping"
                         );
@@ -298,7 +303,7 @@ pub fn replay_handrolled_wal_dir(
                     &rec.event_name,
                     &row,
                     rec.et_ms,
-                    lsn,
+                    rec.lsn,
                     rec.rv as u64,
                     &dev_agg.registry,
                     &mut tables,
@@ -306,14 +311,14 @@ pub fn replay_handrolled_wal_dir(
                 );
             }
 
-            dev_agg.next_event_id.fetch_max(lsn, Ordering::Relaxed);
+            dev_agg.next_event_id.fetch_max(rec.lsn, Ordering::Relaxed);
             if rec.et_ms > 0 {
                 dev_agg
                     .query_time_ms
                     .fetch_max(rec.et_ms as u64, Ordering::Relaxed);
             }
             outcome.replay_event_count += 1;
-            outcome.last_lsn = lsn;
+            outcome.last_lsn = rec.lsn;
         }
     }
 
@@ -340,12 +345,12 @@ pub fn replay_wal_from_lsn(
     }
     let records = WalReader::read_all(wal_dir)?;
     for rec in records {
-        if rec.lsn <= from_lsn_exclusive {
-            continue;
-        }
-        outcome.last_lsn = outcome.last_lsn.max(rec.lsn);
         match rec.record_type {
             RecordType::Event => {
+                if rec.lsn <= from_lsn_exclusive {
+                    continue;
+                }
+                outcome.last_lsn = outcome.last_lsn.max(rec.lsn);
                 let payload: WalEventPayload = match serde_json::from_slice(&rec.payload) {
                     Ok(p) => p,
                     Err(e) => {
@@ -389,27 +394,36 @@ pub fn replay_wal_from_lsn(
                 outcome.replay_event_count += 1;
             }
             RecordType::RegistryBump => match RegistryBumpPayload::decode(&rec.payload) {
-                Ok(bump) => match crate::register::apply_registry_bump(&dev_agg.registry, bump) {
-                    Ok(()) => {
-                        outcome.replay_registry_bumps += 1;
+                Ok(bump) => {
+                    if rec.lsn <= from_lsn_exclusive
+                        && bump.new_version <= dev_agg.registry.version()
+                    {
+                        continue;
                     }
-                    Err(e) => {
-                        // Apply-after-fsync invariant: a durable RegistryBump
-                        // that fails to apply is a hard recovery failure —
-                        // silently skipping would let durable corruption hide.
-                        tracing::error!(
-                            target: "beava.recovery",
-                            kind = "recovery.registry_bump_apply_failed",
-                            lsn = rec.lsn,
-                            error = %e,
-                            "RegistryBump apply failed during replay"
-                        );
-                        return Err(PersistError::Io(std::io::Error::other(format!(
-                            "RegistryBump apply failed at LSN {}: {e}",
-                            rec.lsn
-                        ))));
+                    outcome.last_lsn = outcome.last_lsn.max(rec.lsn);
+                    match crate::register::apply_registry_bump(&dev_agg.registry, bump) {
+                        Ok(()) => {
+                            outcome.replay_registry_bumps += 1;
+                            outcome.applied_registry_bump_after_snapshot = true;
+                        }
+                        Err(e) => {
+                            // Apply-after-fsync invariant: a durable RegistryBump
+                            // that fails to apply is a hard recovery failure —
+                            // silently skipping would let durable corruption hide.
+                            tracing::error!(
+                                target: "beava.recovery",
+                                kind = "recovery.registry_bump_apply_failed",
+                                lsn = rec.lsn,
+                                error = %e,
+                                "RegistryBump apply failed during replay"
+                            );
+                            return Err(PersistError::Io(std::io::Error::other(format!(
+                                "RegistryBump apply failed at LSN {}: {e}",
+                                rec.lsn
+                            ))));
+                        }
                     }
-                },
+                }
                 Err(e) => {
                     tracing::error!(
                         target: "beava.recovery",

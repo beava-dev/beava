@@ -344,7 +344,7 @@ async fn fork_full_snapshot_at_1m_entries() {
         .expect("fork-snapshot");
     let parent_elapsed = t0.elapsed();
     let exit_str = match exit {
-        beava_server::snapshot_fork::ChildExit::Success => "success".to_string(),
+        beava_server::snapshot_fork::ChildExit::Success { .. } => "success".to_string(),
         beava_server::snapshot_fork::ChildExit::Failure { code, message } => {
             format!("FAIL code={code} message={message}")
         }

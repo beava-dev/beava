@@ -93,10 +93,18 @@ impl std::fmt::Debug for WalLsn {
 impl WalLsn {
     /// Create a new `WalLsn` with all watermarks at zero.
     pub fn new() -> Self {
+        Self::new_at(0)
+    }
+
+    /// Create a new `WalLsn` with all watermarks already advanced to `lsn`.
+    ///
+    /// Used after recovery so the hand-rolled WAL ring continues from the
+    /// recovered high-water mark instead of reusing low LSNs after restart.
+    pub fn new_at(lsn: Lsn) -> Self {
         Self {
-            committed: AtomicU64::new(0),
-            written: AtomicU64::new(0),
-            synced: AtomicU64::new(0),
+            committed: AtomicU64::new(lsn),
+            written: AtomicU64::new(lsn),
+            synced: AtomicU64::new(lsn),
             synced_condvar: Condvar::new(),
             synced_mutex: Mutex::new(()),
         }
