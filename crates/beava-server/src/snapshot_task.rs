@@ -40,6 +40,10 @@ pub struct SnapshotTaskConfig {
     /// process-env pollution (per the Phase 13.5.3 architectural rule
     /// in `phase13_5_3_no_env_var_pokes_in_tests`).
     pub use_fork_snapshot: bool,
+    /// Test-only synchronization hook: receives the LSN captured for an
+    /// in-process snapshot immediately before `state_tables.lock()`.
+    #[doc(hidden)]
+    pub snapshot_lsn_capture_tx: Option<std::sync::mpsc::Sender<u64>>,
 }
 
 /// Read `BEAVA_SNAPSHOT_MIN_EVENTS` as a u64. Returns `0` if the env is
@@ -208,8 +212,13 @@ async fn do_snapshot(
 
     // Legacy in-process path (default).
     let (snapshot_lsn, body) = {
-        let registry_snap = app_state.dev_agg.registry.snapshot();
+        let captured_lsn =
+            legacy_snapshot_lsn.max(app_state.dev_agg.next_event_id.load(Ordering::Acquire));
+        if let Some(tx) = &cfg.snapshot_lsn_capture_tx {
+            let _ = tx.send(captured_lsn);
+        }
         let tables = app_state.dev_agg.state_tables.lock();
+        let registry_snap = app_state.dev_agg.registry.snapshot();
         let next_event_id = app_state.dev_agg.next_event_id.load(Ordering::Acquire);
         let query_time_ms = app_state.dev_agg.query_time_ms.load(Ordering::Acquire) as i64;
         let snapshot_lsn = legacy_snapshot_lsn.max(next_event_id);

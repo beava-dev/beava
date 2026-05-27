@@ -143,6 +143,18 @@ impl WalLsn {
         self.committed.fetch_add(n, Ordering::AcqRel) + n
     }
 
+    /// Raise the committed watermark to at least `lsn` without appending
+    /// bytes to the hand-rolled WAL.
+    ///
+    /// The server uses one logical LSN namespace across the legacy
+    /// `WalSink` registry WAL and the data-plane ring WAL. When a registry
+    /// bump advances the legacy WAL first, the next data-plane append must
+    /// jump past that durable point so snapshots can gate both WAL streams
+    /// with a single LSN.
+    pub fn mark_committed_at_least(&self, lsn: Lsn) {
+        self.committed.fetch_max(lsn, Ordering::AcqRel);
+    }
+
     /// Advance `written_lsn` to at least `lsn`.
     ///
     /// Called by the writer thread after `write(fd, ...)` returns.

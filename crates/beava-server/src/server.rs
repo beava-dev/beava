@@ -775,8 +775,7 @@ async fn build_runtime_state_with_persistence(
     //   2. Replay `*.log` records with `lsn > snapshot_lsn` (RegistryBumps
     //      and any persistence-WAL events from the legacy `WalSink`
     //      path).
-    //   3. Replay `*.wal` data-plane events (v=2 binary format from
-    //      `apply_shard`).
+    //   3. Replay `*.wal` data-plane events from `apply_shard`.
     // Memory mode skips this whole block — state starts fresh.
     let initial_start_lsn = if is_memory {
         tracing::info!(
@@ -790,43 +789,20 @@ async fn build_runtime_state_with_persistence(
             .ok()
             .unwrap_or(0);
 
-        let (persistence_lsn, applied_registry_bump_after_snapshot) = if wal_dir.exists() {
+        let persistence_lsn = if wal_dir.exists() {
             match replay_wal_from_lsn(&wal_dir, snapshot_lsn, &dev_agg) {
-                Ok(outcome) => (
-                    outcome.last_lsn.max(snapshot_lsn),
-                    outcome.applied_registry_bump_after_snapshot,
-                ),
-                Err(_) => (snapshot_lsn, false),
+                Ok(outcome) => outcome.last_lsn.max(snapshot_lsn),
+                Err(_) => snapshot_lsn,
             }
         } else {
-            (snapshot_lsn, false)
+            snapshot_lsn
         };
-
-        if applied_registry_bump_after_snapshot {
-            // A post-snapshot registry bump can rebuild aggregation ids. Snapshot
-            // tables are keyed by the pre-bump ids, so discard them and rebuild
-            // data-plane state from the hand-rolled WAL under the new registry.
-            let mut tables = dev_agg.state_tables.lock();
-            tables.clear();
-            beava_core::agg_state_table::ensure_capacity_for(
-                &mut tables,
-                dev_agg.registry.next_agg_id() as usize,
-            );
-            dev_agg
-                .next_event_id
-                .store(0, std::sync::atomic::Ordering::Relaxed);
-            dev_agg
-                .query_time_ms
-                .store(0, std::sync::atomic::Ordering::Relaxed);
-        }
 
         // Replay hand-rolled `*.wal` data-plane events past the state already
-        // covered by the snapshot / legacy persistence WAL.
-        let handrolled_from_lsn = if applied_registry_bump_after_snapshot {
-            0
-        } else {
-            snapshot_lsn.max(persistence_lsn)
-        };
+        // covered by the snapshot. Legacy registry WAL records may have higher
+        // LSNs than some post-snapshot data-plane records, so they must not
+        // raise this replay floor.
+        let handrolled_from_lsn = snapshot_lsn;
         let handrolled_outcome =
             replay_handrolled_wal_dir(&wal_dir, handrolled_from_lsn, &dev_agg).unwrap_or_default();
         let initial = handrolled_outcome
@@ -967,6 +943,7 @@ async fn build_runtime_state_with_persistence(
                 // `phase13_5_3_no_env_var_pokes_in_tests`.
                 min_events_per_snapshot: crate::snapshot_task::min_events_from_env(),
                 use_fork_snapshot: crate::snapshot_fork::fork_enabled(),
+                snapshot_lsn_capture_tx: None,
             },
             Arc::clone(&app_state),
             wal_sink.clone(),

@@ -51,6 +51,7 @@ use std::hash::{Hash, Hasher};
 use crate::agg_descriptor::AggregationDescriptor;
 use crate::agg_op::AggOp;
 use crate::row::{Row, Value};
+use crate::schema::FieldType;
 use compact_str::CompactString;
 use fxhash::FxBuildHasher;
 use hashbrown::HashMap;
@@ -429,7 +430,8 @@ pub fn has_entries_for_name(
 ///
 /// **Snapshot serialization (back-compat):** `iter_sorted` reconstructs
 /// canonical `EntityKey` from the three maps, preserving the serialized
-/// snapshot format. `insert_from_entity_key` is the recovery-path inverse.
+/// snapshot format. `insert_from_entity_key` is the recovery-path inverse
+/// and restores each key into the same runtime sub-map the apply path uses.
 ///
 /// **Query path:** `query_feature` takes an `EntityKey` (built by the query
 /// parser from URL/JSON parameters) and routes through the appropriate map.
@@ -539,9 +541,70 @@ impl AggStateTable {
     }
 
     /// Recovery path: insert a `(EntityKey, Vec<AggOp>)` pair loaded from a
-    /// snapshot. Routes via the `multi` sub-map (EntityKey is always canonical
-    /// Value::Str pairs in the snapshot format).
+    /// snapshot. Routes through the same sub-map selection as the apply hot
+    /// path, so post-snapshot WAL replay updates the restored row instead of
+    /// creating a duplicate in a different storage shape.
     pub fn insert_from_entity_key(&mut self, key: EntityKey, ops: Vec<AggOp>) {
+        self.insert_from_entity_key_with_types(key, ops, None);
+    }
+
+    /// Recovery path with descriptor field types available. Older snapshots
+    /// serialized single numeric/bool/datetime keys as `Value::Str`; use the
+    /// source schema to coerce those legacy keys back into the hot-path shape.
+    pub fn insert_from_entity_key_with_types(
+        &mut self,
+        key: EntityKey,
+        ops: Vec<AggOp>,
+        group_key_types: Option<&[FieldType]>,
+    ) {
+        if self.group_keys.is_empty() {
+            self.group_keys = key.0.iter().map(|(name, _)| name.to_string()).collect();
+        }
+
+        if key.0.len() == 1 {
+            let (_, value) = &key.0[0];
+            let value = match (value, group_key_types.and_then(|types| types.first())) {
+                (Value::Str(s), Some(FieldType::I64)) => s.parse::<i64>().ok().map(Value::I64),
+                (Value::Str(s), Some(FieldType::F64)) => s.parse::<f64>().ok().map(Value::F64),
+                (Value::Str(s), Some(FieldType::Bool)) => s.parse::<bool>().ok().map(Value::Bool),
+                (Value::Str(s), Some(FieldType::Datetime)) => {
+                    s.parse::<i64>().ok().map(Value::Datetime)
+                }
+                _ => None,
+            }
+            .unwrap_or_else(|| value.clone());
+
+            match value {
+                Value::Str(s) => {
+                    self.single_str.insert(s, ops);
+                    return;
+                }
+                Value::I64(n) => {
+                    self.single_u64
+                        .insert(EntityKeyShape::tag_u64(VariantTag::I64, n as u64), ops);
+                    return;
+                }
+                Value::F64(f) if !f.is_nan() => {
+                    self.single_u64
+                        .insert(EntityKeyShape::tag_u64(VariantTag::F64, f.to_bits()), ops);
+                    return;
+                }
+                Value::Bool(b) => {
+                    self.single_u64
+                        .insert(EntityKeyShape::tag_u64(VariantTag::Bool, b as u64), ops);
+                    return;
+                }
+                Value::Datetime(ms) => {
+                    self.single_u64.insert(
+                        EntityKeyShape::tag_u64(VariantTag::Datetime, ms as u64),
+                        ops,
+                    );
+                    return;
+                }
+                _ => {}
+            }
+        }
+
         self.multi.insert(key, ops);
     }
 
@@ -568,8 +631,8 @@ impl AggStateTable {
             match val {
                 Value::Str(s) => {
                     // single_str is the primary path for string-typed group keys.
-                    // Fall back to multi for entries inserted via insert_from_entity_key
-                    // (snapshot recovery path uses multi unconditionally).
+                    // Fall back to multi for legacy entries inserted before
+                    // snapshot recovery restored keys into their hot-path shape.
                     if let Some(ops) = self.single_str.get(s) {
                         ops
                     } else {
@@ -717,26 +780,23 @@ impl AggStateTable {
 
         let key_name = self.group_keys.first().cloned().unwrap_or_default();
 
-        // Reconstruct EntityKey from single_u64 entries.
+        // Reconstruct EntityKey from single_u64 entries. Preserve the typed
+        // Value variant so snapshot load restores into single_u64 again.
         for (k, v) in &self.single_u64 {
             let tag = k >> 60;
             let payload = k & 0x0FFF_FFFF_FFFF_FFFF;
-            let canonical: CompactString = match tag {
-                1 => (payload as i64).to_string().into(),
+            let value = match tag {
+                1 => Value::I64(payload as i64),
                 2 => {
                     // F64: restore bits; upper 4 bits were replaced by tag=2.
-                    let f = f64::from_bits(payload | (2u64 << 60));
-                    format!("{:?}", f).into()
+                    Value::F64(f64::from_bits(payload | (2u64 << 60)))
                 }
-                3 => (payload != 0).to_string().into(),
-                4 => (payload as i64).to_string().into(),
-                _ => "unknown".into(),
+                3 => Value::Bool(payload != 0),
+                4 => Value::Datetime(payload as i64),
+                _ => Value::Str("unknown".into()),
             };
             let mut pairs: SmallVec<[(CompactString, Value); 2]> = SmallVec::new();
-            pairs.push((
-                CompactString::from(key_name.as_str()),
-                Value::Str(canonical),
-            ));
+            pairs.push((CompactString::from(key_name.as_str()), value));
             entries.push((EntityKey(pairs), v));
         }
 
@@ -934,6 +994,72 @@ mod tests {
             let row2 = table.get_or_init(&key, &desc);
             assert_eq!(row2[0].query(0), Value::I64(1));
         }
+    }
+
+    #[test]
+    fn insert_from_entity_key_restores_single_str_hot_shape() {
+        let desc = make_descriptor("A", "S", &["user_id"], &[("cnt", count_op_desc())]);
+        let mut table = AggStateTable::new();
+        table.insert_from_entity_key(
+            make_user_key("alice"),
+            vec![AggOp::Count(crate::agg_state::CountState { n: 5 })],
+        );
+
+        assert_eq!(table.single_str.len(), 1);
+        assert!(table.multi.is_empty());
+
+        let event_row = Row::new().with_field("user_id", Value::Str("alice".into()));
+        let shape = EntityKeyShape::from_row(&desc.group_keys, &event_row).expect("shape");
+        let ops = table.get_or_init_by_shape(&shape, &desc);
+        ops[0].update(&event_row, 0, None, true);
+
+        assert_eq!(ops[0].query(0), Value::I64(6));
+    }
+
+    #[test]
+    fn snapshot_roundtrip_restores_single_u64_hot_shape() {
+        let desc = make_descriptor("A", "S", &["user_id"], &[("cnt", count_op_desc())]);
+        let event_row = Row::new().with_field("user_id", Value::I64(42));
+        let shape = EntityKeyShape::from_row(&desc.group_keys, &event_row).expect("shape");
+
+        let mut table = AggStateTable::new();
+        {
+            let ops = table.get_or_init_by_shape(&shape, &desc);
+            ops[0].update(&event_row, 0, None, true);
+        }
+
+        let mut restored = AggStateTable::new();
+        for (key, ops) in table.iter_sorted() {
+            restored.insert_from_entity_key(key, ops.clone());
+        }
+
+        assert_eq!(restored.single_u64.len(), 1);
+        assert!(restored.single_str.is_empty());
+        assert!(restored.multi.is_empty());
+
+        let ops = restored.get_or_init_by_shape(&shape, &desc);
+        ops[0].update(&event_row, 0, None, true);
+        assert_eq!(ops[0].query(0), Value::I64(2));
+    }
+
+    #[test]
+    fn insert_from_entity_key_with_types_coerces_legacy_i64_string() {
+        let desc = make_descriptor("A", "S", &["user_id"], &[("cnt", count_op_desc())]);
+        let mut table = AggStateTable::new();
+        table.insert_from_entity_key_with_types(
+            make_user_key_from_i64(42),
+            vec![AggOp::Count(crate::agg_state::CountState { n: 5 })],
+            Some(&[FieldType::I64]),
+        );
+
+        assert_eq!(table.single_u64.len(), 1);
+        assert!(table.single_str.is_empty());
+
+        let event_row = Row::new().with_field("user_id", Value::I64(42));
+        let shape = EntityKeyShape::from_row(&desc.group_keys, &event_row).expect("shape");
+        let ops = table.get_or_init_by_shape(&shape, &desc);
+        ops[0].update(&event_row, 0, None, true);
+        assert_eq!(ops[0].query(0), Value::I64(6));
     }
 
     #[test]

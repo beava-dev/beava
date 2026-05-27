@@ -5,10 +5,9 @@
 //! 2. JSON parse → 400
 //! 3. Snapshot current registry for validation + diff
 //! 4. validate_payload → 400
-//! 5. classify_register_diff (apply_shard's pre-flight has already
-//!    pre-removed any descriptor whose shape would change with force=true,
-//!    or returned 409 force_required without force; destructive entries
-//!    here are an invariant violation → 503)
+//! 5. classify_register_diff (apply_shard's pre-flight has either returned
+//!    409 force_required without force, or supplied the force-removal set
+//!    that this module persists in the RegistryBump before applying)
 //! 6. No-op (no NewDescriptor entries in additive) → 200 same version
 //! 7. Additive install → 200 new version
 
@@ -222,8 +221,16 @@ pub(crate) async fn execute_register_with_wal(
     payload: RegisterPayload,
     wal_sink: &WalSink,
     force_removed: Vec<String>,
+    wal_min_lsn: u64,
 ) -> RegisterOutcome {
-    execute_register_inner(registry, payload, Some(wal_sink), force_removed).await
+    execute_register_inner(
+        registry,
+        payload,
+        Some(wal_sink),
+        force_removed,
+        wal_min_lsn,
+    )
+    .await
 }
 
 async fn execute_register_inner(
@@ -231,6 +238,7 @@ async fn execute_register_inner(
     payload: RegisterPayload,
     wal_sink: Option<&WalSink>,
     force_removed: Vec<String>,
+    wal_min_lsn: u64,
 ) -> RegisterOutcome {
     if payload.nodes.is_empty() {
         let version = registry.version();
@@ -273,46 +281,45 @@ async fn execute_register_inner(
     let registered_descriptors: Vec<String> = nodes.iter().map(|n| n.name().to_string()).collect();
 
     // Use the new (Phase 13.4 Plan 06) categorized diff. apply_shard's
-    // force-handling block pre-removes every existing descriptor the
-    // payload would change (destructive + additive-against-existing,
-    // when force=true) BEFORE this function runs. By the time we get
-    // here, classify against the post-pre-removal snapshot should never
-    // produce destructive entries — every remaining diff is additive
-    // (NewDescriptor) or already_present (exact match).
+    // force-handling block computes every existing descriptor the payload
+    // would replace (destructive + additive-against-existing) but does not
+    // mutate the live registry before the WAL append. By the time we apply
+    // below, the removal list is carried in the durable RegistryBump.
     let diff = beava_core::register_validate::classify_register_diff(&current_snapshot, &nodes);
 
-    // Invariant check: apply_shard's force-handling block pre-removes every
-    // descriptor whose shape would change before this function is called.
-    // If destructive entries reach here, the caller bypassed apply_shard
-    // (or its pre-flight has a bug) — surface as WalUnavailable (503) so
-    // operators see a noisy server-side error rather than a silent no-op.
-    if !diff.destructive.is_empty() {
+    // Invariant check: destructive entries are allowed only when apply_shard
+    // supplied the force-removal set that will be applied after fsync.
+    if !diff.destructive.is_empty() && force_removed.is_empty() {
         warn!(
             kind = "register.preflight_invariant_violated",
             version = current_snapshot.version,
             destructive = ?diff.destructive,
-            "execute_register saw destructive entries — apply_shard pre-flight should have pre-removed them; refusing to mutate"
+            "execute_register saw destructive entries without a force-removal set; refusing to mutate"
         );
         return RegisterOutcome::WalUnavailable {
             version: current_snapshot.version,
         };
     }
 
-    // Net-new descriptors are entries with `kind: new_descriptor`. Other
-    // additive variants (NewField, NewAgg) shouldn't appear here in normal
-    // flow — apply_shard pre-removes their target descriptor with
-    // force=true so they re-land here as NewDescriptor against the
-    // post-removal snapshot.
-    let added: Vec<String> = diff
-        .additive
-        .iter()
-        .filter_map(|e| match e {
-            beava_core::registry_diff::DiffEntry::NewDescriptor { name, .. } => Some(name.clone()),
-            _ => None,
-        })
-        .collect();
+    // Net-new descriptors are entries with `kind: new_descriptor`. With
+    // force=true, apply_shard supplies the descriptor-removal set and the
+    // durable RegistryBump applies it before re-installing the payload, so
+    // every registered descriptor is reported as added.
+    let added: Vec<String> = if force_removed.is_empty() {
+        diff.additive
+            .iter()
+            .filter_map(|e| match e {
+                beava_core::registry_diff::DiffEntry::NewDescriptor { name, .. } => {
+                    Some(name.clone())
+                }
+                _ => None,
+            })
+            .collect()
+    } else {
+        registered_descriptors.clone()
+    };
 
-    if added.is_empty() {
+    if added.is_empty() && force_removed.is_empty() {
         info!(
             kind = "register.noop",
             version = current_snapshot.version,
@@ -326,15 +333,16 @@ async fn execute_register_inner(
         };
     }
 
+    let bump = RegistryBumpPayload {
+        new_version: current_snapshot.version + 1,
+        payload_nodes: nodes.clone(),
+        force_removed_descriptors: force_removed.clone(),
+    };
+
     // Apply-after-fsync: append + fsync the `RegistryBump` BEFORE mutating
     // the live registry, so recovery only sees descriptors that survived
     // the durability boundary.
     if let Some(sink) = wal_sink {
-        let bump = RegistryBumpPayload {
-            new_version: current_snapshot.version + 1,
-            payload_nodes: nodes.clone(),
-            force_removed_descriptors: force_removed.clone(),
-        };
         let encoded = match bump.encode() {
             Ok(b) => b,
             Err(e) => {
@@ -348,7 +356,10 @@ async fn execute_register_inner(
                 };
             }
         };
-        if let Err(e) = sink.append_record(RecordType::RegistryBump, encoded).await {
+        if let Err(e) = sink
+            .append_record_at_least(RecordType::RegistryBump, encoded, wal_min_lsn)
+            .await
+        {
             warn!(
                 kind = "register.wal_append_failed",
                 error = %e,
@@ -360,12 +371,28 @@ async fn execute_register_inner(
         }
     }
 
-    let new_version = registry.apply_registration(
-        nodes,
-        compiled_chains,
-        propagated_schemas,
-        compiled_aggregations,
-    );
+    let new_version = if force_removed.is_empty() {
+        registry.apply_registration(
+            nodes,
+            compiled_chains,
+            propagated_schemas,
+            compiled_aggregations,
+        )
+    } else {
+        match crate::register::apply_registry_bump(registry, bump) {
+            Ok(()) => registry.version(),
+            Err(e) => {
+                warn!(
+                    kind = "register.force_apply_failed_after_wal",
+                    error = %e,
+                    "force RegistryBump apply failed after WAL append"
+                );
+                return RegisterOutcome::WalUnavailable {
+                    version: current_snapshot.version,
+                };
+            }
+        }
+    };
     info!(
         kind = "register.success",
         version = new_version,

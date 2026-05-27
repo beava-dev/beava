@@ -399,8 +399,8 @@ async fn register_destructive_agg_removal_without_force_returns_409() {
 // 409'd — even with `force=true` set on the request body.
 //
 // Fixed behavior: with `force=true`, additive entries that target an
-// existing descriptor (NewField on event, NewAgg on table) MUST also be
-// pre-removed so execute_register sees them as fully new. The
+// existing descriptor (NewField on event, NewAgg on table) MUST also land
+// through the durable force-removal path before re-install. The
 // caller-explicit `force=true` carries the "drop existing state" intent
 // for both destructive AND additive-against-existing changes.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

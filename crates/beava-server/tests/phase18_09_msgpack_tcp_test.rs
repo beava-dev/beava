@@ -3,8 +3,8 @@
 //! Tasks covered:
 //!   9.2 — parse_wire_request handles CT_MSGPACK envelope
 //!   9.4 — dispatch_push_sync handles msgpack body format end-to-end
-//!   9.5 — WAL record v=2 binary header written for msgpack push
-//!   9.6 — WAL replay handles v=2 (msgpack) + mixed v=1/v=2 records
+//!   9.5 — WAL record v=3 binary header written for msgpack push
+//!   9.6 — WAL replay handles msgpack records after restart
 
 // ─── Task 9.2 RED: parse_wire_request handles msgpack envelope ────────────────
 //
@@ -339,13 +339,13 @@ async fn test_dispatch_push_json_body_still_works() {
     let _ = tokio::time::timeout(std::time::Duration::from_secs(5), serve_task).await;
 }
 
-// ─── Task 9.5 RED: WAL record v=2 binary header ───────────────────────────────
+// ─── Task 9.5: WAL record v=3 binary header ───────────────────────────────────
 //
 // Pushes via TCP/msgpack, reads the WAL file directly, asserts first record
-// starts with [0x02, 0x02, ...] (v=2, body_format=msgpack).
+// starts with [0x03, assigned_lsn, 0x02, ...] (v=3, body_format=msgpack).
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn test_wal_record_v2_format() {
+async fn test_wal_record_v3_format() {
     {
         let _g = SERVER_SERIALIZER_09.lock().unwrap();
     } // serialise test start; _g drops before any await
@@ -386,7 +386,7 @@ async fn test_wal_record_v2_format() {
         .await
         .expect("register");
 
-    // Send a msgpack push so a v=2 WAL record is written.
+    // Send a msgpack push so a v=3 WAL record is written.
     let body =
         serde_json::json!({"user_id": "waltest", "amount": 7.0, "event_time": 2_000_000_i64});
     let _ = send_msgpack_push_tcp(tcp_addr, "TxnEvent", &body).await;
@@ -400,7 +400,7 @@ async fn test_wal_record_v2_format() {
 
     // Read the WAL directory and find the data-plane WAL file.
     // The hand-rolled WalWriter creates "wal-0000000000000000.wal".
-    // The first record should start with v=2, body_format=CT_MSGPACK.
+    // The first record should start with v=3, assigned_lsn, body_format=CT_MSGPACK.
     let wal_files: Vec<_> = std::fs::read_dir(&wal_path)
         .expect("read wal dir")
         .filter_map(|e| e.ok())
@@ -410,12 +410,11 @@ async fn test_wal_record_v2_format() {
         })
         .collect();
 
-    // WAL files present = v=2 records were written (the WalWriter creates them).
-    // If no WAL files exist, the WalBufferRing hasn't flushed — this indicates
-    // the v=2 WAL append path is not yet implemented. Fail explicitly.
+    // WAL files present = v3 records were written (the WalWriter creates them).
+    // If no WAL files exist, the WalBufferRing hasn't flushed. Fail explicitly.
     assert!(
         !wal_files.is_empty(),
-        "expected at least one WAL .wal file after msgpack push; v=2 WAL append not yet wired"
+        "expected at least one WAL .wal file after msgpack push; v3 WAL append not yet wired"
     );
 
     // Read the first WAL file and check the record format.
@@ -423,29 +422,33 @@ async fn test_wal_record_v2_format() {
     let wal_bytes = std::fs::read(wal_file_path).expect("read wal file");
     assert!(!wal_bytes.is_empty(), "WAL file should not be empty");
 
-    // v=2 record format: [u8 v=2][u8 body_format][u32 rv][u64 et_ms][u16 event_name_len][...name...][u32 body_len][...body...]
-    // First byte must be 0x02 (record version 2).
+    // v3 record format: [u8 v=3][u64 assigned_lsn][u8 body_format][u32 rv][u64 et_ms][u16 event_name_len][...name...][u32 body_len][...body...]
+    // First byte must be 0x03 (record version 3).
     assert_eq!(
-        wal_bytes[0], 0x02,
-        "first WAL record byte must be version=2 (0x02), got {:#04x}",
+        wal_bytes[0], 0x03,
+        "first WAL record byte must be version=3 (0x03), got {:#04x}",
         wal_bytes[0]
     );
-    // Second byte must be 0x02 (CT_MSGPACK body format).
+    assert!(
+        wal_bytes.len() >= 10,
+        "v3 WAL record should include version + assigned_lsn + body_format"
+    );
+    let assigned_lsn = u64::from_be_bytes(wal_bytes[1..9].try_into().unwrap());
+    assert!(assigned_lsn > 0, "assigned_lsn must be non-zero");
+    // Byte 9 must be 0x02 (CT_MSGPACK body format).
     assert_eq!(
-        wal_bytes[1], CT_MSGPACK,
-        "second WAL record byte must be CT_MSGPACK (0x02), got {:#04x}",
-        wal_bytes[1]
+        wal_bytes[9], CT_MSGPACK,
+        "v3 WAL body_format byte must be CT_MSGPACK (0x02), got {:#04x}",
+        wal_bytes[9]
     );
 }
 
-// ─── Task 9.6 RED: WAL replay handles v=2 + mixed v=1/v=2 ───────────────────
+// ─── Task 9.6: WAL replay handles msgpack records after restart ──────────────
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_wal_replay_v2_msgpack() {
     // This test verifies that after a server restart, state built from a
-    // msgpack (v=2) push is correctly replayed from the WAL.
-    // RED: the v=2 WAL format is not yet implemented, so this test will fail
-    // until Task 9.5 GREEN + 9.6 GREEN land.
+    // msgpack push is correctly replayed from the WAL.
     {
         let _g = SERVER_SERIALIZER_09.lock().unwrap();
     } // serialise test start; _g drops before any await
@@ -539,10 +542,8 @@ async fn test_wal_replay_v2_msgpack() {
                 "count should be 3 after WAL replay of 3 msgpack events"
             );
         } else {
-            // If the endpoint returns 404/error, WAL replay hasn't reconstituted
-            // the aggregation state from v=2 records — this is the RED condition.
             panic!(
-                "GET /get/cnt/replay_user failed with status {}; v=2 WAL replay not yet implemented",
+                "GET /get/cnt/replay_user failed with status {}; WAL replay did not restore msgpack state",
                 get_resp.status()
             );
         }

@@ -74,14 +74,14 @@ fn build_app_state(n_entities: usize) -> AppState {
 #[cfg(unix)]
 fn measure_fork(app_state: &AppState) -> Duration {
     let lock_start = Instant::now();
-    let pid = {
-        let _state_lock = app_state.dev_agg.state_tables.lock();
-        unsafe { libc::fork() }
-    };
+    let state_lock = app_state.dev_agg.state_tables.lock();
+    let pid = unsafe { libc::fork() };
     let lock_held = lock_start.elapsed();
     if pid == 0 {
         unsafe { libc::_exit(0) };
     }
+    assert!(pid > 0, "fork failed: {}", std::io::Error::last_os_error());
+    drop(state_lock);
     let mut status: libc::c_int = 0;
     unsafe {
         libc::waitpid(pid, &mut status, 0);

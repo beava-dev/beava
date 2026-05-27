@@ -214,11 +214,9 @@ impl ApplyShard {
                 // categorised-lists schema. `dry_run` fires first (returns
                 // the diff JSON without applying). The force gate runs
                 // second: destructive entries without `force=true` return
-                // 409 + `force_required`; with `force=true` we eagerly
-                // remove the conflicting descriptors so
-                // `execute_register_with_wal` treats the payload as
-                // additive (`registry_version` bumps, WAL records the
-                // change).
+                // 409 + `force_required`; with `force=true` we compute the
+                // exact removal set but leave the live registry untouched
+                // until the WAL-backed register path has fsynced the bump.
                 let (force, dry_run) = match serde_json::from_slice::<serde_json::Value>(&payload) {
                     Ok(v) => (
                         v.get("force").and_then(|x| x.as_bool()).unwrap_or(false),
@@ -263,15 +261,11 @@ impl ApplyShard {
 
                 // `force=true` carries the explicit "drop existing state and
                 // replace fully" intent for any descriptor that already
-                // exists in the registry. We pre-remove every existing
-                // descriptor that the new payload would change before
-                // invoking `execute_register_with_wal`, which delegates
-                // installation to `Registry::apply_registration` (silently
-                // skips descriptors already present by name). Without
-                // pre-removal, an additive change against an existing
-                // descriptor (e.g. NewField on an existing event source)
-                // would no-op silently. Two reasons we can't gate solely
-                // on `diff.destructive`:
+                // exists in the registry. Compute every existing descriptor
+                // the new payload would change and record it in the durable
+                // `RegistryBump`; the WAL-backed path applies the removal
+                // after fsync. Two reasons we can't gate solely on
+                // `diff.destructive`:
                 //
                 //   1. `classify_register_diff` classifies new fields on
                 //      an existing event source and new aggregations in
@@ -283,12 +277,11 @@ impl ApplyShard {
                 //      skip — it's genuinely-new (not in current
                 //      registry), so there's nothing to pre-remove.
                 //
-                // Pre-removal drops compiled chains, aggregations, feature
-                // index entries, and accumulated state for the named
-                // descriptors. That state loss is the documented `force=true`
-                // semantic; callers who want to add a field without losing
-                // state should send the request without `force` (additive
-                // path is allowed by `register_check_force_required`).
+                // Forced removal drops compiled chains, aggregations, feature
+                // index entries, and the old agg slots become unreachable.
+                // That state loss is the documented `force=true` semantic;
+                // callers who want to add a field without losing state should
+                // send the request without `force`.
                 let mut force_removed: Vec<String> = Vec::new();
                 if force {
                     let mut to_remove: Vec<String> = Vec::new();
@@ -385,12 +378,6 @@ impl ApplyShard {
                         to_remove.dedup();
                     }
 
-                    if !to_remove.is_empty() {
-                        self.state
-                            .dev_agg
-                            .registry
-                            .force_remove_descriptors(&to_remove);
-                    }
                     // Captured for the RegistryBump WAL record so recovery
                     // can replay the same force-removal closure BEFORE
                     // re-applying `payload_nodes` — without this, replay
@@ -402,6 +389,11 @@ impl ApplyShard {
                 // function on a one-shot single-threaded tokio runtime so
                 // we don't pull tokio into the hot path.
                 let state_clone = Arc::clone(&self.state);
+                let registry_bump_min_lsn = state_clone
+                    .dev_agg
+                    .next_event_id
+                    .load(std::sync::atomic::Ordering::Acquire)
+                    .saturating_add(1);
                 let rt = tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()
@@ -411,6 +403,7 @@ impl ApplyShard {
                     reg_payload,
                     &state_clone.wal_sink,
                     force_removed,
+                    registry_bump_min_lsn,
                 ));
                 // Grow `state_tables` so the hot path can index by
                 // `desc.agg_id` without bounds issues. Register is rare,
@@ -987,9 +980,9 @@ impl ApplyShard {
         let now_ms_i64: i64 = now_ms as i64;
         let t_validate = t0.map(|t| t.elapsed());
 
-        // 6. Serialize WAL payload — v=2 binary format.
+        // 6. Serialize WAL payload — v=3 binary format.
         //
-        // `[u8 v=2][u8 body_format][u32 rv BE][u64 et_ms BE]
+        // `[u8 v=3][u64 assigned_lsn BE][u8 body_format][u32 rv BE][u64 et_ms BE]
         //  [u16 event_name_len BE][N bytes name][u32 body_len BE][M bytes body]`
         //
         // `body` is the exact bytes received from the wire — zero-copy
@@ -999,9 +992,13 @@ impl ApplyShard {
         let name_bytes = event_name.as_bytes();
         let name_len = name_bytes.len() as u16;
         let body_len = body.len() as u32;
-        let mut payload_bytes =
-            Vec::with_capacity(1 + 1 + 4 + 8 + 2 + name_bytes.len() + 4 + body.len());
-        payload_bytes.push(0x02u8);
+        let payload_len = 1 + 8 + 1 + 4 + 8 + 2 + name_bytes.len() + 4 + body.len();
+        self.wal_lsn
+            .mark_committed_at_least(self.state.wal_sink.durable_lsn());
+        let expected_ack_lsn = self.wal_lsn.committed().saturating_add(payload_len as u64);
+        let mut payload_bytes = Vec::with_capacity(payload_len);
+        payload_bytes.push(0x03u8);
+        payload_bytes.extend_from_slice(&expected_ack_lsn.to_be_bytes());
         payload_bytes.push(body_format);
         payload_bytes.extend_from_slice(&registry_version.to_be_bytes());
         payload_bytes.extend_from_slice(&now_ms.to_be_bytes());
@@ -1013,6 +1010,7 @@ impl ApplyShard {
 
         // 7. WAL append — lock-free, no Mutex, no channel.
         let ack_lsn = self.wal_ring.append(&payload_bytes);
+        debug_assert_eq!(ack_lsn, expected_ack_lsn);
         let t_wal_append = t0.map(|t| t.elapsed());
 
         // 8. Apply to aggregations under the table lock (uncontended on

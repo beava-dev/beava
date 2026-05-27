@@ -67,6 +67,7 @@ pub enum SyncMode {
 struct AppendRequest {
     record_type: RecordType,
     payload: Vec<u8>,
+    min_lsn: Lsn,
     mode: SyncMode,
     done: oneshot::Sender<Result<Lsn, PersistError>>,
 }
@@ -130,6 +131,7 @@ impl WalSink {
                     req = append_rx.recv() => {
                         match req {
                             Some(req) => {
+                                next_lsn = next_lsn.max(req.min_lsn);
                                 let assigned = next_lsn;
                                 next_lsn = next_lsn.saturating_add(1);
                                 // Advance the durable watermark immediately —
@@ -194,7 +196,20 @@ impl WalSink {
         record_type: RecordType,
         payload: Vec<u8>,
     ) -> Result<Lsn, PersistError> {
-        self.append_record_with_mode(record_type, payload, SyncMode::PerEvent)
+        self.append_record_with_mode_at_least(record_type, payload, 0, SyncMode::PerEvent)
+            .await
+    }
+
+    /// Strict append that first raises the assigned LSN to at least
+    /// `min_lsn`. Used when another WAL stream has already advanced the
+    /// logical LSN namespace.
+    pub async fn append_record_at_least(
+        &self,
+        record_type: RecordType,
+        payload: Vec<u8>,
+        min_lsn: Lsn,
+    ) -> Result<Lsn, PersistError> {
+        self.append_record_with_mode_at_least(record_type, payload, min_lsn, SyncMode::PerEvent)
             .await
     }
 
@@ -208,11 +223,23 @@ impl WalSink {
         payload: Vec<u8>,
         mode: SyncMode,
     ) -> Result<Lsn, PersistError> {
+        self.append_record_with_mode_at_least(record_type, payload, 0, mode)
+            .await
+    }
+
+    async fn append_record_with_mode_at_least(
+        &self,
+        record_type: RecordType,
+        payload: Vec<u8>,
+        min_lsn: Lsn,
+        mode: SyncMode,
+    ) -> Result<Lsn, PersistError> {
         let (tx, rx) = oneshot::channel();
         self.append_tx
             .send(AppendRequest {
                 record_type,
                 payload,
+                min_lsn,
                 mode,
                 done: tx,
             })
@@ -468,6 +495,7 @@ fn stage_request(
     next_lsn: &mut Lsn,
     staged_bytes: &mut u64,
 ) -> Option<PendingFsync> {
+    *next_lsn = (*next_lsn).max(req.min_lsn);
     let lsn = *next_lsn;
     *next_lsn += 1;
     let payload_len = req.payload.len();

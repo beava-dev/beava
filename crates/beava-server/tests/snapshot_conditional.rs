@@ -183,6 +183,7 @@ async fn default_zero_threshold_always_snapshots_on_tick() {
         retain: 10,
         min_events_per_snapshot: 0, // legacy behavior
         use_fork_snapshot: false,
+        snapshot_lsn_capture_tx: None,
     };
     let cancel = CancellationToken::new();
     let (snap_join, _trigger) =
@@ -215,6 +216,7 @@ async fn nonzero_threshold_skips_when_below() {
         retain: 10,
         min_events_per_snapshot: 1000, // anything > 0 events appended
         use_fork_snapshot: false,
+        snapshot_lsn_capture_tx: None,
     };
     let cancel = CancellationToken::new();
     let (snap_join, _trigger) =
@@ -245,6 +247,7 @@ async fn nonzero_threshold_fires_when_met() {
         // Low threshold so a handful of appends clears it.
         min_events_per_snapshot: 3,
         use_fork_snapshot: false,
+        snapshot_lsn_capture_tx: None,
     };
     let cancel = CancellationToken::new();
     let app_state_arc = Arc::new(app_state);
@@ -286,6 +289,7 @@ async fn nonzero_threshold_uses_applied_data_plane_lsn() {
         retain: 10,
         min_events_per_snapshot: 3,
         use_fork_snapshot: false,
+        snapshot_lsn_capture_tx: None,
     };
     let cancel = CancellationToken::new();
     let app_state = Arc::new(app_state);
@@ -323,6 +327,7 @@ async fn manual_trigger_bypasses_threshold() {
         // High threshold — would skip any interval tick even if it fired.
         min_events_per_snapshot: u64::MAX,
         use_fork_snapshot: false,
+        snapshot_lsn_capture_tx: None,
     };
     let cancel = CancellationToken::new();
     let (snap_join, trigger) =
@@ -356,12 +361,14 @@ async fn snapshot_baseline_stays_at_captured_lsn_when_wal_advances_during_write(
             .expect("append before snapshot");
     }
 
+    let (capture_tx, capture_rx) = std::sync::mpsc::channel();
     let cfg = SnapshotTaskConfig {
         interval: Duration::from_millis(TICK_MS),
         snapshot_dir: tmp.path().to_path_buf(),
         retain: 10,
         min_events_per_snapshot: 5,
         use_fork_snapshot: false,
+        snapshot_lsn_capture_tx: Some(capture_tx),
     };
     let cancel = CancellationToken::new();
     let app_state = Arc::new(app_state);
@@ -387,10 +394,15 @@ async fn snapshot_baseline_stays_at_captured_lsn_when_wal_advances_during_write(
     let (ack_tx, ack_rx) = oneshot::channel();
     trigger.send(ack_tx).await.expect("trigger send");
 
-    // Let the snapshot task run up to the blocked state_tables lock. At that
-    // point `do_snapshot` has already captured snapshot_lsn=5, but cannot
-    // serialize until this test releases the lock.
-    std::thread::sleep(Duration::from_millis(50));
+    // Wait until the snapshot task has captured snapshot_lsn=5 and is about
+    // to block on `state_tables.lock()`. It cannot serialize until this test
+    // releases the lock.
+    assert_eq!(
+        capture_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("snapshot task did not capture LSN before lock"),
+        5
+    );
 
     for _ in 0..5 {
         wal_sink

@@ -59,13 +59,28 @@ pub fn load_snapshot_if_any(
                             new_next_agg_id,
                         );
                         for (node_name, entries) in state_tables {
-                            let agg_id = match dev_agg.registry.compiled_aggregation(&node_name) {
-                                Some(d) => d.agg_id as usize,
+                            let agg_desc = match dev_agg.registry.compiled_aggregation(&node_name) {
+                                Some(d) => d,
                                 None => continue,
                             };
+                            let agg_id = agg_desc.agg_id as usize;
+                            let group_key_types = dev_agg
+                                .registry
+                                .get_event_descriptor(&agg_desc.source_node_name)
+                                .map(|event| {
+                                    agg_desc
+                                        .group_keys
+                                        .iter()
+                                        .filter_map(|key| event.schema.fields.get(key).cloned())
+                                        .collect::<Vec<_>>()
+                                });
                             let tbl = &mut tables[agg_id];
                             for (key, ops) in entries {
-                                tbl.insert_from_entity_key(key, ops);
+                                tbl.insert_from_entity_key_with_types(
+                                    key,
+                                    ops,
+                                    group_key_types.as_deref(),
+                                );
                             }
                         }
                     }
@@ -128,8 +143,8 @@ struct WalEventPayload {
     b: serde_json::Value,
 }
 
-/// A single decoded v=2 record from the hand-rolled WAL file.
-struct V2Record {
+/// A single decoded record from the hand-rolled WAL file.
+struct HandrolledWalRecord {
     lsn: Lsn,
     body_format: u8,
     // reason: parsed from the v=2 record header for completeness; recovery
@@ -141,28 +156,48 @@ struct V2Record {
     body: Vec<u8>,
 }
 
-/// Parse all v=2 binary records from a contiguous byte slice.
+/// Parse all hand-rolled binary records from a contiguous byte slice.
 ///
-/// Format: `[u8 v=2][u8 body_format][u32 rv BE][u64 et_ms BE]
-///           [u16 name_len BE][N bytes name][u32 body_len BE][M bytes body]`
+/// v=2 format:
+/// `[u8 v=2][u8 body_format][u32 rv BE][u64 et_ms BE]
+///  [u16 name_len BE][N bytes name][u32 body_len BE][M bytes body]`
 ///
-/// Stops at first byte that is not 0x02 (unknown version) or if bytes are
+/// v=3 format:
+/// `[u8 v=3][u64 assigned_lsn BE][u8 body_format][u32 rv BE][u64 et_ms BE]
+///  [u16 name_len BE][N bytes name][u32 body_len BE][M bytes body]`
+///
+/// Stops at first byte that is not 0x02/0x03 (unknown version) or if bytes are
 /// insufficient (truncated record — treat as EOF).
-fn parse_v2_records(data: &[u8], base_lsn: Lsn) -> Vec<V2Record> {
+fn parse_handrolled_records(data: &[u8], base_lsn: Lsn) -> Vec<HandrolledWalRecord> {
     let mut records = Vec::new();
     let mut pos = 0usize;
 
     loop {
-        // Fixed header is 1+1+4+8+2 = 16 bytes.
-        if pos + 16 > data.len() {
+        if pos >= data.len() {
             break;
         }
 
         let version = data[pos];
-        if version != 0x02 {
+        if version != 0x02 && version != 0x03 {
             break;
         }
         pos += 1;
+
+        let assigned_lsn = if version == 0x03 {
+            if pos + 8 > data.len() {
+                break;
+            }
+            let lsn = u64::from_be_bytes(data[pos..pos + 8].try_into().unwrap());
+            pos += 8;
+            Some(lsn)
+        } else {
+            None
+        };
+
+        // Remaining fixed header is 1+4+8+2 = 15 bytes.
+        if pos + 15 > data.len() {
+            break;
+        }
 
         let body_format = data[pos];
         pos += 1;
@@ -196,8 +231,8 @@ fn parse_v2_records(data: &[u8], base_lsn: Lsn) -> Vec<V2Record> {
         let body = data[pos..pos + body_len].to_vec();
         pos += body_len;
 
-        records.push(V2Record {
-            lsn: base_lsn.saturating_add(pos as u64),
+        records.push(HandrolledWalRecord {
+            lsn: assigned_lsn.unwrap_or_else(|| base_lsn.saturating_add(pos as u64)),
             body_format,
             rv,
             et_ms,
@@ -212,7 +247,7 @@ fn parse_v2_records(data: &[u8], base_lsn: Lsn) -> Vec<V2Record> {
 /// Replay hand-rolled WAL files (`*.wal`) from `wal_dir`.
 ///
 /// Hand-rolled WAL files are written by `WalBufferRing` + `WalWriter` in the
-/// v=2 binary record format (see `dispatch_push_sync` in `apply_shard`),
+/// binary push-record format (see `dispatch_push_sync` in `apply_shard`),
 /// distinct from the `beava-persistence` `WalSink` format (`*.log`). Returns
 /// recovery counters and replays only records with `lsn > from_lsn_exclusive`.
 pub fn replay_handrolled_wal_dir(
@@ -242,7 +277,7 @@ pub fn replay_handrolled_wal_dir(
 
     for wal_file in &wal_files {
         let data = std::fs::read(wal_file)?;
-        let records = parse_v2_records(&data, base_lsn);
+        let records = parse_handrolled_records(&data, base_lsn);
         base_lsn = base_lsn.saturating_add(data.len() as u64);
 
         for rec in records {
@@ -395,14 +430,19 @@ pub fn replay_wal_from_lsn(
             }
             RecordType::RegistryBump => match RegistryBumpPayload::decode(&rec.payload) {
                 Ok(bump) => {
-                    if rec.lsn <= from_lsn_exclusive
-                        && bump.new_version <= dev_agg.registry.version()
-                    {
+                    outcome.last_lsn = outcome.last_lsn.max(rec.lsn);
+                    if bump.new_version <= dev_agg.registry.version() {
                         continue;
                     }
-                    outcome.last_lsn = outcome.last_lsn.max(rec.lsn);
                     match crate::register::apply_registry_bump(&dev_agg.registry, bump) {
                         Ok(()) => {
+                            {
+                                let mut tables = dev_agg.state_tables.lock();
+                                beava_core::agg_state_table::ensure_capacity_for(
+                                    &mut tables,
+                                    dev_agg.registry.next_agg_id() as usize,
+                                );
+                            }
                             outcome.replay_registry_bumps += 1;
                             outcome.applied_registry_bump_after_snapshot = true;
                         }
@@ -476,4 +516,100 @@ fn json_object_to_row(jv: &serde_json::Value) -> Row {
         }
     }
     row
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use beava_core::registry::Registry;
+    use beava_persistence::{RecordType, WalRecord};
+    use serde_json::json;
+    use std::sync::Arc;
+
+    fn txn_register_payload() -> crate::register::RegisterPayload {
+        serde_json::from_value(json!({
+            "nodes": [
+                {
+                    "kind": "event",
+                    "name": "Txn",
+                    "schema": {"fields": {
+                        "event_time": "i64",
+                        "user_id": "str",
+                        "amount": "f64"
+                    }, "optional_fields": []}
+                },
+                {
+                    "kind": "derivation",
+                    "name": "TxnAgg",
+                    "output_kind": "table",
+                    "upstreams": ["Txn"],
+                    "ops": [{"op": "group_by", "keys": ["user_id"], "agg": {
+                        "cnt": {"op": "count", "params": {}}
+                    }}],
+                    "schema": {"fields": {"user_id": "str", "cnt": "i64"}, "optional_fields": []},
+                    "table_primary_key": ["user_id"]
+                }
+            ]
+        }))
+        .expect("valid register payload")
+    }
+
+    #[test]
+    fn handrolled_v3_records_use_persisted_lsn() {
+        let mut bytes = Vec::new();
+        let body = br#"{"user_id":"alice","amount":1.0}"#;
+        let name = b"Txn";
+
+        bytes.push(0x03);
+        bytes.extend_from_slice(&10_000u64.to_be_bytes());
+        bytes.push(beava_core::wire::CT_JSON);
+        bytes.extend_from_slice(&7u32.to_be_bytes());
+        bytes.extend_from_slice(&(123i64).to_be_bytes());
+        bytes.extend_from_slice(&(name.len() as u16).to_be_bytes());
+        bytes.extend_from_slice(name);
+        bytes.extend_from_slice(&(body.len() as u32).to_be_bytes());
+        bytes.extend_from_slice(body);
+
+        let records = parse_handrolled_records(&bytes, 0);
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].lsn, 10_000);
+        assert_eq!(records[0].rv, 7);
+        assert_eq!(records[0].event_name, "Txn");
+    }
+
+    #[test]
+    fn replay_skips_already_installed_registry_bump_even_past_snapshot_lsn() {
+        let wal = tempfile::tempdir().unwrap();
+        let registry = Arc::new(Registry::new());
+        let dev_agg = DevAggState::new(registry);
+        let payload = txn_register_payload();
+        let bump = crate::register::RegistryBumpPayload {
+            new_version: 1,
+            payload_nodes: payload.nodes,
+            force_removed_descriptors: Vec::new(),
+        };
+
+        crate::register::apply_registry_bump(&dev_agg.registry, bump.clone())
+            .expect("install bump before replay");
+        assert_eq!(dev_agg.registry.version(), 1);
+
+        let mut writer =
+            beava_persistence::WalWriter::open(wal.path(), 100, dev_agg.registry.version() as u32)
+                .expect("open wal writer");
+        writer
+            .append(&WalRecord {
+                lsn: 123,
+                record_type: RecordType::RegistryBump,
+                payload: bump.encode().expect("encode bump"),
+            })
+            .expect("append bump");
+        writer.sync_data().expect("sync wal");
+        drop(writer);
+
+        let outcome = replay_wal_from_lsn(wal.path(), 42, &dev_agg).expect("replay wal");
+        assert_eq!(outcome.last_lsn, 123);
+        assert_eq!(outcome.replay_registry_bumps, 0);
+        assert!(!outcome.applied_registry_bump_after_snapshot);
+        assert_eq!(dev_agg.registry.version(), 1);
+    }
 }

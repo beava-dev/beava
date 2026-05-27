@@ -553,13 +553,28 @@ pub fn compile_aggregations_from_nodes(
 
             // Validate group keys.
             for (key_idx, key) in keys.iter().enumerate() {
-                if !upstream_schema.fields.contains_key(key.as_str()) {
-                    errors.push(ValidationError {
-                        code: ErrorCode::AggregationUnknownField,
-                        path: format!("nodes[{node_idx}].ops[{op_idx}].group_by[{key_idx}]"),
-                        reason: format!("group_by key '{key}' does not exist in upstream schema"),
-                    });
-                    deriv_errors = true;
+                match upstream_schema.fields.get(key.as_str()) {
+                    None => {
+                        errors.push(ValidationError {
+                            code: ErrorCode::AggregationUnknownField,
+                            path: format!("nodes[{node_idx}].ops[{op_idx}].group_by[{key_idx}]"),
+                            reason: format!(
+                                "group_by key '{key}' does not exist in upstream schema"
+                            ),
+                        });
+                        deriv_errors = true;
+                    }
+                    Some(crate::schema::FieldType::F64) => {
+                        errors.push(ValidationError {
+                            code: ErrorCode::AggregationUnknownField,
+                            path: format!("nodes[{node_idx}].ops[{op_idx}].group_by[{key_idx}]"),
+                            reason: format!(
+                                "group_by key '{key}' cannot be float-typed; cast to str/int/bool first"
+                            ),
+                        });
+                        deriv_errors = true;
+                    }
+                    Some(_) => {}
                 }
             }
 
@@ -1510,6 +1525,33 @@ mod tests {
                 |e| e.code == ErrorCode::AggregationUnknownField && e.path.contains("group_by")
             ),
             "expected AggregationUnknownField for group_by key, got: {errors:#?}"
+        );
+    }
+
+    #[test]
+    fn rule11_rejects_float_group_key() {
+        let nodes = vec![
+            event_node_with_fields(
+                "Txn",
+                &[("user_id", FieldType::Str), ("amount", FieldType::F64)],
+            ),
+            group_by_derivation(
+                "AmountStats",
+                "Txn",
+                vec!["amount"],
+                serde_json::json!({
+                    "cnt": {"op": "count", "params": {}}
+                }),
+            ),
+        ];
+        let (_, errors) = compile_aggregations_from_nodes(&nodes, &empty_registry(), &[]);
+        assert!(
+            errors.iter().any(|e| {
+                e.code == ErrorCode::AggregationUnknownField
+                    && e.path.contains("group_by")
+                    && e.reason.contains("cannot be float-typed")
+            }),
+            "expected float group_by rejection, got: {errors:#?}"
         );
     }
 

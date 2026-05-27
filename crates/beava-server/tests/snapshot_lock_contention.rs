@@ -102,16 +102,17 @@ fn measure_fork_parent_lock_hold(app_state: &AppState) -> Duration {
     // We can't reuse the public function because it does the whole
     // snapshot. This measures ONLY the parent-side lock scope.
     let lock_start = Instant::now();
-    let pid = {
-        let _state_lock = app_state.dev_agg.state_tables.lock();
-        unsafe { libc::fork() }
-    };
+    let state_lock = app_state.dev_agg.state_tables.lock();
+    let pid = unsafe { libc::fork() };
     let lock_held = lock_start.elapsed();
 
     if pid == 0 {
         // Child: exit immediately. Snapshot itself is tested elsewhere.
         unsafe { libc::_exit(0) };
     }
+    assert!(pid > 0, "fork failed: {}", std::io::Error::last_os_error());
+
+    drop(state_lock);
 
     // Reap so we don't leak a zombie.
     let mut status: libc::c_int = 0;

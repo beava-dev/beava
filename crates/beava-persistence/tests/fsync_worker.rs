@@ -50,6 +50,35 @@ async fn append_returns_durable_lsn() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn append_record_at_least_raises_assigned_lsn() {
+    let dir = tempfile::tempdir().unwrap();
+    let (sink, handle) = WalSink::spawn(config_for_test(dir.path().to_path_buf())).unwrap();
+
+    let lsn = sink
+        .append_record_at_least(
+            beava_persistence::RecordType::RegistryBump,
+            b"x".to_vec(),
+            100,
+        )
+        .await
+        .unwrap();
+    assert_eq!(lsn, 100);
+
+    let next = sink.append_event(b"p".to_vec()).await.unwrap();
+    assert_eq!(next, 101);
+
+    sink.shutdown().await.unwrap();
+    handle.await.unwrap();
+
+    let seg = find_segment(dir.path());
+    let r = WalReader::open(&seg).unwrap();
+    let recs: Vec<_> = r.collect::<Result<_, _>>().unwrap();
+    assert_eq!(recs.len(), 2);
+    assert_eq!(recs[0].lsn, 100);
+    assert_eq!(recs[1].lsn, 101);
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn concurrent_appends_get_distinct_lsns() {
     let dir = tempfile::tempdir().unwrap();
     let (sink, handle) = WalSink::spawn(config_for_test(dir.path().to_path_buf())).unwrap();

@@ -113,10 +113,9 @@ pub async fn do_snapshot_via_fork(
     std::fs::create_dir_all(snapshot_dir)
         .map_err(|e| SnapshotForkError::Persist(PersistError::Io(e)))?;
 
+    let state_lock = app_state.dev_agg.state_tables.lock();
     let snapshot_dir_owned = snapshot_dir.to_path_buf();
     let registry_snap = app_state.dev_agg.registry.snapshot();
-
-    let state_lock = app_state.dev_agg.state_tables.lock();
     let next_event_id = app_state.dev_agg.next_event_id.load(Ordering::Acquire);
     let query_time_ms = app_state.dev_agg.query_time_ms.load(Ordering::Acquire) as i64;
     let snapshot_lsn = legacy_snapshot_lsn.max(next_event_id);

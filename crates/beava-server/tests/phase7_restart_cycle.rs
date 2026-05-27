@@ -298,6 +298,89 @@ async fn sc4_schema_evolution_survives_restart() {
     }
 }
 
+/// Registry WAL records can advance the durable legacy LSN before the first
+/// data-plane push. The ring WAL must jump past that LSN so a later snapshot
+/// can use one LSN to cover both `.log` registry records and `.wal` events
+/// without skipping post-snapshot push records on restart.
+#[tokio::test]
+async fn registry_first_snapshot_replays_post_snapshot_push_tail() {
+    let _serializer_guard = RESTART_CYCLE_SERIALIZER.lock().await;
+    let wal = tempfile::tempdir().unwrap();
+    let snap = tempfile::tempdir().unwrap();
+
+    {
+        let ts = TestServerBuilder::new()
+            .dev_endpoints(true)
+            .wal_dir(wal.path().to_path_buf())
+            .snapshot_dir(snap.path().to_path_buf())
+            .fsync_interval_ms(1)
+            .spawn()
+            .await
+            .expect("spawn 1st");
+
+        register(&ts, json!([txn_descriptor(), txn_agg_descriptor()])).await;
+        for i in 0..5_i64 {
+            push_event(
+                &ts,
+                "Txn",
+                json!({"user_id": "alice", "amount": 1.0, "event_time": 1_000_000 + i}),
+            )
+            .await;
+        }
+
+        ts.force_snapshot_now().await.expect("force snapshot");
+        let snapshots = beava_persistence::list_snapshots(snap.path()).expect("list snapshots");
+        let (_, snapshot_path) = snapshots.first().expect("snapshot exists after force");
+        let (_, snapshot_bytes) =
+            beava_persistence::SnapshotReader::open(snapshot_path).expect("open snapshot");
+        let snapshot_body =
+            beava_core::snapshot_body::SnapshotBody::decode(&snapshot_bytes).expect("decode");
+        assert_eq!(snapshot_body.registry.version, 1);
+        assert!(snapshot_body.next_event_id > 1);
+        assert_eq!(
+            snapshot_body
+                .state_tables
+                .get("TxnAgg")
+                .map(|entries| entries.len()),
+            Some(1),
+            "forced snapshot should include the pre-tail TxnAgg state"
+        );
+
+        for i in 0..4_i64 {
+            push_event(
+                &ts,
+                "Txn",
+                json!({"user_id": "alice", "amount": 1.0, "event_time": 2_000_000 + i}),
+            )
+            .await;
+        }
+
+        let v = get_feature(&ts, "TxnAgg", "alice", &["cnt"]).await;
+        assert_eq!(v["cnt"], 9, "pre-restart cnt expected 9, got {v}");
+
+        ts.shutdown().await.expect("shutdown 1st");
+    }
+
+    {
+        let ts = TestServerBuilder::new()
+            .dev_endpoints(true)
+            .wal_dir(wal.path().to_path_buf())
+            .snapshot_dir(snap.path().to_path_buf())
+            .fsync_interval_ms(1)
+            .spawn()
+            .await
+            .expect("spawn 2nd");
+
+        let v = get_feature(&ts, "TxnAgg", "alice", &["cnt"]).await;
+        assert_eq!(
+            v["cnt"], 9,
+            "post-restart cnt expected 9 (snapshot + post-snapshot WAL tail), got {v}"
+        );
+
+        ts.shutdown().await.expect("shutdown 2nd");
+    }
+}
+
 /// Bonus: verify SC1 + SC4 combined — snapshot MID-WAY through schema
 /// evolution. Specifically: register A → push A → snapshot → register B →
 /// push A and B → shutdown → restart. Snapshot covers v1 schema; WAL tail
