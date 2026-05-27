@@ -8,7 +8,7 @@
 //!    path).
 //! 2. The child path does not corrupt parent state (parent can continue
 //!    using `app_state` after the fork without crashing).
-//! 3. The `BEAVA_SNAPSHOT_FORK` env gate is honored.
+//! 3. The fork path serializes real registered aggregation state.
 //!
 //! NOTE on lock-hold timing: a microbenchmark proving "lock held < 10ms"
 //! is intentionally NOT included here — it's timing-sensitive and would
@@ -17,11 +17,15 @@
 //! syscall) and the parent-state-after-fork test below (which would fail
 //! if the parent were blocked on a long lock-hold).
 
-use beava_core::agg_op::AggOp;
+use beava_core::agg_descriptor::{AggregationDescriptor, NamedAggOp};
+use beava_core::agg_op::{AggKind, AggOp, AggOpDescriptor, FIELD_IDX_NONE};
 use beava_core::agg_state::CountState;
-use beava_core::agg_state_table::{AggStateTable, EntityKey};
-use beava_core::registry::Registry;
+use beava_core::agg_state_table::{ensure_capacity_for, AggStateTable, EntityKey};
+use beava_core::op_node::{AggSpec, OpNode};
+use beava_core::registry::{DerivationDescriptor, EventDescriptor, OutputKind, Registry};
+use beava_core::registry_diff::PayloadNode;
 use beava_core::row::Value;
+use beava_core::schema::{DerivedSchema, EventSchema, FieldType};
 use beava_core::snapshot_body::SnapshotBody;
 use beava_persistence::SnapshotReader;
 use beava_server::registry_debug::DevAggState;
@@ -29,20 +33,98 @@ use beava_server::snapshot_fork::{do_snapshot_via_fork, ChildExit};
 use beava_server::AppState;
 use compact_str::CompactString;
 use smallvec::smallvec;
+use std::collections::BTreeMap;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tempfile::TempDir;
 
+fn count_desc() -> AggOpDescriptor {
+    AggOpDescriptor {
+        kind: AggKind::Count,
+        field: None,
+        window_ms: None,
+        where_expr: None,
+        n: None,
+        half_life_ms: None,
+        sub_window_ms: None,
+        sigma: None,
+        sketch_params: None,
+        ext: Default::default(),
+        field_idx: FIELD_IDX_NONE,
+        field_idx_into_event_extracted: Vec::new(),
+    }
+}
+
 /// Build a minimal `AppState` populated with N entities × 1 Count aggregation.
 fn build_app_state(n_entities: usize) -> AppState {
     let registry = Arc::new(Registry::new());
+    let mut event_fields = BTreeMap::new();
+    event_fields.insert("user_id".to_string(), FieldType::Str);
+    let event = EventDescriptor {
+        name: "Txn".to_string(),
+        schema: EventSchema {
+            fields: event_fields,
+            optional_fields: vec![],
+        },
+        dedupe_key: None,
+        dedupe_window_ms: None,
+        keep_events_for_ms: None,
+        cold_after_ms: None,
+        registered_at_version: 0,
+        name_arc: Arc::from(""),
+        apply_field_names: vec![],
+    };
+
+    let mut group_by = BTreeMap::new();
+    group_by.insert(
+        "cnt".to_string(),
+        AggSpec {
+            op: "count".to_string(),
+            params: serde_json::Value::Object(Default::default()),
+        },
+    );
+    let mut derived_fields = BTreeMap::new();
+    derived_fields.insert("user_id".to_string(), FieldType::Str);
+    derived_fields.insert("cnt".to_string(), FieldType::I64);
+    let deriv = DerivationDescriptor {
+        name: "UserCounts".to_string(),
+        output_kind: OutputKind::Table,
+        upstreams: vec!["Txn".to_string()],
+        ops: vec![OpNode::GroupBy {
+            keys: vec!["user_id".to_string()],
+            agg: group_by,
+        }],
+        schema: DerivedSchema {
+            fields: derived_fields,
+            optional_fields: vec![],
+        },
+        table_primary_key: Some(vec!["user_id".to_string()]),
+        registered_at_version: 0,
+    };
+    let agg = AggregationDescriptor {
+        node_name: "UserCounts".to_string(),
+        source_node_name: "Txn".to_string(),
+        group_keys: vec!["user_id".to_string()],
+        features: vec![NamedAggOp {
+            feature_name: "cnt".to_string(),
+            descriptor: count_desc(),
+        }],
+        agg_id: 0,
+        field_names: vec![],
+        cluster_id: 0,
+    };
+    registry.apply_registration(
+        vec![PayloadNode::Event(event), PayloadNode::Derivation(deriv)],
+        vec![],
+        vec![],
+        vec![("UserCounts".to_string(), Arc::new(agg))],
+    );
+
     let dev_agg = DevAggState::new(registry);
 
-    // Inject one populated AggStateTable directly via the Mutex. We bypass
-    // the register path because the test only cares about the snapshot
-    // codepath, not the register-validate machinery.
     {
         let mut tables = dev_agg.state_tables.lock();
+        ensure_capacity_for(&mut tables, 1);
         let mut table = AggStateTable::new();
         for ent in 0..n_entities {
             let key_str = format!("user_{ent:09}");
@@ -55,14 +137,7 @@ fn build_app_state(n_entities: usize) -> AppState {
                 vec![AggOp::Count(CountState { n: ent as u64 })],
             );
         }
-        // StateTables is Vec<AggStateTable>; push the populated table at
-        // agg_id 0. (We don't bother registering it in the registry — the
-        // child's SnapshotBody::from_live iterates registry.compiled_aggregations,
-        // so an empty registry means the encoded body has zero serialized
-        // tables. That's still a valid byte-identical contract test: both
-        // paths produce the same empty-aggregations body for the same input.)
-        let _ = table;
-        let _ = &mut *tables;
+        tables[0] = table;
     }
 
     // Build a no-op WalSink for this test — the snapshot path doesn't need
@@ -107,8 +182,13 @@ async fn fork_snapshot_writes_decodable_file() {
     assert_eq!(header.snapshot_lsn, 42);
     // body_len must match the actual body bytes count.
     assert_eq!(header.body_len as usize, body.len());
-    // SnapshotBody must decode (validates body schema integrity).
-    let _decoded = SnapshotBody::decode(&body).expect("body must decode");
+    // SnapshotBody must decode and contain the registered aggregation state.
+    let decoded = SnapshotBody::decode(&body).expect("body must decode");
+    let entries = decoded
+        .state_tables
+        .get("UserCounts")
+        .expect("registered aggregation state must be serialized");
+    assert_eq!(entries.len(), 100);
 }
 
 #[cfg(unix)]
@@ -142,12 +222,17 @@ async fn fork_snapshot_with_zero_state() {
     let exit = do_snapshot_via_fork(tmp.path(), 7, &app_state)
         .await
         .unwrap();
-    matches!(exit, ChildExit::Success);
+    assert!(matches!(exit, ChildExit::Success));
 
     let path = tmp.path().join(format!("snapshot-{:016x}.bvs", 7u64));
     let (header, body) = SnapshotReader::open(&path).expect("zero-state snapshot must decode");
     assert_eq!(header.snapshot_lsn, 7);
-    let _decoded = SnapshotBody::decode(&body).expect("zero-state body must decode");
+    let decoded = SnapshotBody::decode(&body).expect("zero-state body must decode");
+    assert_eq!(
+        decoded.state_tables["UserCounts"].len(),
+        0,
+        "registered aggregation with zero entities should serialize as an empty table"
+    );
 }
 
 // Suppress unused-import warning in non-unix builds.

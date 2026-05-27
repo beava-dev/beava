@@ -28,11 +28,13 @@
 //!    parent and child. `bincode::serialize` in the child therefore allocates
 //!    safely.
 //!
-//! 3. **Locks held by vanished threads are irrelevant.** The child only
-//!    touches: `app_state.dev_agg.{registry, state_tables, next_event_id,
-//!    query_time_ms}` (read-only via the lock guard the forking thread
-//!    holds), and `std::fs` (writes the new snapshot file via its own fds).
-//!    It does NOT touch WAL state, tokio runtime, the admin sidecar, or any
+//! 3. **Locks held by vanished threads are irrelevant.** The parent captures
+//!    the registry snapshot before `fork()`, so the child never takes the
+//!    registry `RwLock` in its inherited address space. The child only
+//!    touches: `app_state.dev_agg.state_tables` (read-only via the lock guard
+//!    the forking thread holds), scalar counter copies captured pre-fork, and
+//!    `std::fs` (writes the new snapshot file via its own fds). It does NOT
+//!    touch WAL state, tokio runtime, the admin sidecar, or any
 //!    `parking_lot::Mutex` it didn't already hold at fork time.
 //!
 //! 4. **Child never returns; calls `libc::_exit`.** `_exit` is async-signal-
@@ -108,6 +110,7 @@ pub async fn do_snapshot_via_fork(
 
     let next_event_id = app_state.dev_agg.next_event_id.load(Ordering::Relaxed);
     let query_time_ms = app_state.dev_agg.query_time_ms.load(Ordering::Relaxed) as i64;
+    let registry_snap = app_state.dev_agg.registry.snapshot();
 
     // Ensure the snapshot dir exists in the parent (cheap; idempotent). The
     // child cannot afford a mkdir failure.
@@ -126,8 +129,9 @@ pub async fn do_snapshot_via_fork(
     //   noop, spawn_blocking workers) vanish in the child per POSIX.
     // - System malloc (glibc/libc) is fork-safe via pthread_atfork handlers,
     //   so `bincode::serialize` in the child allocates safely.
-    // - Child only reads `app_state` fields and calls std::fs + libc::_exit.
-    //   No tokio, no WAL, no admin sidecar.
+    // - Child uses the pre-captured registry snapshot and only reads the
+    //   inherited state_tables snapshot from `app_state`; no registry RwLock,
+    //   no tokio, no WAL, no admin sidecar.
     // - Child calls `libc::_exit` (async-signal-safe; skips at_exit
     //   handlers) rather than `std::process::exit`.
     let pid = {
@@ -147,7 +151,6 @@ pub async fn do_snapshot_via_fork(
         // The state_tables lock that the parent held at fork time is locked
         // in our address space too; since we're single-threaded, just read
         // through the Mutex.
-        let registry_snap = app_state_arc.dev_agg.registry.snapshot();
         let tables = app_state_arc.dev_agg.state_tables.lock();
         let body = SnapshotBody::from_live(&registry_snap, &tables, next_event_id, query_time_ms);
         // Drop guard before encode — encoding allocates but doesn't need the

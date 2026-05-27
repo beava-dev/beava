@@ -101,10 +101,13 @@ pub fn spawn_snapshot_task(
                     // Manual trigger always runs regardless of threshold.
                     // Tests + operators use this to force a snapshot.
                     let res = do_snapshot(&cfg, &app_state, &wal_sink).await;
-                    if res.is_ok() {
-                        last_snapshot_lsn = wal_sink.durable_lsn();
-                    }
-                    let mapped = res.map_err(|e| e.to_string());
+                    let mapped = match res {
+                        Ok(snapshot_lsn) => {
+                            last_snapshot_lsn = snapshot_lsn;
+                            Ok(())
+                        }
+                        Err(e) => Err(e.to_string()),
+                    };
                     let _ = ack.send(mapped);
                 }
                 _ = iv.tick() => {
@@ -132,8 +135,8 @@ pub fn spawn_snapshot_task(
                         }
                     }
                     match do_snapshot(&cfg, &app_state, &wal_sink).await {
-                        Ok(()) => {
-                            last_snapshot_lsn = wal_sink.durable_lsn();
+                        Ok(snapshot_lsn) => {
+                            last_snapshot_lsn = snapshot_lsn;
                         }
                         Err(e) => {
                             tracing::warn!(
@@ -155,7 +158,7 @@ async fn do_snapshot(
     cfg: &SnapshotTaskConfig,
     app_state: &AppState,
     wal_sink: &WalSink,
-) -> Result<(), SnapshotTaskError> {
+) -> Result<u64, SnapshotTaskError> {
     #[cfg(any(feature = "testing", test))]
     maybe_crash_at("before-snapshot");
 
@@ -190,7 +193,7 @@ async fn do_snapshot(
                     via = "fork",
                     "snapshot written via fork + WAL truncated + old snapshots pruned"
                 );
-                return Ok(());
+                return Ok(snapshot_lsn);
             }
             Ok(crate::snapshot_fork::ChildExit::Failure { code, message }) => {
                 return Err(SnapshotTaskError::Encode(format!(
@@ -239,7 +242,7 @@ async fn do_snapshot(
         removed,
         "snapshot written + WAL truncated + old snapshots pruned"
     );
-    Ok(())
+    Ok(snapshot_lsn)
 }
 
 #[cfg(any(feature = "testing", test))]

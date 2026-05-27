@@ -115,6 +115,7 @@ fn run_shape(label: &str, shape: OpShape, sizes: &[usize]) -> Vec<(usize, f64)> 
 }
 
 #[test]
+#[ignore = "diagnostic repro: allocates millions of entries; run manually in release with --ignored --nocapture"]
 fn measure_snapshot_lock_hold_time() {
     println!();
     println!("=== state_tables.lock() hold-time measurement ===");

@@ -73,7 +73,7 @@ pub fn detect_and_opt_out() {
         // subject to system THP (we log the failure and move on).
         let ret = unsafe { libc::prctl(libc::PR_SET_THP_DISABLE, 1u64, 0u64, 0u64, 0u64) };
         if ret == 0 {
-            tracing::info!(
+            tracing::debug!(
                 target: "beava.thp",
                 kind = "thp.process_opt_out_ok",
                 "process opted out of THP via prctl(PR_SET_THP_DISABLE) — \
