@@ -553,3 +553,151 @@ pub(crate) fn error_code_to_wire_str(code: ErrorCode) -> &'static str {
 pub fn format_serde_error_public(e: &serde_json::Error) -> (String, String) {
     ("<body>".to_string(), e.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use beava_core::registry::Registry;
+    use serde_json::json;
+    use std::sync::Arc;
+
+    fn baseline_payload() -> RegisterPayload {
+        serde_json::from_value(json!({
+            "nodes": [
+                {
+                    "kind": "event",
+                    "name": "Tx",
+                    "schema": {
+                        "fields": {
+                            "event_time": "i64",
+                            "user_id": "str",
+                            "amount": "f64"
+                        },
+                        "optional_fields": []
+                    }
+                },
+                {
+                    "kind": "derivation",
+                    "name": "UserSpend",
+                    "output_kind": "event",
+                    "upstreams": ["Tx"],
+                    "ops": [{
+                        "op": "group_by",
+                        "keys": ["user_id"],
+                        "agg": {
+                            "cnt":   {"op": "count", "params": {"window": "1h"}},
+                            "total": {"op": "sum",   "params": {"field": "amount", "window": "1h"}}
+                        }
+                    }],
+                    "schema": {
+                        "fields": {"user_id": "str", "cnt": "i64", "total": "f64"},
+                        "optional_fields": []
+                    }
+                }
+            ]
+        }))
+        .expect("valid baseline register payload")
+    }
+
+    fn changed_window_payload() -> RegisterPayload {
+        serde_json::from_value(json!({
+            "nodes": [
+                {
+                    "kind": "event",
+                    "name": "Tx",
+                    "schema": {
+                        "fields": {
+                            "event_time": "i64",
+                            "user_id": "str",
+                            "amount": "f64"
+                        },
+                        "optional_fields": []
+                    }
+                },
+                {
+                    "kind": "derivation",
+                    "name": "UserSpend",
+                    "output_kind": "event",
+                    "upstreams": ["Tx"],
+                    "ops": [{
+                        "op": "group_by",
+                        "keys": ["user_id"],
+                        "agg": {
+                            "cnt":   {"op": "count", "params": {"window": "30m"}},
+                            "total": {"op": "sum",   "params": {"field": "amount", "window": "30m"}}
+                        }
+                    }],
+                    "schema": {
+                        "fields": {"user_id": "str", "cnt": "i64", "total": "f64"},
+                        "optional_fields": []
+                    }
+                }
+            ]
+        }))
+        .expect("valid changed-window register payload")
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn force_register_wal_failure_does_not_mutate_registry() {
+        let registry = Arc::new(Registry::new());
+        apply_registry_bump(
+            &registry,
+            RegistryBumpPayload {
+                new_version: 1,
+                payload_nodes: baseline_payload().nodes,
+                force_removed_descriptors: Vec::new(),
+            },
+        )
+        .expect("install baseline");
+
+        let before = registry.snapshot();
+        assert_eq!(before.version, 1);
+        assert!(before.events.contains_key("Tx"));
+        assert!(before.derivations.contains_key("UserSpend"));
+        assert!(before.compiled_aggregations.contains_key("UserSpend"));
+        assert_eq!(
+            registry
+                .compiled_aggregation("UserSpend")
+                .expect("baseline agg")
+                .features
+                .iter()
+                .find(|f| f.feature_name == "cnt")
+                .and_then(|f| f.descriptor.window_ms),
+            Some(3_600_000)
+        );
+
+        let (sink, handle) = beava_persistence::WalSink::spawn_no_op();
+        sink.clone().shutdown().await.expect("shutdown no-op sink");
+        handle.await.expect("join no-op sink");
+
+        let outcome = execute_register_with_wal(
+            &registry,
+            changed_window_payload(),
+            &sink,
+            vec!["UserSpend".to_string()],
+            2,
+        )
+        .await;
+        let (status, body) = map_outcome_to_response(outcome);
+        assert_eq!(status, 503);
+        assert_eq!(body["error"]["code"], "wal_unavailable");
+        assert_eq!(body["registry_version"], 1);
+
+        let after = registry.snapshot();
+        assert_eq!(after.version, before.version);
+        assert!(after.events.contains_key("Tx"));
+        assert!(after.derivations.contains_key("UserSpend"));
+        assert!(after.compiled_aggregations.contains_key("UserSpend"));
+        assert_eq!(
+            registry
+                .compiled_aggregation("UserSpend")
+                .expect("agg survives WAL failure")
+                .features
+                .iter()
+                .find(|f| f.feature_name == "cnt")
+                .and_then(|f| f.descriptor.window_ms),
+            Some(3_600_000),
+            "force removal must not apply before the RegistryBump is durable"
+        );
+    }
+}

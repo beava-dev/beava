@@ -381,6 +381,85 @@ async fn registry_first_snapshot_replays_post_snapshot_push_tail() {
     }
 }
 
+/// Regression for the recovery replay floor: a post-snapshot data-plane WAL
+/// record can have an LSN lower than a later registry `.log` bump. Recovery
+/// must still replay hand-rolled `.wal` records from `snapshot_lsn`, not from
+/// the higher registry persistence LSN.
+#[tokio::test]
+async fn snapshot_then_push_then_schema_bump_replays_pre_bump_tail() {
+    let _serializer_guard = RESTART_CYCLE_SERIALIZER.lock().await;
+    let wal = tempfile::tempdir().unwrap();
+    let snap = tempfile::tempdir().unwrap();
+
+    {
+        let ts = TestServerBuilder::new()
+            .dev_endpoints(true)
+            .wal_dir(wal.path().to_path_buf())
+            .snapshot_dir(snap.path().to_path_buf())
+            .fsync_interval_ms(1)
+            .spawn()
+            .await
+            .expect("spawn 1st");
+
+        register(&ts, json!([txn_descriptor(), txn_agg_descriptor()])).await;
+        for i in 0..5_i64 {
+            push_event(
+                &ts,
+                "Txn",
+                json!({"user_id": "alice", "amount": 1.0, "event_time": 1_000_000 + i}),
+            )
+            .await;
+        }
+
+        ts.force_snapshot_now().await.expect("force snapshot");
+
+        push_event(
+            &ts,
+            "Txn",
+            json!({"user_id": "alice", "amount": 1.0, "event_time": 2_000_000}),
+        )
+        .await;
+
+        register(
+            &ts,
+            json!([
+                txn_descriptor(),
+                txn_agg_descriptor(),
+                click_descriptor(),
+                click_agg_descriptor()
+            ]),
+        )
+        .await;
+
+        let v = get_feature(&ts, "TxnAgg", "alice", &["cnt"]).await;
+        assert_eq!(
+            v["cnt"], 6,
+            "pre-restart cnt expected 6 after the post-snapshot pre-bump push, got {v}"
+        );
+
+        ts.shutdown().await.expect("shutdown 1st");
+    }
+
+    {
+        let ts = TestServerBuilder::new()
+            .dev_endpoints(true)
+            .wal_dir(wal.path().to_path_buf())
+            .snapshot_dir(snap.path().to_path_buf())
+            .fsync_interval_ms(1)
+            .spawn()
+            .await
+            .expect("spawn 2nd");
+
+        let v = get_feature(&ts, "TxnAgg", "alice", &["cnt"]).await;
+        assert_eq!(
+            v["cnt"], 6,
+            "post-restart cnt expected 6; replay must not skip the post-snapshot pre-bump WAL record even though the later RegistryBump has a higher LSN, got {v}"
+        );
+
+        ts.shutdown().await.expect("shutdown 2nd");
+    }
+}
+
 /// Bonus: verify SC1 + SC4 combined — snapshot MID-WAY through schema
 /// evolution. Specifically: register A → push A → snapshot → register B →
 /// push A and B → shutdown → restart. Snapshot covers v1 schema; WAL tail

@@ -241,7 +241,7 @@ async fn fork_vs_legacy_lock_hold_at_same_state_size() {
 /// write + waitpid) must still leave the parent's apply lock available
 /// quickly. This is the integration-level guarantee.
 #[cfg(unix)]
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test(flavor = "current_thread")]
 async fn fork_full_path_apply_lock_available_during_child_work() {
     let tmp = TempDir::new().unwrap();
     let app_state = build_app_state(100_000);
