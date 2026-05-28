@@ -246,17 +246,7 @@ fn wait_for_snapshot_child(
         }
 
         if Instant::now() >= deadline {
-            unsafe {
-                libc::kill(pid, libc::SIGKILL);
-            }
-            reap_killed_child(pid);
-            return Ok(ChildExit::Failure {
-                code: -1,
-                message: format!(
-                    "child exceeded fork snapshot wait timeout of {}s and was killed",
-                    timeout.as_secs()
-                ),
-            });
+            return terminate_timed_out_child(pid, timeout);
         }
 
         std::thread::sleep(Duration::from_millis(10));
@@ -264,20 +254,74 @@ fn wait_for_snapshot_child(
 }
 
 #[cfg(unix)]
-fn reap_killed_child(pid: libc::pid_t) {
+fn terminate_timed_out_child(
+    pid: libc::pid_t,
+    timeout: Duration,
+) -> Result<ChildExit, std::io::Error> {
+    let kill_error = if unsafe { libc::kill(pid, libc::SIGKILL) } == 0 {
+        None
+    } else {
+        Some(std::io::Error::last_os_error())
+    };
+    let reap_grace = Duration::from_secs(1);
+    let reap_deadline = Instant::now() + reap_grace;
+    let reaped = reap_child_until(pid, reap_deadline)?;
+
+    let mut message = format!(
+        "child exceeded fork snapshot wait timeout of {}s and was killed",
+        timeout.as_secs()
+    );
+    if let Some(err) = kill_error {
+        message.push_str(&format!("; SIGKILL failed: {err}"));
+    }
+
+    match reaped {
+        Some(status) => {
+            if libc::WIFSIGNALED(status) {
+                message.push_str(&format!("; reaped signal {}", libc::WTERMSIG(status)));
+            } else if libc::WIFEXITED(status) {
+                message.push_str(&format!(
+                    "; reaped exit status {}",
+                    libc::WEXITSTATUS(status)
+                ));
+            } else {
+                message.push_str(&format!("; reaped status {status}"));
+            }
+            Ok(ChildExit::Failure { code: -1, message })
+        }
+        None => Err(std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            format!(
+                "child exceeded fork snapshot wait timeout of {}s, but was not reaped within {}ms",
+                timeout.as_secs(),
+                reap_grace.as_millis()
+            ),
+        )),
+    }
+}
+
+#[cfg(unix)]
+fn reap_child_until(
+    pid: libc::pid_t,
+    deadline: Instant,
+) -> Result<Option<libc::c_int>, std::io::Error> {
     loop {
         let mut status: libc::c_int = 0;
-        let waited = unsafe { libc::waitpid(pid, &mut status, 0) };
+        let waited = unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG) };
         if waited == pid {
-            return;
+            return Ok(Some(status));
         }
         if waited < 0 {
             let err = std::io::Error::last_os_error();
             if err.raw_os_error() == Some(libc::EINTR) {
                 continue;
             }
-            return;
+            return Err(err);
         }
+        if Instant::now() >= deadline {
+            return Ok(None);
+        }
+        std::thread::sleep(Duration::from_millis(10));
     }
 }
 
@@ -418,4 +462,69 @@ fn child_fail(snapshot_dir: &Path, snapshot_lsn: u64, msg: &str) -> ! {
     // generic "child exited non-zero" message.
     let _ = std::fs::write(&err_path, msg);
     unsafe { libc::_exit(1) }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_snapshot_dir(name: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "beava-snapshot-fork-{name}-{}-{nanos}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn wait_for_snapshot_child_timeout_kills_and_reaps_child() {
+        let dir = temp_snapshot_dir("timeout-reap");
+        let pid = unsafe { libc::fork() };
+        assert!(pid >= 0, "fork failed: {}", std::io::Error::last_os_error());
+
+        if pid == 0 {
+            loop {
+                unsafe {
+                    libc::pause();
+                }
+            }
+        }
+
+        let started = Instant::now();
+        let exit = wait_for_snapshot_child(pid, dir.clone(), 42, Duration::from_millis(20))
+            .expect("timeout path must return a bounded failure");
+        let elapsed = started.elapsed();
+
+        match exit {
+            ChildExit::Failure { code, message } => {
+                assert_eq!(code, -1);
+                assert!(
+                    message.contains("exceeded fork snapshot wait timeout"),
+                    "{message}"
+                );
+                assert!(message.contains("reaped signal"), "{message}");
+            }
+            other => panic!("expected timeout failure, got {other:?}"),
+        }
+        assert!(
+            elapsed < Duration::from_secs(2),
+            "timeout/kill/reap path took {elapsed:?}"
+        );
+
+        let mut status: libc::c_int = 0;
+        let waited = unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG) };
+        assert_eq!(waited, -1, "child should already be reaped");
+        assert_eq!(
+            std::io::Error::last_os_error().raw_os_error(),
+            Some(libc::ECHILD)
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
 }
