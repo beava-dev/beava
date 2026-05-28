@@ -93,6 +93,9 @@ async fn metrics_handler(State(state): State<AdminState>) -> impl IntoResponse {
     // `categories_capped`; top-k displacement and histogram bucket drops
     // join when those operator internals expose hooks.
     let op_cap_hits = entropy_capped;
+    let snapshot_metrics = crate::snapshot_metrics::snapshot();
+    let snapshot_duration_seconds = snapshot_metrics.last_duration_us as f64 / 1_000_000.0;
+    let snapshot_fsync_seconds = snapshot_metrics.last_fsync_us as f64 / 1_000_000.0;
 
     let body = format!(
         "# HELP beava_registry_version Registry version (monotonic).\n\
@@ -121,7 +124,16 @@ async fn metrics_handler(State(state): State<AdminState>) -> impl IntoResponse {
          beava_bucket_reclaim_total {bucket_reclaims}\n\
          # HELP beava_bytes_per_entity_p99 Static estimate of per-entity memory footprint (~7 KB for a rich 30-feature pack).\n\
          # TYPE beava_bytes_per_entity_p99 gauge\n\
-         beava_bytes_per_entity_p99 {bytes_per_entity_p99}\n",
+         beava_bytes_per_entity_p99 {bytes_per_entity_p99}\n\
+         # HELP beava_snapshot_last_duration_seconds Wall-clock duration of the last successful snapshot.\n\
+         # TYPE beava_snapshot_last_duration_seconds gauge\n\
+         beava_snapshot_last_duration_seconds {snapshot_duration_seconds:.6}\n\
+         # HELP beava_snapshot_last_bytes Bytes written by the last successful snapshot, including snapshot header and body.\n\
+         # TYPE beava_snapshot_last_bytes gauge\n\
+         beava_snapshot_last_bytes {snapshot_bytes}\n\
+         # HELP beava_snapshot_last_fsync_seconds File plus parent-directory fsync time for the last successful snapshot.\n\
+         # TYPE beava_snapshot_last_fsync_seconds gauge\n\
+         beava_snapshot_last_fsync_seconds {snapshot_fsync_seconds:.6}\n",
         registry_version = snap.version,
         node_count = snap.node_count,
         entropy_capped = entropy_capped,
@@ -130,6 +142,9 @@ async fn metrics_handler(State(state): State<AdminState>) -> impl IntoResponse {
         entity_count = entity_count,
         bucket_reclaims = bucket_reclaims,
         bytes_per_entity_p99 = BYTES_PER_ENTITY_P99_V0_PLACEHOLDER,
+        snapshot_duration_seconds = snapshot_duration_seconds,
+        snapshot_bytes = snapshot_metrics.last_bytes,
+        snapshot_fsync_seconds = snapshot_fsync_seconds,
     );
 
     (

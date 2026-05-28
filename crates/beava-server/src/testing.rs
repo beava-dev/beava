@@ -488,7 +488,8 @@ impl TestServer {
     }
 
     /// Force the periodic snapshot task to run NOW. Resolves once the
-    /// snapshot has been written, WAL truncated, and old snapshots pruned.
+    /// snapshot has been written, covered WAL reclamation has been queued,
+    /// and old snapshots have been pruned.
     /// Returns an error if the snapshot task has stopped or the snapshot
     /// itself failed.
     pub async fn force_snapshot_now(&self) -> Result<(), String> {

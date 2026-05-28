@@ -17,6 +17,8 @@
 
 use beava_server::testing::TestServerBuilder;
 use serde_json::json;
+use std::path::Path;
+use std::time::{Duration, Instant};
 
 async fn register_txn_agg(ts: &beava_server::testing::TestServer) {
     let payload = json!({"nodes": [
@@ -63,7 +65,35 @@ async fn push_n_for_alice(ts: &beava_server::testing::TestServer, n: u64) {
     }
 }
 
-/// SC3: WAL truncation after snapshot — confirm at least one WAL segment is
+fn handrolled_wal_len(wal_dir: &Path) -> u64 {
+    std::fs::read_dir(wal_dir)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("wal"))
+        .filter_map(|p| p.metadata().ok().map(|m| m.len()))
+        .sum()
+}
+
+async fn wait_for_wal_len<F>(wal_dir: &Path, pred: F) -> u64
+where
+    F: Fn(u64) -> bool,
+{
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let len = handrolled_wal_len(wal_dir);
+        if pred(len) {
+            return len;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "timed out waiting for hand-rolled WAL length condition; current len={len}"
+        );
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+}
+
+/// SC3: WAL reclamation after snapshot — confirm at least one WAL segment is
 /// pruned when force_snapshot_now runs after segments accumulate.
 #[tokio::test]
 async fn sc3_truncate_releases_wal_past_snapshot() {
@@ -102,6 +132,33 @@ async fn sc3_truncate_releases_wal_past_snapshot() {
     assert!(
         after_segments <= before_segments,
         "WAL segment count must not grow after snapshot+truncate (before={before_segments}, after={after_segments})"
+    );
+    ts.shutdown().await.expect("shutdown");
+}
+
+#[tokio::test]
+async fn snapshot_reclaims_handrolled_wal_file_bytes() {
+    let wal = tempfile::tempdir().unwrap();
+    let snap = tempfile::tempdir().unwrap();
+    let ts = TestServerBuilder::new()
+        .dev_endpoints(true)
+        .wal_dir(wal.path().to_path_buf())
+        .snapshot_dir(snap.path().to_path_buf())
+        .fsync_interval_ms(1)
+        .wal_tick_ms(1)
+        .spawn()
+        .await
+        .expect("spawn");
+    register_txn_agg(&ts).await;
+    push_n_for_alice(&ts, 200).await;
+
+    let before_len = wait_for_wal_len(wal.path(), |len| len > 0).await;
+    ts.force_snapshot_now().await.expect("force snapshot");
+    let after_len = wait_for_wal_len(wal.path(), |len| len < before_len).await;
+
+    assert!(
+        after_len < before_len,
+        "snapshot should reclaim hand-rolled .wal bytes (before={before_len}, after={after_len})"
     );
     ts.shutdown().await.expect("shutdown");
 }

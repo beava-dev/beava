@@ -15,7 +15,7 @@
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::error::{PersistError, SnapshotError};
 use crate::snapshot_header::{
@@ -33,6 +33,25 @@ use crate::Lsn;
 /// methods exist as an explicit affordance for tests and embed callers
 /// that still hold a writer handle.
 pub struct SnapshotWriter;
+
+/// Best-effort instrumentation returned by [`SnapshotWriter::write_with_stats`].
+#[derive(Debug, Clone)]
+pub struct SnapshotWriteStats {
+    pub path: PathBuf,
+    /// Header bytes plus body bytes written to the committed snapshot file.
+    pub bytes: u64,
+    /// Required file fsync duration.
+    pub file_fsync_duration: Duration,
+    /// Best-effort parent-directory fsync duration. `None` when unsupported or
+    /// when opening the directory failed.
+    pub dir_fsync_duration: Option<Duration>,
+}
+
+impl SnapshotWriteStats {
+    pub fn total_fsync_duration(&self) -> Duration {
+        self.file_fsync_duration + self.dir_fsync_duration.unwrap_or_default()
+    }
+}
 
 impl SnapshotWriter {
     /// Construct a no-op snapshot writer for `Persistence::Memory` mode.
@@ -54,6 +73,16 @@ impl SnapshotWriter {
         registry_version: u64,
         body: &[u8],
     ) -> Result<PathBuf, PersistError> {
+        Self::write_with_stats(dir, snapshot_lsn, registry_version, body).map(|stats| stats.path)
+    }
+
+    /// Atomically write a snapshot file and return write/fsync stats.
+    pub fn write_with_stats(
+        dir: &Path,
+        snapshot_lsn: Lsn,
+        registry_version: u64,
+        body: &[u8],
+    ) -> Result<SnapshotWriteStats, PersistError> {
         std::fs::create_dir_all(dir).map_err(PersistError::Io)?;
         let tmp_path = dir.join(format!("snapshot-{snapshot_lsn:016x}.tmp"));
         let final_path = dir.join(format!("snapshot-{snapshot_lsn:016x}.{SNAPSHOT_EXT}"));
@@ -74,6 +103,7 @@ impl SnapshotWriter {
             body_crc32c,
         };
         let header_bytes = header.encode();
+        let bytes = header_bytes.len() as u64 + body.len() as u64;
 
         let mut f = OpenOptions::new()
             .read(true)
@@ -85,21 +115,34 @@ impl SnapshotWriter {
         f.write_all(&header_bytes).map_err(PersistError::Io)?;
         f.write_all(body).map_err(PersistError::Io)?;
 
+        let file_fsync_started = Instant::now();
         f.sync_all().map_err(PersistError::Io)?;
+        let file_fsync_duration = file_fsync_started.elapsed();
         drop(f);
 
         std::fs::rename(&tmp_path, &final_path).map_err(PersistError::Io)?;
 
+        #[cfg(unix)]
+        let mut dir_fsync_duration = None;
+        #[cfg(not(unix))]
+        let dir_fsync_duration = None;
         // Best-effort parent-directory fsync makes the rename durable on
         // filesystems that don't journal directory entries with the file.
         #[cfg(unix)]
         {
             if let Ok(d) = File::open(dir) {
+                let dir_fsync_started = Instant::now();
                 let _ = d.sync_all();
+                dir_fsync_duration = Some(dir_fsync_started.elapsed());
             }
         }
 
-        Ok(final_path)
+        Ok(SnapshotWriteStats {
+            path: final_path,
+            bytes,
+            file_fsync_duration,
+            dir_fsync_duration,
+        })
     }
 }
 

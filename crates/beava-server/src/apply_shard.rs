@@ -12,7 +12,7 @@
 use crate::register::RegisterPayload;
 use crate::runtime_core_glue::GlueResponse;
 use crate::AppState;
-use beava_core::row::Row;
+use beava_core::row::{Row, Value};
 use beava_runtime_core::wal_buffer::WalBufferRing;
 use beava_runtime_core::wal_lsn::WalLsn;
 use beava_runtime_core::wire_request::WireRequest;
@@ -896,6 +896,13 @@ impl ApplyShard {
         };
         let t_parse = t0.map(|t| t.elapsed());
 
+        if string_has_control_chars(event_name) || row_has_control_chars(&row) {
+            return GlueResponse::PushError {
+                code: "control_character_in_string",
+                registry_version,
+            };
+        }
+
         // 2. Lookup event descriptor (Arc-backed; refcount bump only).
         let descriptor = match self.state.dev_agg.registry.get_event_descriptor(event_name) {
             Some(d) => d,
@@ -1193,6 +1200,38 @@ fn extract_dedupe_str_from_row(row: &beava_core::row::Row, key: &str) -> Option<
         Value::List(l) => format!("{:?}", l),
         Value::Map(m) => format!("{:?}", m),
     })
+}
+
+fn row_has_control_chars(row: &Row) -> bool {
+    row.iter()
+        .any(|(field, value)| string_has_control_chars(field) || value_has_control_chars(value))
+}
+
+fn value_has_control_chars(value: &Value) -> bool {
+    match value {
+        Value::Str(s) => string_has_control_chars(s),
+        Value::Json(jv) => json_value_has_control_chars(jv),
+        Value::List(values) => values.iter().any(value_has_control_chars),
+        Value::Map(map) => map
+            .iter()
+            .any(|(key, value)| string_has_control_chars(key) || value_has_control_chars(value)),
+        _ => false,
+    }
+}
+
+fn json_value_has_control_chars(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::String(s) => string_has_control_chars(s),
+        serde_json::Value::Array(values) => values.iter().any(json_value_has_control_chars),
+        serde_json::Value::Object(map) => map.iter().any(|(key, value)| {
+            string_has_control_chars(key) || json_value_has_control_chars(value)
+        }),
+        _ => false,
+    }
+}
+
+fn string_has_control_chars(value: &str) -> bool {
+    value.chars().any(char::is_control)
 }
 
 /// One entry in the `OP_BATCH_GET` request payload.

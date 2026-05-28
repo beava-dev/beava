@@ -287,6 +287,7 @@ struct ServerV18State {
     wal_ring: Arc<beava_runtime_core::wal_buffer::WalBufferRing>,
     wal_lsn: Arc<beava_runtime_core::wal_lsn::WalLsn>,
     wal_writer_handle: std::thread::JoinHandle<()>,
+    wal_reclaim: Option<beava_runtime_core::wal_writer::WalReclaimHandle>,
     /// TCP frame-size cap plumbed through `WorkerConfig` rather than read
     /// from env per-frame, so parallel `TestServer` instances don't
     /// contaminate each other.
@@ -899,8 +900,10 @@ async fn build_runtime_state_with_persistence(
     // fsync. Memory mode: drain sealed buffers back to the free pool
     // with no file I/O so the apply hot path can't backpressure-block
     // once buffers fill.
-    let (wal_writer_shutdown, wal_writer_handle) = if is_memory {
-        spawn_no_op_wal_writer(Arc::clone(&wal_ring), Arc::clone(&wal_lsn), wal_cfg.tick_ms)
+    let (wal_writer_shutdown, wal_writer_handle, wal_reclaim) = if is_memory {
+        let (shutdown, handle) =
+            spawn_no_op_wal_writer(Arc::clone(&wal_ring), Arc::clone(&wal_lsn), wal_cfg.tick_ms);
+        (shutdown, handle, None)
     } else {
         let wal_writer = WalWriter::new(
             &wal_dir,
@@ -909,13 +912,14 @@ async fn build_runtime_state_with_persistence(
             wal_cfg.tick_ms,
         )
         .map_err(|e| ServerError::WalSpawn(e.to_string()))?;
+        let reclaim = wal_writer.reclaim_handle();
         // Capture the shutdown flag BEFORE `spawn()` consumes the writer.
         // Without it, the writer loop would never see the shutdown signal
         // and `JoinHandle` drop would detach the thread mid-tick, losing
         // any active-buffer contents that hadn't been sealed yet.
         let shutdown = wal_writer.shutdown_flag();
         let handle = wal_writer.spawn();
-        (shutdown, handle)
+        (shutdown, handle, Some(reclaim))
     };
 
     // Memory mode skips the snapshot task entirely (zero file I/O), but
@@ -947,6 +951,7 @@ async fn build_runtime_state_with_persistence(
             },
             Arc::clone(&app_state),
             wal_sink.clone(),
+            wal_reclaim.clone(),
             snapshot_cancel.clone(),
         );
         (Some((snapshot_cancel, snapshot_worker)), snapshot_trigger)
@@ -961,6 +966,7 @@ async fn build_runtime_state_with_persistence(
         wal_ring,
         wal_lsn,
         wal_writer_handle,
+        wal_reclaim,
         wal_writer_shutdown,
         snapshot_task,
         snapshot_trigger,
@@ -1054,6 +1060,7 @@ where
         wal_ring,
         wal_lsn,
         wal_writer_handle,
+        wal_reclaim: _wal_reclaim,
         wal_writer_shutdown,
         snapshot_task,
         snapshot_trigger,

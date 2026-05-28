@@ -42,5 +42,5 @@ pub use router::{Route, Router};
 pub use tcp_listener::TcpListener;
 pub use wal_buffer::{WalBuffer, WalBufferRing};
 pub use wal_lsn::{Lsn, WalLsn};
-pub use wal_writer::WalWriter;
+pub use wal_writer::{WalReclaimHandle, WalWriter};
 pub use wire_request::WireRequest;

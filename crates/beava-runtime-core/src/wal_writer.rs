@@ -42,7 +42,7 @@ use crate::wal_lsn::WalLsn;
 use std::fs::{File, OpenOptions};
 use std::io::Write as IoWrite;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -90,6 +90,8 @@ impl From<std::io::Error> for WalWriterError {
 pub struct WalWriter {
     /// Open WAL segment file (O_APPEND | O_WRONLY | O_CREAT).
     file: File,
+    /// Stable WAL path. The writer owns all truncate/compact operations.
+    wal_path: PathBuf,
     /// Shared buffer ring — writer pops sealed buffers from here.
     ring: Arc<WalBufferRing>,
     /// Shared LSN watermarks — writer advances written + synced here.
@@ -98,6 +100,34 @@ pub struct WalWriter {
     tick_ms: u64,
     /// Set to `true` by `shutdown()` to ask the writer thread to drain and exit.
     shutdown: Arc<AtomicBool>,
+    /// Snapshot-covered LSN requested by the snapshot task. The writer is the
+    /// only thread that acts on this request because it owns the append file.
+    reclaim: WalReclaimHandle,
+}
+
+/// Handle used by snapshot/checkpoint code to request hand-rolled WAL
+/// compaction. Requests are monotone; the writer thread observes them after a
+/// flush+fsync boundary and safely rewrites the WAL tail.
+#[derive(Clone, Debug)]
+pub struct WalReclaimHandle {
+    requested_lsn: Arc<AtomicU64>,
+}
+
+impl WalReclaimHandle {
+    fn new() -> Self {
+        Self {
+            requested_lsn: Arc::new(AtomicU64::new(0)),
+        }
+    }
+
+    /// Request reclamation of WAL records covered by `covered_lsn`.
+    pub fn request_reclaim_up_to(&self, covered_lsn: u64) {
+        self.requested_lsn.fetch_max(covered_lsn, Ordering::AcqRel);
+    }
+
+    fn requested_lsn(&self) -> u64 {
+        self.requested_lsn.load(Ordering::Acquire)
+    }
 }
 
 impl WalWriter {
@@ -128,10 +158,12 @@ impl WalWriter {
 
         Ok(Self {
             file,
+            wal_path,
             ring,
             lsn,
             tick_ms,
             shutdown: Arc::new(AtomicBool::new(false)),
+            reclaim: WalReclaimHandle::new(),
         })
     }
 
@@ -140,23 +172,32 @@ impl WalWriter {
         Arc::clone(&self.shutdown)
     }
 
+    /// Return a handle for snapshot/checkpoint code to request WAL
+    /// reclamation. The writer performs the actual compaction on its own
+    /// thread after flushing the ring.
+    pub fn reclaim_handle(&self) -> WalReclaimHandle {
+        self.reclaim.clone()
+    }
+
     /// Start the writer + fsync loop in a dedicated `std::thread`.
     ///
     /// The returned `JoinHandle` can be awaited for clean shutdown.
     pub fn spawn(self) -> JoinHandle<()> {
         let WalWriter {
             mut file,
+            wal_path,
             ring,
             lsn,
             tick_ms,
             shutdown,
+            reclaim,
         } = self;
         let tick = Duration::from_millis(tick_ms);
 
         std::thread::Builder::new()
             .name("beava-wal-writer".to_owned())
             .spawn(move || {
-                run_writer_loop(&mut file, &ring, &lsn, tick, &shutdown);
+                run_writer_loop(&mut file, &wal_path, &ring, &lsn, tick, &shutdown, &reclaim);
             })
             .expect("failed to spawn WAL writer thread")
     }
@@ -164,11 +205,14 @@ impl WalWriter {
 
 fn run_writer_loop(
     file: &mut File,
+    wal_path: &Path,
     ring: &WalBufferRing,
     lsn: &WalLsn,
     tick: Duration,
     shutdown: &AtomicBool,
+    reclaim: &WalReclaimHandle,
 ) {
+    let mut reclaimed_lsn = 0u64;
     loop {
         std::thread::sleep(tick);
 
@@ -178,12 +222,14 @@ fn run_writer_loop(
 
         // 2. Drain all sealed buffers: write → fsync → free.
         flush_sealed_buffers(file, ring, lsn);
+        maybe_reclaim_wal_file(file, wal_path, lsn, reclaim, &mut reclaimed_lsn);
 
         // 3. Check shutdown after draining.
         if shutdown.load(Ordering::Acquire) {
             // Final drain + fsync on shutdown.
             ring.seal_active();
             flush_sealed_buffers(file, ring, lsn);
+            maybe_reclaim_wal_file(file, wal_path, lsn, reclaim, &mut reclaimed_lsn);
             break;
         }
     }
@@ -244,6 +290,219 @@ fn sync_file(file: &mut File) -> std::io::Result<()> {
     {
         file.sync_data()
     }
+}
+
+fn maybe_reclaim_wal_file(
+    file: &mut File,
+    wal_path: &Path,
+    lsn: &WalLsn,
+    reclaim: &WalReclaimHandle,
+    reclaimed_lsn: &mut u64,
+) {
+    let requested = reclaim.requested_lsn();
+    if requested == 0 || requested <= *reclaimed_lsn {
+        return;
+    }
+    let synced_lsn = lsn.synced();
+
+    match compact_wal_file(file, wal_path, requested) {
+        Ok(stats) => {
+            *reclaimed_lsn = requested;
+            tracing::info!(
+                target: "beava.wal",
+                kind = "wal.handrolled_reclaimed",
+                covered_lsn = requested,
+                data_plane_synced_lsn = synced_lsn,
+                before_bytes = stats.before_bytes,
+                after_bytes = stats.after_bytes,
+                removed_records = stats.removed_records,
+                retained_records = stats.retained_records,
+                "hand-rolled WAL reclaimed after durable snapshot"
+            );
+        }
+        Err(e) => {
+            tracing::warn!(
+                target: "beava.wal",
+                kind = "wal.handrolled_reclaim_failed",
+                covered_lsn = requested,
+                error = %e,
+                "hand-rolled WAL reclaim skipped"
+            );
+        }
+    }
+}
+
+#[derive(Debug)]
+struct WalCompactStats {
+    before_bytes: u64,
+    after_bytes: u64,
+    removed_records: usize,
+    retained_records: usize,
+}
+
+#[derive(Debug)]
+struct ParsedWalRecord {
+    lsn: u64,
+    start: usize,
+    end: usize,
+    version: u8,
+}
+
+fn compact_wal_file(
+    open_append_file: &mut File,
+    wal_path: &Path,
+    covered_lsn: u64,
+) -> std::io::Result<WalCompactStats> {
+    open_append_file.sync_all()?;
+
+    let data = std::fs::read(wal_path)?;
+    let before_bytes = data.len() as u64;
+    if data.is_empty() {
+        return Ok(WalCompactStats {
+            before_bytes,
+            after_bytes: 0,
+            removed_records: 0,
+            retained_records: 0,
+        });
+    }
+
+    let records = parse_wal_record_bounds(&data)?;
+    let mut retained = Vec::new();
+    let mut removed_records = 0usize;
+    let mut retained_records = 0usize;
+    for rec in records {
+        if rec.lsn <= covered_lsn {
+            removed_records += 1;
+            continue;
+        }
+        if rec.version != 0x03 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "cannot compact retained legacy v2 WAL records without assigned LSNs",
+            ));
+        }
+        retained.extend_from_slice(&data[rec.start..rec.end]);
+        retained_records += 1;
+    }
+
+    if removed_records == 0 {
+        return Ok(WalCompactStats {
+            before_bytes,
+            after_bytes: before_bytes,
+            removed_records,
+            retained_records,
+        });
+    }
+
+    let tmp_path = wal_path.with_extension("wal.compact.tmp");
+    match std::fs::remove_file(&tmp_path) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e),
+    }
+    {
+        let mut tmp = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp_path)?;
+        tmp.write_all(&retained)?;
+        tmp.sync_all()?;
+    }
+    std::fs::rename(&tmp_path, wal_path)?;
+
+    if let Some(parent) = wal_path.parent() {
+        if let Ok(dir) = File::open(parent) {
+            let _ = dir.sync_all();
+        }
+    }
+
+    *open_append_file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(wal_path)?;
+
+    Ok(WalCompactStats {
+        before_bytes,
+        after_bytes: retained.len() as u64,
+        removed_records,
+        retained_records,
+    })
+}
+
+fn parse_wal_record_bounds(data: &[u8]) -> std::io::Result<Vec<ParsedWalRecord>> {
+    let mut records = Vec::new();
+    let mut pos = 0usize;
+    let mut base_lsn = 0u64;
+
+    while pos < data.len() {
+        let start = pos;
+        let version = data[pos];
+        if version != 0x02 && version != 0x03 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("unknown WAL record version {version:#04x} at byte {pos}"),
+            ));
+        }
+        pos += 1;
+
+        let assigned_lsn = if version == 0x03 {
+            if pos + 8 > data.len() {
+                return Err(unexpected_eof("v3 assigned_lsn"));
+            }
+            let lsn = u64::from_be_bytes(data[pos..pos + 8].try_into().unwrap());
+            pos += 8;
+            Some(lsn)
+        } else {
+            None
+        };
+
+        if pos + 15 > data.len() {
+            return Err(unexpected_eof("fixed header"));
+        }
+        pos += 1; // body_format
+        pos += 4; // registry version
+        pos += 8; // event time
+
+        let name_len = u16::from_be_bytes(data[pos..pos + 2].try_into().unwrap()) as usize;
+        pos += 2;
+
+        if pos + name_len + 4 > data.len() {
+            return Err(unexpected_eof("event name/body length"));
+        }
+        std::str::from_utf8(&data[pos..pos + name_len]).map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("invalid WAL event name utf8 at byte {pos}: {e}"),
+            )
+        })?;
+        pos += name_len;
+
+        let body_len = u32::from_be_bytes(data[pos..pos + 4].try_into().unwrap()) as usize;
+        pos += 4;
+
+        if pos + body_len > data.len() {
+            return Err(unexpected_eof("body"));
+        }
+        pos += body_len;
+
+        let end = pos;
+        records.push(ParsedWalRecord {
+            lsn: assigned_lsn.unwrap_or_else(|| base_lsn.saturating_add(end as u64)),
+            start,
+            end,
+            version,
+        });
+        base_lsn = base_lsn.saturating_add((end - start) as u64);
+    }
+
+    Ok(records)
+}
+
+fn unexpected_eof(field: &str) -> std::io::Error {
+    std::io::Error::new(
+        std::io::ErrorKind::UnexpectedEof,
+        format!("truncated WAL record while reading {field}"),
+    )
 }
 
 /// Return `true` if `path` is on a network filesystem (NFS, SMB, FUSE, etc.).
@@ -337,5 +596,143 @@ pub fn is_network_fs(path: &Path) -> bool {
     {
         let _ = path;
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "beava-wal-writer-{name}-{}-{nanos}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn encode_v3(buf: &mut Vec<u8>, lsn: u64, event_name: &str, body: &[u8]) {
+        buf.push(0x03);
+        buf.extend_from_slice(&lsn.to_be_bytes());
+        buf.push(0x02); // JSON
+        buf.extend_from_slice(&1u32.to_be_bytes());
+        buf.extend_from_slice(&123u64.to_be_bytes());
+        let name_bytes = event_name.as_bytes();
+        buf.extend_from_slice(&(name_bytes.len() as u16).to_be_bytes());
+        buf.extend_from_slice(name_bytes);
+        buf.extend_from_slice(&(body.len() as u32).to_be_bytes());
+        buf.extend_from_slice(body);
+    }
+
+    #[test]
+    fn compact_wal_file_removes_snapshot_covered_v3_records() {
+        let dir = temp_dir("compact");
+        let path = dir.join("wal-0000000000000000.wal");
+        let mut bytes = Vec::new();
+        encode_v3(&mut bytes, 10, "Txn", br#"{"user_id":"a"}"#);
+        encode_v3(&mut bytes, 20, "Txn", br#"{"user_id":"b"}"#);
+        encode_v3(&mut bytes, 30, "Txn", br#"{"user_id":"c"}"#);
+        std::fs::write(&path, &bytes).unwrap();
+
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .unwrap();
+        let stats = compact_wal_file(&mut file, &path, 20).unwrap();
+        let compacted = std::fs::read(&path).unwrap();
+        let records = parse_wal_record_bounds(&compacted).unwrap();
+
+        assert_eq!(stats.removed_records, 2);
+        assert_eq!(stats.retained_records, 1);
+        assert!(stats.after_bytes < stats.before_bytes);
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].lsn, 30);
+
+        file.write_all(b"tail").unwrap();
+        file.sync_all().unwrap();
+        assert!(
+            std::fs::metadata(&path).unwrap().len() > stats.after_bytes,
+            "writer must keep appending to the compacted WAL path"
+        );
+
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn compact_wal_file_skips_when_no_records_are_covered() {
+        let dir = temp_dir("noop");
+        let path = dir.join("wal-0000000000000000.wal");
+        let mut bytes = Vec::new();
+        encode_v3(&mut bytes, 50, "Txn", br#"{"user_id":"a"}"#);
+        std::fs::write(&path, &bytes).unwrap();
+
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .unwrap();
+        let stats = compact_wal_file(&mut file, &path, 20).unwrap();
+
+        assert_eq!(stats.removed_records, 0);
+        assert_eq!(stats.retained_records, 1);
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn compact_wal_file_replaces_stale_tmp_from_prior_crash() {
+        let dir = temp_dir("stale-tmp");
+        let path = dir.join("wal-0000000000000000.wal");
+        let mut bytes = Vec::new();
+        encode_v3(&mut bytes, 10, "Txn", br#"{"user_id":"a"}"#);
+        std::fs::write(&path, &bytes).unwrap();
+        std::fs::write(path.with_extension("wal.compact.tmp"), b"stale").unwrap();
+
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .unwrap();
+        let stats = compact_wal_file(&mut file, &path, 10).unwrap();
+
+        assert_eq!(stats.removed_records, 1);
+        assert_eq!(stats.after_bytes, 0);
+        assert_eq!(std::fs::read(&path).unwrap(), b"");
+
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn reclaim_request_can_exceed_data_plane_synced_lsn_for_registry_lsn_gaps() {
+        let dir = temp_dir("registry-gap");
+        let path = dir.join("wal-0000000000000000.wal");
+        let mut bytes = Vec::new();
+        encode_v3(&mut bytes, 10, "Txn", br#"{"user_id":"a"}"#);
+        std::fs::write(&path, &bytes).unwrap();
+
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .unwrap();
+        let lsn = WalLsn::new_at(10);
+        let reclaim = WalReclaimHandle::new();
+        reclaim.request_reclaim_up_to(100);
+        let mut reclaimed_lsn = 0;
+
+        maybe_reclaim_wal_file(&mut file, &path, &lsn, &reclaim, &mut reclaimed_lsn);
+
+        assert_eq!(reclaimed_lsn, 100);
+        assert_eq!(std::fs::read(&path).unwrap(), b"");
+
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

@@ -47,16 +47,21 @@
 
 use crate::AppState;
 use beava_core::snapshot_body::SnapshotBody;
-use beava_persistence::PersistError;
+use beava_persistence::{PersistError, SnapshotWriteStats};
 use std::path::Path;
 use std::sync::atomic::Ordering;
+#[cfg(unix)]
+use std::time::Duration;
 
 /// Result of a fork-snapshot. The parent uses `ChildExit::Success` to decide
 /// whether to truncate the WAL.
 #[derive(Debug)]
 pub enum ChildExit {
     /// Child exited with status 0 — snapshot file is durable.
-    Success { snapshot_lsn: u64 },
+    Success {
+        snapshot_lsn: u64,
+        write_stats: Option<SnapshotWriteStats>,
+    },
     /// Child exited non-zero or with a signal. Snapshot file may be partial
     /// or absent.
     Failure { code: i32, message: String },
@@ -89,7 +94,7 @@ pub fn fork_enabled() -> bool {
 }
 
 /// Perform a snapshot via `fork()` + COW. Returns the child's exit summary
-/// so the caller can gate WAL truncation on success.
+/// so the caller can gate WAL reclamation on success.
 ///
 /// The caller is responsible for:
 /// - Passing the legacy `WalSink` LSN. This function combines it with the
@@ -119,6 +124,7 @@ pub async fn do_snapshot_via_fork(
     let next_event_id = app_state.dev_agg.next_event_id.load(Ordering::Acquire);
     let query_time_ms = app_state.dev_agg.query_time_ms.load(Ordering::Acquire) as i64;
     let snapshot_lsn = legacy_snapshot_lsn.max(next_event_id);
+    let _ = std::fs::remove_file(snapshot_stats_sidecar_path(snapshot_dir, snapshot_lsn));
 
     // Briefly take the state_tables lock so the fork sees a quiescent state
     // snapshot. The lock-hold spans only the fork syscall (~µs).
@@ -156,15 +162,18 @@ pub async fn do_snapshot_via_fork(
         };
         let registry_version = body.registry.version;
 
-        match SnapshotWriter::write(
+        match SnapshotWriter::write_with_stats(
             &snapshot_dir_owned,
             snapshot_lsn,
             registry_version,
             &encoded,
         ) {
-            Ok(_) => unsafe {
-                libc::_exit(0);
-            },
+            Ok(stats) => {
+                write_stats_sidecar(&snapshot_dir_owned, snapshot_lsn, &stats);
+                unsafe {
+                    libc::_exit(0);
+                }
+            }
             Err(e) => child_fail(&snapshot_dir_owned, snapshot_lsn, &format!("write: {e}")),
         }
     }
@@ -184,7 +193,11 @@ pub async fn do_snapshot_via_fork(
         if libc::WIFEXITED(status) {
             let code = libc::WEXITSTATUS(status);
             if code == 0 {
-                Ok(ChildExit::Success { snapshot_lsn })
+                let write_stats = read_stats_sidecar(&snapshot_dir_owned, snapshot_lsn);
+                Ok(ChildExit::Success {
+                    snapshot_lsn,
+                    write_stats,
+                })
             } else {
                 // Try to read the error sidecar the child wrote, best-effort.
                 let err_path =
@@ -225,6 +238,73 @@ pub async fn do_snapshot_via_fork(
         std::io::ErrorKind::Unsupported,
         "fork-snapshot is unix-only",
     )))
+}
+
+#[cfg(unix)]
+fn snapshot_stats_sidecar_path(snapshot_dir: &Path, snapshot_lsn: u64) -> std::path::PathBuf {
+    snapshot_dir.join(format!("snapshot-{snapshot_lsn:016x}.stats"))
+}
+
+#[cfg(unix)]
+fn snapshot_file_path(snapshot_dir: &Path, snapshot_lsn: u64) -> std::path::PathBuf {
+    snapshot_dir.join(format!(
+        "snapshot-{snapshot_lsn:016x}.{}",
+        beava_persistence::SNAPSHOT_EXT
+    ))
+}
+
+#[cfg(unix)]
+fn write_stats_sidecar(snapshot_dir: &Path, snapshot_lsn: u64, stats: &SnapshotWriteStats) {
+    let dir_fsync_us = stats
+        .dir_fsync_duration
+        .map(duration_micros)
+        .map(|us| us.to_string())
+        .unwrap_or_else(|| "none".to_string());
+    let body = format!(
+        "bytes={}\nfile_fsync_us={}\ndir_fsync_us={}\n",
+        stats.bytes,
+        duration_micros(stats.file_fsync_duration),
+        dir_fsync_us
+    );
+    let _ = std::fs::write(
+        snapshot_stats_sidecar_path(snapshot_dir, snapshot_lsn),
+        body,
+    );
+}
+
+#[cfg(unix)]
+fn read_stats_sidecar(snapshot_dir: &Path, snapshot_lsn: u64) -> Option<SnapshotWriteStats> {
+    let path = snapshot_stats_sidecar_path(snapshot_dir, snapshot_lsn);
+    let raw = std::fs::read_to_string(&path).ok()?;
+    let _ = std::fs::remove_file(&path);
+
+    let bytes = parse_stats_field(&raw, "bytes")?.parse::<u64>().ok()?;
+    let file_fsync_us = parse_stats_field(&raw, "file_fsync_us")?
+        .parse::<u64>()
+        .ok()?;
+    let dir_fsync_duration = match parse_stats_field(&raw, "dir_fsync_us")? {
+        "none" => None,
+        value => Some(Duration::from_micros(value.parse::<u64>().ok()?)),
+    };
+
+    Some(SnapshotWriteStats {
+        path: snapshot_file_path(snapshot_dir, snapshot_lsn),
+        bytes,
+        file_fsync_duration: Duration::from_micros(file_fsync_us),
+        dir_fsync_duration,
+    })
+}
+
+#[cfg(unix)]
+fn parse_stats_field<'a>(raw: &'a str, key: &str) -> Option<&'a str> {
+    let prefix = format!("{key}=");
+    raw.lines()
+        .find_map(|line| line.strip_prefix(&prefix).map(str::trim))
+}
+
+#[cfg(unix)]
+fn duration_micros(duration: Duration) -> u64 {
+    duration.as_micros().min(u64::MAX as u128) as u64
 }
 
 /// Child-side fatal: write the error message to a sidecar file and `_exit(1)`.

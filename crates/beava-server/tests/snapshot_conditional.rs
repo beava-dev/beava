@@ -187,7 +187,7 @@ async fn default_zero_threshold_always_snapshots_on_tick() {
     };
     let cancel = CancellationToken::new();
     let (snap_join, _trigger) =
-        spawn_snapshot_task(cfg, Arc::new(app_state), wal_sink, cancel.clone());
+        spawn_snapshot_task(cfg, Arc::new(app_state), wal_sink, None, cancel.clone());
 
     // Wait for ~3 ticks. With threshold=0, each tick produces a snapshot.
     // Note: with no WAL activity, all snapshots write to the same LSN-named
@@ -220,7 +220,7 @@ async fn nonzero_threshold_skips_when_below() {
     };
     let cancel = CancellationToken::new();
     let (snap_join, _trigger) =
-        spawn_snapshot_task(cfg, Arc::new(app_state), wal_sink, cancel.clone());
+        spawn_snapshot_task(cfg, Arc::new(app_state), wal_sink, None, cancel.clone());
 
     // Same wait as the previous test — but with threshold > 0 and zero
     // WAL appends, every tick should be skipped.
@@ -251,8 +251,13 @@ async fn nonzero_threshold_fires_when_met() {
     };
     let cancel = CancellationToken::new();
     let app_state_arc = Arc::new(app_state);
-    let (snap_join, _trigger) =
-        spawn_snapshot_task(cfg, app_state_arc.clone(), wal_sink.clone(), cancel.clone());
+    let (snap_join, _trigger) = spawn_snapshot_task(
+        cfg,
+        app_state_arc.clone(),
+        wal_sink.clone(),
+        None,
+        cancel.clone(),
+    );
 
     // Append 5 events — clears the threshold of 3.
     for _ in 0..5 {
@@ -294,7 +299,7 @@ async fn nonzero_threshold_uses_applied_data_plane_lsn() {
     let cancel = CancellationToken::new();
     let app_state = Arc::new(app_state);
     let (snap_join, _trigger) =
-        spawn_snapshot_task(cfg, Arc::clone(&app_state), wal_sink, cancel.clone());
+        spawn_snapshot_task(cfg, Arc::clone(&app_state), wal_sink, None, cancel.clone());
 
     tokio::time::sleep(Duration::from_millis(TICK_MS / 2)).await;
     app_state.dev_agg.next_event_id.store(5, Ordering::Release);
@@ -331,7 +336,7 @@ async fn manual_trigger_bypasses_threshold() {
     };
     let cancel = CancellationToken::new();
     let (snap_join, trigger) =
-        spawn_snapshot_task(cfg, Arc::new(app_state), wal_sink, cancel.clone());
+        spawn_snapshot_task(cfg, Arc::new(app_state), wal_sink, None, cancel.clone());
 
     // Fire a manual trigger — should always run regardless of threshold.
     let (ack_tx, ack_rx) = oneshot::channel();
@@ -376,6 +381,7 @@ async fn snapshot_baseline_stays_at_captured_lsn_when_wal_advances_during_write(
         cfg,
         Arc::clone(&app_state),
         wal_sink.clone(),
+        None,
         cancel.clone(),
     );
 

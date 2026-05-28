@@ -88,6 +88,22 @@ fn snapshot_write_then_read_roundtrip() {
 }
 
 #[test]
+fn snapshot_write_with_stats_reports_bytes_and_fsync_timing() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let body = b"instrumented payload".to_vec();
+    let stats = SnapshotWriter::write_with_stats(tmp.path(), 1001, 3, &body).expect("write");
+
+    assert!(stats.path.exists());
+    assert_eq!(stats.bytes, SNAPSHOT_HEADER_SIZE as u64 + body.len() as u64);
+    assert!(stats.total_fsync_duration() >= stats.file_fsync_duration);
+    #[cfg(unix)]
+    assert!(
+        stats.dir_fsync_duration.is_some(),
+        "unix snapshot writes should attempt parent-dir fsync"
+    );
+}
+
+#[test]
 fn snapshot_body_corruption_detected() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let body = vec![0x42u8; 64];

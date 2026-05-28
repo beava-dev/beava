@@ -81,11 +81,19 @@ async fn push_raw(
     event_name: &str,
     body: &serde_json::Value,
 ) -> reqwest::Response {
+    push_raw_bytes(ts, event_name, serde_json::to_vec(body).unwrap()).await
+}
+
+async fn push_raw_bytes(
+    ts: &beava_server::testing::TestServer,
+    event_name: &str,
+    body: Vec<u8>,
+) -> reqwest::Response {
     let url = format!("{}/push/{}", ts.base_url(), event_name);
     reqwest::Client::new()
         .post(&url)
         .header("Content-Type", "application/json")
-        .body(serde_json::to_vec(body).unwrap())
+        .body(body)
         .timeout(Duration::from_secs(5))
         .send()
         .await
@@ -115,6 +123,42 @@ async fn push_happy_path_returns_ack_and_applies_event() {
     assert_eq!(get.status().as_u16(), 200);
     let got: serde_json::Value = get.json().await.unwrap();
     assert_eq!(got["value"], 1, "count should be 1 after one push: {got}");
+
+    ts.shutdown().await.expect("shutdown");
+}
+
+#[tokio::test]
+async fn push_rejects_control_characters_in_decoded_strings() {
+    let tmp = tempfile::tempdir().unwrap();
+    let ts = spawn_with_wal(&tmp).await;
+    register_transaction(&ts, None, None).await;
+
+    let resp = push_raw(
+        &ts,
+        "Transaction",
+        &json!({"user_id": "alice\u{0001}", "amount": 5.0, "event_time": 1_000_000}),
+    )
+    .await;
+    assert_eq!(resp.status().as_u16(), 400);
+    let body: serde_json::Value = resp.json().await.expect("error body");
+    assert_eq!(body["error"]["code"], "control_character_in_string");
+
+    ts.shutdown().await.expect("shutdown");
+}
+
+#[tokio::test]
+async fn push_allows_json_whitespace_and_escaped_non_control_strings() {
+    let tmp = tempfile::tempdir().unwrap();
+    let ts = spawn_with_wal(&tmp).await;
+    register_transaction(&ts, None, None).await;
+
+    let body = br#"{
+        "user_id": "alice \\n quote \" ok",
+        "amount": 5.0,
+        "event_time": 1000000
+    }"#;
+    let resp = push_raw_bytes(&ts, "Transaction", body.to_vec()).await;
+    assert_eq!(resp.status().as_u16(), 200);
 
     ts.shutdown().await.expect("shutdown");
 }

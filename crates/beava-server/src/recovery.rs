@@ -17,7 +17,7 @@ use beava_core::row::{Row, Value};
 use beava_core::snapshot_body::SnapshotBody;
 use beava_persistence::{list_snapshots, Lsn, PersistError, RecordType, SnapshotReader, WalReader};
 use serde::Deserialize;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 
 /// Outcome counters reported back from `replay_wal_from_lsn`.
@@ -27,8 +27,105 @@ pub struct RecoveryOutcome {
     pub snapshot_lsn: Lsn,
     pub replay_event_count: u64,
     pub replay_registry_bumps: u64,
+    pub quarantined_records: u64,
     pub applied_registry_bump_after_snapshot: bool,
     pub last_lsn: Lsn,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum WalQuarantineKind {
+    HandrolledJsonBody,
+    HandrolledMsgpackBody,
+    PersistenceEventPayload,
+}
+
+impl WalQuarantineKind {
+    fn as_str(self) -> &'static str {
+        match self {
+            WalQuarantineKind::HandrolledJsonBody => "handrolled-json-body",
+            WalQuarantineKind::HandrolledMsgpackBody => "handrolled-msgpack-body",
+            WalQuarantineKind::PersistenceEventPayload => "persistence-event-payload",
+        }
+    }
+}
+
+fn wal_quarantine_marker_path(wal_dir: &Path, lsn: Lsn, kind: WalQuarantineKind) -> PathBuf {
+    wal_dir
+        .join("quarantine")
+        .join(format!("lsn-{lsn:016x}-{}.json", kind.as_str()))
+}
+
+fn wal_quarantine_marker_exists(wal_dir: &Path, lsn: Lsn, kind: WalQuarantineKind) -> bool {
+    wal_quarantine_marker_path(wal_dir, lsn, kind).exists()
+}
+
+fn quarantine_wal_decode_failure(
+    wal_dir: &Path,
+    lsn: Lsn,
+    kind: WalQuarantineKind,
+    error: &dyn std::fmt::Display,
+) {
+    let marker = wal_quarantine_marker_path(wal_dir, lsn, kind);
+    if marker.exists() {
+        return;
+    }
+
+    let Some(dir) = marker.parent() else {
+        return;
+    };
+    if let Err(e) = std::fs::create_dir_all(dir) {
+        tracing::warn!(
+            target: "beava.recovery",
+            kind = "recovery.wal_quarantine_write_failed",
+            lsn,
+            quarantine_kind = kind.as_str(),
+            error = %e,
+            "failed to create WAL quarantine directory"
+        );
+        return;
+    }
+
+    let body = serde_json::json!({
+        "lsn": lsn,
+        "kind": kind.as_str(),
+        "reason": error.to_string(),
+    });
+    let bytes = serde_json::to_vec_pretty(&body).unwrap_or_default();
+    let tmp = marker.with_extension(format!("json.tmp-{}", std::process::id()));
+    if let Err(e) = std::fs::write(&tmp, bytes) {
+        tracing::warn!(
+            target: "beava.recovery",
+            kind = "recovery.wal_quarantine_write_failed",
+            lsn,
+            quarantine_kind = kind.as_str(),
+            error = %e,
+            "failed to write WAL quarantine marker"
+        );
+        return;
+    }
+    if let Err(e) = std::fs::rename(&tmp, &marker) {
+        let _ = std::fs::remove_file(&tmp);
+        tracing::warn!(
+            target: "beava.recovery",
+            kind = "recovery.wal_quarantine_write_failed",
+            lsn,
+            quarantine_kind = kind.as_str(),
+            marker = %marker.display(),
+            error = %e,
+            "failed to commit WAL quarantine marker"
+        );
+        return;
+    }
+
+    tracing::warn!(
+        target: "beava.recovery",
+        kind = "recovery.wal_record_quarantined",
+        lsn,
+        quarantine_kind = kind.as_str(),
+        marker = %marker.display(),
+        error = %error,
+        "WAL record decode failed; quarantined for future recovery passes"
+    );
 }
 
 /// Scan `snapshot_dir` for the highest-LSN valid snapshot; install its
@@ -284,18 +381,31 @@ pub fn replay_handrolled_wal_dir(
             if rec.lsn <= from_lsn_exclusive {
                 continue;
             }
+            outcome.last_lsn = outcome.last_lsn.max(rec.lsn);
+
+            let quarantine_kind = if rec.body_format == CT_MSGPACK {
+                WalQuarantineKind::HandrolledMsgpackBody
+            } else {
+                WalQuarantineKind::HandrolledJsonBody
+            };
+            if wal_quarantine_marker_exists(wal_dir, rec.lsn, quarantine_kind) {
+                outcome.quarantined_records += 1;
+                tracing::debug!(
+                    target: "beava.recovery",
+                    kind = "recovery.wal_quarantine_skip",
+                    lsn = rec.lsn,
+                    quarantine_kind = quarantine_kind.as_str(),
+                    "skipping quarantined WAL record"
+                );
+                continue;
+            }
 
             let row: Row = if rec.body_format == CT_MSGPACK {
                 match rmp_serde::from_slice::<Row>(&rec.body) {
                     Ok(r) => r,
                     Err(e) => {
-                        tracing::warn!(
-                            target: "beava.recovery",
-                            kind = "recovery.v2_msgpack_decode_failed",
-                            lsn = rec.lsn,
-                            error = %e,
-                            "v=2 msgpack body decode failed; skipping"
-                        );
+                        quarantine_wal_decode_failure(wal_dir, rec.lsn, quarantine_kind, &e);
+                        outcome.quarantined_records += 1;
                         continue;
                     }
                 }
@@ -303,13 +413,8 @@ pub fn replay_handrolled_wal_dir(
                 match serde_json::from_slice::<Row>(&rec.body) {
                     Ok(r) => r,
                     Err(e) => {
-                        tracing::warn!(
-                            target: "beava.recovery",
-                            kind = "recovery.v2_json_decode_failed",
-                            lsn = rec.lsn,
-                            error = %e,
-                            "v=2 JSON body decode failed; skipping"
-                        );
+                        quarantine_wal_decode_failure(wal_dir, rec.lsn, quarantine_kind, &e);
+                        outcome.quarantined_records += 1;
                         continue;
                     }
                 }
@@ -353,7 +458,6 @@ pub fn replay_handrolled_wal_dir(
                     .fetch_max(rec.et_ms as u64, Ordering::Relaxed);
             }
             outcome.replay_event_count += 1;
-            outcome.last_lsn = rec.lsn;
         }
     }
 
@@ -386,16 +490,23 @@ pub fn replay_wal_from_lsn(
                     continue;
                 }
                 outcome.last_lsn = outcome.last_lsn.max(rec.lsn);
+                let quarantine_kind = WalQuarantineKind::PersistenceEventPayload;
+                if wal_quarantine_marker_exists(wal_dir, rec.lsn, quarantine_kind) {
+                    outcome.quarantined_records += 1;
+                    tracing::debug!(
+                        target: "beava.recovery",
+                        kind = "recovery.wal_quarantine_skip",
+                        lsn = rec.lsn,
+                        quarantine_kind = quarantine_kind.as_str(),
+                        "skipping quarantined WAL record"
+                    );
+                    continue;
+                }
                 let payload: WalEventPayload = match serde_json::from_slice(&rec.payload) {
                     Ok(p) => p,
                     Err(e) => {
-                        tracing::warn!(
-                            target: "beava.recovery",
-                            kind = "recovery.event_decode_failed",
-                            lsn = rec.lsn,
-                            error = %e,
-                            "event payload decode failed; skipping"
-                        );
+                        quarantine_wal_decode_failure(wal_dir, rec.lsn, quarantine_kind, &e);
+                        outcome.quarantined_records += 1;
                         continue;
                     }
                 };
@@ -487,6 +598,7 @@ pub fn replay_wal_from_lsn(
         snapshot_lsn = outcome.snapshot_lsn,
         events_replayed = outcome.replay_event_count,
         registry_bumps_replayed = outcome.replay_registry_bumps,
+        quarantined_records = outcome.quarantined_records,
         last_lsn = outcome.last_lsn,
         "recovery complete"
     );
@@ -575,6 +687,77 @@ mod tests {
         assert_eq!(records[0].lsn, 10_000);
         assert_eq!(records[0].rv, 7);
         assert_eq!(records[0].event_name, "Txn");
+    }
+
+    #[test]
+    fn handrolled_decode_failure_writes_quarantine_marker() {
+        let wal = tempfile::tempdir().unwrap();
+        let registry = Arc::new(Registry::new());
+        let dev_agg = DevAggState::new(registry);
+        let lsn: Lsn = 379_827;
+        let body = b"not-json";
+        let name = b"Txn";
+
+        let mut bytes = Vec::new();
+        bytes.push(0x03);
+        bytes.extend_from_slice(&lsn.to_be_bytes());
+        bytes.push(beava_core::wire::CT_JSON);
+        bytes.extend_from_slice(&1u32.to_be_bytes());
+        bytes.extend_from_slice(&(123i64).to_be_bytes());
+        bytes.extend_from_slice(&(name.len() as u16).to_be_bytes());
+        bytes.extend_from_slice(name);
+        bytes.extend_from_slice(&(body.len() as u32).to_be_bytes());
+        bytes.extend_from_slice(body);
+        std::fs::write(wal.path().join("wal-0000000000000000.wal"), bytes).unwrap();
+
+        let outcome = replay_handrolled_wal_dir(wal.path(), 0, &dev_agg).expect("replay");
+        assert_eq!(outcome.last_lsn, lsn);
+        assert_eq!(outcome.replay_event_count, 0);
+        assert_eq!(outcome.quarantined_records, 1);
+        assert!(wal_quarantine_marker_exists(
+            wal.path(),
+            lsn,
+            WalQuarantineKind::HandrolledJsonBody
+        ));
+
+        let outcome = replay_handrolled_wal_dir(wal.path(), 0, &dev_agg).expect("replay again");
+        assert_eq!(outcome.last_lsn, lsn);
+        assert_eq!(outcome.quarantined_records, 1);
+    }
+
+    #[test]
+    fn persistence_event_decode_failure_writes_quarantine_marker() {
+        let wal = tempfile::tempdir().unwrap();
+        let registry = Arc::new(Registry::new());
+        let dev_agg = DevAggState::new(registry);
+        let lsn: Lsn = 379_827;
+
+        let mut writer =
+            beava_persistence::WalWriter::open(wal.path(), 100, dev_agg.registry.version() as u32)
+                .expect("open wal writer");
+        writer
+            .append(&WalRecord {
+                lsn,
+                record_type: RecordType::Event,
+                payload: b"not-json".to_vec(),
+            })
+            .expect("append event");
+        writer.sync_data().expect("sync wal");
+        drop(writer);
+
+        let outcome = replay_wal_from_lsn(wal.path(), 0, &dev_agg).expect("replay wal");
+        assert_eq!(outcome.last_lsn, lsn);
+        assert_eq!(outcome.replay_event_count, 0);
+        assert_eq!(outcome.quarantined_records, 1);
+        assert!(wal_quarantine_marker_exists(
+            wal.path(),
+            lsn,
+            WalQuarantineKind::PersistenceEventPayload
+        ));
+
+        let outcome = replay_wal_from_lsn(wal.path(), 0, &dev_agg).expect("replay wal again");
+        assert_eq!(outcome.last_lsn, lsn);
+        assert_eq!(outcome.quarantined_records, 1);
     }
 
     #[test]

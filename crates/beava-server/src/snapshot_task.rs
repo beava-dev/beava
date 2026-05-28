@@ -1,16 +1,19 @@
 //! Periodic snapshot task: captures the highest applied WAL watermark, captures
 //! live registry + state tables, encodes outside the apply lock, atomic-renames
-//! into the snapshot dir, then truncates the WAL up to the snapshot LSN and
-//! prunes old snapshots. A manual-trigger channel lets tests force an immediate
-//! snapshot via `TestServer::force_snapshot_now`.
+//! into the snapshot dir, then prunes/reclaims WAL state covered by the
+//! snapshot LSN and prunes old snapshots. A manual-trigger channel lets tests
+//! force an immediate snapshot via `TestServer::force_snapshot_now`.
 
 use crate::AppState;
 use beava_core::snapshot_body::SnapshotBody;
-use beava_persistence::{prune_old_snapshots, PersistError, SnapshotWriter, WalSink};
-use std::path::PathBuf;
+use beava_persistence::{
+    prune_old_snapshots, PersistError, SnapshotWriteStats, SnapshotWriter, WalSink,
+};
+use beava_runtime_core::wal_writer::WalReclaimHandle;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -72,6 +75,7 @@ pub fn spawn_snapshot_task(
     cfg: SnapshotTaskConfig,
     app_state: Arc<AppState>,
     wal_sink: WalSink,
+    wal_reclaim: Option<WalReclaimHandle>,
     cancel: CancellationToken,
 ) -> (JoinHandle<()>, SnapshotTriggerTx) {
     let (trigger_tx, mut trigger_rx) = mpsc::channel::<oneshot::Sender<Result<(), String>>>(8);
@@ -104,7 +108,7 @@ pub fn spawn_snapshot_task(
                 Some(ack) = trigger_rx.recv() => {
                     // Manual trigger always runs regardless of threshold.
                     // Tests + operators use this to force a snapshot.
-                    let res = do_snapshot(&cfg, &app_state, &wal_sink).await;
+                    let res = do_snapshot(&cfg, &app_state, &wal_sink, wal_reclaim.as_ref()).await;
                     let mapped = match res {
                         Ok(snapshot_lsn) => {
                             last_snapshot_lsn = snapshot_lsn;
@@ -138,7 +142,7 @@ pub fn spawn_snapshot_task(
                             continue;
                         }
                     }
-                    match do_snapshot(&cfg, &app_state, &wal_sink).await {
+                    match do_snapshot(&cfg, &app_state, &wal_sink, wal_reclaim.as_ref()).await {
                         Ok(snapshot_lsn) => {
                             last_snapshot_lsn = snapshot_lsn;
                         }
@@ -162,10 +166,12 @@ async fn do_snapshot(
     cfg: &SnapshotTaskConfig,
     app_state: &AppState,
     wal_sink: &WalSink,
+    wal_reclaim: Option<&WalReclaimHandle>,
 ) -> Result<u64, SnapshotTaskError> {
     #[cfg(any(feature = "testing", test))]
     maybe_crash_at("before-snapshot");
 
+    let snapshot_started = Instant::now();
     let legacy_snapshot_lsn = wal_sink.durable_lsn();
 
     // Dispatch on `BEAVA_SNAPSHOT_FORK=1` — the fork+COW path drops apply-
@@ -181,21 +187,43 @@ async fn do_snapshot(
         )
         .await
         {
-            Ok(crate::snapshot_fork::ChildExit::Success { snapshot_lsn }) => {
+            Ok(crate::snapshot_fork::ChildExit::Success {
+                snapshot_lsn,
+                write_stats,
+            }) => {
+                let mut legacy_segments_removed = 0;
+                let mut handrolled_reclaim_requested = false;
                 if snapshot_lsn > 0 {
-                    wal_sink.truncate_up_to(snapshot_lsn).await?;
+                    legacy_segments_removed = wal_sink.truncate_up_to(snapshot_lsn).await?;
+                    if let Some(reclaim) = wal_reclaim {
+                        reclaim.request_reclaim_up_to(snapshot_lsn);
+                        handrolled_reclaim_requested = true;
+                    }
                 }
                 let removed = prune_old_snapshots(&cfg.snapshot_dir, cfg.retain)?;
                 let registry_version = app_state.dev_agg.registry.version();
+                let total_duration = snapshot_started.elapsed();
+                let (snapshot_bytes, fsync_duration) =
+                    snapshot_write_metrics(&cfg.snapshot_dir, snapshot_lsn, write_stats.as_ref());
+                crate::snapshot_metrics::record_snapshot_success(
+                    total_duration,
+                    snapshot_bytes,
+                    fsync_duration,
+                );
                 tracing::info!(
                     target: "beava.snapshot",
                     kind = "snapshot.written",
                     snapshot_lsn,
                     registry_version,
+                    duration_ms = total_duration.as_secs_f64() * 1000.0,
+                    bytes = snapshot_bytes,
+                    fsync_ms = fsync_duration.as_secs_f64() * 1000.0,
                     retained = cfg.retain,
-                    removed,
+                    snapshots_removed = removed,
+                    legacy_wal_segments_removed = legacy_segments_removed,
+                    handrolled_wal_reclaim_requested = handrolled_reclaim_requested,
                     via = "fork",
-                    "snapshot written via fork + WAL truncated + old snapshots pruned"
+                    "snapshot written via fork; covered WAL reclamation queued"
                 );
                 return Ok(snapshot_lsn);
             }
@@ -233,24 +261,47 @@ async fn do_snapshot(
     #[cfg(any(feature = "testing", test))]
     maybe_crash_at("before-rename");
 
-    SnapshotWriter::write(&cfg.snapshot_dir, snapshot_lsn, registry_version, &encoded)?;
+    let write_stats = SnapshotWriter::write_with_stats(
+        &cfg.snapshot_dir,
+        snapshot_lsn,
+        registry_version,
+        &encoded,
+    )?;
 
     #[cfg(any(feature = "testing", test))]
     maybe_crash_at("after-rename-before-truncate");
 
+    let mut legacy_segments_removed = 0;
+    let mut handrolled_reclaim_requested = false;
     if snapshot_lsn > 0 {
-        wal_sink.truncate_up_to(snapshot_lsn).await?;
+        legacy_segments_removed = wal_sink.truncate_up_to(snapshot_lsn).await?;
+        if let Some(reclaim) = wal_reclaim {
+            reclaim.request_reclaim_up_to(snapshot_lsn);
+            handrolled_reclaim_requested = true;
+        }
     }
 
     let removed = prune_old_snapshots(&cfg.snapshot_dir, cfg.retain)?;
+    let total_duration = snapshot_started.elapsed();
+    let fsync_duration = write_stats.total_fsync_duration();
+    crate::snapshot_metrics::record_snapshot_success(
+        total_duration,
+        write_stats.bytes,
+        fsync_duration,
+    );
     tracing::info!(
         target: "beava.snapshot",
         kind = "snapshot.written",
         snapshot_lsn,
         registry_version,
+        duration_ms = total_duration.as_secs_f64() * 1000.0,
+        bytes = write_stats.bytes,
+        fsync_ms = fsync_duration.as_secs_f64() * 1000.0,
         retained = cfg.retain,
-        removed,
-        "snapshot written + WAL truncated + old snapshots pruned"
+        snapshots_removed = removed,
+        legacy_wal_segments_removed = legacy_segments_removed,
+        handrolled_wal_reclaim_requested = handrolled_reclaim_requested,
+        "snapshot written; covered WAL reclamation queued"
     );
     Ok(snapshot_lsn)
 }
@@ -259,6 +310,26 @@ fn current_snapshot_lsn(app_state: &AppState, wal_sink: &WalSink) -> u64 {
     wal_sink
         .durable_lsn()
         .max(app_state.dev_agg.next_event_id.load(Ordering::Acquire))
+}
+
+fn snapshot_write_metrics(
+    snapshot_dir: &Path,
+    snapshot_lsn: u64,
+    write_stats: Option<&SnapshotWriteStats>,
+) -> (u64, Duration) {
+    if let Some(stats) = write_stats {
+        return (stats.bytes, stats.total_fsync_duration());
+    }
+
+    let bytes = snapshot_dir
+        .join(format!(
+            "snapshot-{snapshot_lsn:016x}.{}",
+            beava_persistence::SNAPSHOT_EXT
+        ))
+        .metadata()
+        .map(|m| m.len())
+        .unwrap_or(0);
+    (bytes, Duration::ZERO)
 }
 
 #[cfg(any(feature = "testing", test))]

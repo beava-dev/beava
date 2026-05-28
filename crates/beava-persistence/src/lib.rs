@@ -74,7 +74,9 @@ pub use error::{PersistError, SnapshotError};
 pub use fsync_worker::{SyncMode, WalSink, WalSinkConfig};
 pub use reader::WalReader;
 pub use record::FORMAT_VERSION;
-pub use snapshot::{list_snapshots, prune_old_snapshots, SnapshotReader, SnapshotWriter};
+pub use snapshot::{
+    list_snapshots, prune_old_snapshots, SnapshotReader, SnapshotWriteStats, SnapshotWriter,
+};
 pub use snapshot_header::{
     SnapshotHeader, SNAPSHOT_EXT, SNAPSHOT_FORMAT_VERSION, SNAPSHOT_HEADER_SIZE, SNAPSHOT_MAGIC,
 };
