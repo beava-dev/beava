@@ -14,6 +14,7 @@
 
 #![cfg(feature = "testing")]
 
+use beava_core::wire::{CT_JSON, CT_MSGPACK};
 use beava_server::testing::TestServerBuilder;
 use std::fs;
 use std::io::Write;
@@ -21,8 +22,8 @@ use std::path::Path;
 
 /// Encode one v=2 record into a buffer.
 ///
-/// `body_format` selects the on-disk encoding: `0x02 = CT_JSON` (server
-/// default for HTTP /push), `0x01 = CT_MSGPACK`.
+/// `body_format` selects the on-disk encoding: `CT_JSON` (server default for
+/// HTTP /push) or `CT_MSGPACK`.
 fn encode_v2_record(
     buf: &mut Vec<u8>,
     body_format: u8,
@@ -58,7 +59,6 @@ fn write_wal_file(dir: &Path, bytes: &[u8]) {
 /// the corrupt body) and then warn-skip the corrupt body via the
 /// `serde_json::from_slice` failure arm.
 fn build_wal_with_one_valid_and_one_corrupt_json() -> Vec<u8> {
-    const CT_JSON: u8 = 0x02;
     let mut buf = Vec::new();
 
     // Record 1: valid CT_JSON body — `{"user_id":"alice","amount":1.0}`.
@@ -79,8 +79,6 @@ fn build_wal_with_one_valid_and_one_corrupt_json() -> Vec<u8> {
 /// record. Exercises the `recovery.v2_msgpack_decode_failed` arm
 /// (recovery.rs:251-260).
 fn build_wal_with_corrupt_msgpack_record() -> Vec<u8> {
-    const CT_JSON: u8 = 0x02;
-    const CT_MSGPACK: u8 = 0x01;
     let mut buf = Vec::new();
 
     // Record 1: valid CT_JSON.
@@ -235,7 +233,6 @@ async fn boot_with_only_corrupt_record_still_boots() {
 
     // Single CORRUPT CT_JSON record — declared body_len=5 but body is
     // not valid JSON.
-    const CT_JSON: u8 = 0x02;
     let mut buf = Vec::new();
     encode_v2_record(&mut buf, CT_JSON, 1, 1_700_000_000_000, "Txn", b"xxxxx");
     write_wal_file(wal.path(), &buf);

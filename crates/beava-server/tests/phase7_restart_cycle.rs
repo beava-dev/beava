@@ -19,6 +19,8 @@
 
 use beava_server::testing::TestServerBuilder;
 use serde_json::json;
+use std::path::Path;
+use std::time::{Duration, Instant};
 use tokio::sync::Mutex as TokioMutex;
 
 /// Plan 12.6-15: serialize ServerV18 boots so two restart-cycle tests don't
@@ -125,6 +127,34 @@ async fn get_feature(
     let body = r.text().await.unwrap_or_default();
     assert_eq!(status, 200, "/get expected 200, got {status}: {body}");
     serde_json::from_str(&body).expect("body json")
+}
+
+fn handrolled_wal_len(wal_dir: &Path) -> u64 {
+    std::fs::read_dir(wal_dir)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("wal"))
+        .filter_map(|p| p.metadata().ok().map(|m| m.len()))
+        .sum()
+}
+
+async fn wait_for_wal_len<F>(wal_dir: &Path, pred: F) -> u64
+where
+    F: Fn(u64) -> bool,
+{
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let len = handrolled_wal_len(wal_dir);
+        if pred(len) {
+            return len;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "timed out waiting for hand-rolled WAL length condition; current len={len}"
+        );
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
 }
 
 /// SC1: snapshot atomic write → reproducible state after restart from
@@ -375,6 +405,74 @@ async fn registry_first_snapshot_replays_post_snapshot_push_tail() {
         assert_eq!(
             v["cnt"], 9,
             "post-restart cnt expected 9 (snapshot + post-snapshot WAL tail), got {v}"
+        );
+
+        ts.shutdown().await.expect("shutdown 2nd");
+    }
+}
+
+#[tokio::test]
+async fn compacted_handrolled_wal_restarts_with_retained_tail() {
+    let _serializer_guard = RESTART_CYCLE_SERIALIZER.lock().await;
+    let wal = tempfile::tempdir().unwrap();
+    let snap = tempfile::tempdir().unwrap();
+
+    {
+        let ts = TestServerBuilder::new()
+            .dev_endpoints(true)
+            .wal_dir(wal.path().to_path_buf())
+            .snapshot_dir(snap.path().to_path_buf())
+            .fsync_interval_ms(1)
+            .wal_tick_ms(1)
+            .spawn()
+            .await
+            .expect("spawn 1st");
+
+        register(&ts, json!([txn_descriptor(), txn_agg_descriptor()])).await;
+        for i in 0..12_i64 {
+            push_event(
+                &ts,
+                "Txn",
+                json!({"user_id": "alice", "amount": 1.0, "event_time": 1_000_000 + i}),
+            )
+            .await;
+        }
+
+        let before_len = wait_for_wal_len(wal.path(), |len| len > 0).await;
+        ts.force_snapshot_now().await.expect("force snapshot");
+        let compacted_len = wait_for_wal_len(wal.path(), |len| len < before_len).await;
+
+        for i in 0..3_i64 {
+            push_event(
+                &ts,
+                "Txn",
+                json!({"user_id": "alice", "amount": 1.0, "event_time": 2_000_000 + i}),
+            )
+            .await;
+        }
+        let _tail_len = wait_for_wal_len(wal.path(), |len| len > compacted_len).await;
+
+        let v = get_feature(&ts, "TxnAgg", "alice", &["cnt"]).await;
+        assert_eq!(v["cnt"], 15, "pre-restart cnt expected 15, got {v}");
+
+        ts.shutdown().await.expect("shutdown 1st");
+    }
+
+    {
+        let ts = TestServerBuilder::new()
+            .dev_endpoints(true)
+            .wal_dir(wal.path().to_path_buf())
+            .snapshot_dir(snap.path().to_path_buf())
+            .fsync_interval_ms(1)
+            .wal_tick_ms(1)
+            .spawn()
+            .await
+            .expect("spawn 2nd");
+
+        let v = get_feature(&ts, "TxnAgg", "alice", &["cnt"]).await;
+        assert_eq!(
+            v["cnt"], 15,
+            "post-restart cnt expected 15: snapshot-covered prefix plus retained compacted WAL tail, got {v}"
         );
 
         ts.shutdown().await.expect("shutdown 2nd");

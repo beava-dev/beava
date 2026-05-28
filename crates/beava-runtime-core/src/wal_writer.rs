@@ -151,6 +151,7 @@ impl WalWriter {
         }
 
         let wal_path = dir.join("wal-0000000000000000.wal");
+        repair_wal_file_tail(&wal_path)?;
         let file = OpenOptions::new()
             .create(true)
             .append(true)
@@ -366,7 +367,8 @@ fn compact_wal_file(
         });
     }
 
-    let records = parse_wal_record_bounds(&data)?;
+    let parsed = parse_wal_record_bounds_with_prefix(&data)?;
+    let records = parsed.records;
     let mut retained = Vec::new();
     let mut removed_records = 0usize;
     let mut retained_records = 0usize;
@@ -385,7 +387,8 @@ fn compact_wal_file(
         retained_records += 1;
     }
 
-    if removed_records == 0 {
+    if removed_records == 0 && parsed.valid_prefix_len == data.len() {
+        sync_parent_dir(wal_path)?;
         return Ok(WalCompactStats {
             before_bytes,
             after_bytes: before_bytes,
@@ -416,13 +419,8 @@ fn compact_wal_file(
 
     std::fs::rename(&tmp_path, wal_path)?;
 
-    if let Some(parent) = wal_path.parent() {
-        if let Ok(dir) = File::open(parent) {
-            let _ = dir.sync_all();
-        }
-    }
-
     *open_append_file = new_append_file;
+    sync_parent_dir(wal_path)?;
 
     Ok(WalCompactStats {
         before_bytes,
@@ -432,10 +430,21 @@ fn compact_wal_file(
     })
 }
 
+#[cfg(test)]
 fn parse_wal_record_bounds(data: &[u8]) -> std::io::Result<Vec<ParsedWalRecord>> {
+    Ok(parse_wal_record_bounds_with_prefix(data)?.records)
+}
+
+#[derive(Debug)]
+struct ParsedWalRecords {
+    records: Vec<ParsedWalRecord>,
+    valid_prefix_len: usize,
+}
+
+fn parse_wal_record_bounds_with_prefix(data: &[u8]) -> std::io::Result<ParsedWalRecords> {
     let mut records = Vec::new();
     let mut pos = 0usize;
-    let mut base_lsn = 0u64;
+    let mut valid_prefix_len = 0usize;
 
     while pos < data.len() {
         let start = pos;
@@ -484,15 +493,54 @@ fn parse_wal_record_bounds(data: &[u8]) -> std::io::Result<Vec<ParsedWalRecord>>
 
         let end = pos;
         records.push(ParsedWalRecord {
-            lsn: assigned_lsn.unwrap_or_else(|| base_lsn.saturating_add(end as u64)),
+            lsn: assigned_lsn.unwrap_or(end as u64),
             start,
             end,
             version,
         });
-        base_lsn = base_lsn.saturating_add((end - start) as u64);
+        valid_prefix_len = end;
     }
 
-    Ok(records)
+    Ok(ParsedWalRecords {
+        records,
+        valid_prefix_len,
+    })
+}
+
+fn repair_wal_file_tail(wal_path: &Path) -> std::io::Result<()> {
+    let data = match std::fs::read(wal_path) {
+        Ok(data) => data,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e),
+    };
+    let parsed = parse_wal_record_bounds_with_prefix(&data)?;
+    if parsed.valid_prefix_len == data.len() {
+        return Ok(());
+    }
+
+    let file = OpenOptions::new().write(true).open(wal_path)?;
+    file.set_len(parsed.valid_prefix_len as u64)?;
+    file.sync_all()?;
+    sync_parent_dir(wal_path)?;
+    tracing::warn!(
+        target: "beava.wal",
+        kind = "wal.handrolled_tail_repaired",
+        path = %wal_path.display(),
+        before_bytes = data.len(),
+        after_bytes = parsed.valid_prefix_len,
+        "repaired hand-rolled WAL by truncating invalid tail before append"
+    );
+    Ok(())
+}
+
+fn sync_parent_dir(path: &Path) -> std::io::Result<()> {
+    let parent = path.parent().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("path has no parent: {}", path.display()),
+        )
+    })?;
+    File::open(parent)?.sync_all()
 }
 
 /// Return `true` if `path` is on a network filesystem (NFS, SMB, FUSE, etc.).
@@ -707,6 +755,64 @@ mod tests {
             std::fs::metadata(&path).unwrap().len() > stats.after_bytes,
             "writer must keep appending to the renamed compacted WAL"
         );
+
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn compact_wal_file_repairs_truncated_tail_even_without_covered_records() {
+        let dir = temp_dir("truncated-tail-no-covered");
+        let path = dir.join("wal-0000000000000000.wal");
+        let mut bytes = Vec::new();
+        encode_v3(&mut bytes, 30, "Txn", br#"{"user_id":"retained"}"#);
+        let valid_len = bytes.len() as u64;
+        bytes.extend_from_slice(&[0x03, 0, 0, 0]); // torn v3 header
+        std::fs::write(&path, &bytes).unwrap();
+
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .unwrap();
+        let stats = compact_wal_file(&mut file, &path, 10).unwrap();
+        let compacted = std::fs::read(&path).unwrap();
+        let records = parse_wal_record_bounds(&compacted).unwrap();
+
+        assert_eq!(stats.removed_records, 0);
+        assert_eq!(stats.retained_records, 1);
+        assert_eq!(stats.after_bytes, valid_len);
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].lsn, 30);
+
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn wal_writer_new_repairs_invalid_tail_before_append() {
+        let dir = temp_dir("startup-repair");
+        let path = dir.join("wal-0000000000000000.wal");
+        let mut bytes = Vec::new();
+        encode_v3(&mut bytes, 10, "Txn", br#"{"user_id":"covered"}"#);
+        let valid_len = bytes.len();
+        bytes.extend_from_slice(b"stale-garbage-tail");
+        std::fs::write(&path, &bytes).unwrap();
+
+        let ring = Arc::new(WalBufferRing::new(2, 4096, Arc::new(WalLsn::new())));
+        let lsn = Arc::new(WalLsn::new());
+        let mut writer = WalWriter::new(&dir, ring, lsn, 1).expect("WalWriter::new repairs tail");
+
+        assert_eq!(std::fs::metadata(&path).unwrap().len(), valid_len as u64);
+
+        let mut appended = Vec::new();
+        encode_v3(&mut appended, 20, "Txn", br#"{"user_id":"retained"}"#);
+        writer.file.write_all(&appended).unwrap();
+        writer.file.sync_all().unwrap();
+
+        let repaired = std::fs::read(&path).unwrap();
+        let records = parse_wal_record_bounds(&repaired).unwrap();
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[0].lsn, 10);
+        assert_eq!(records[1].lsn, 20);
 
         std::fs::remove_dir_all(dir).unwrap();
     }

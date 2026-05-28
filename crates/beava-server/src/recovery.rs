@@ -2,7 +2,8 @@
 //!
 //! 1. `load_snapshot_if_any(dir, dev_agg)` — descending-LSN scan; first valid
 //!    snapshot wins; install registry descriptors + state tables; return its
-//!    LSN. Empty dir or all-corrupt files → 0 (cold start).
+//!    snapshot LSN plus the applied data-plane watermark stored in the body.
+//!    Empty dir or all-corrupt files → 0 (cold start).
 //! 2. `replay_wal_from_lsn(wal_dir, snapshot_lsn, dev_agg)` — replay every WAL
 //!    record with `lsn > snapshot_lsn` in LSN order: `Event` decodes its
 //!    payload and feeds `apply_event_to_aggregations`; `RegistryBump`
@@ -30,6 +31,17 @@ pub struct RecoveryOutcome {
     pub quarantined_records: u64,
     pub applied_registry_bump_after_snapshot: bool,
     pub last_lsn: Lsn,
+}
+
+/// Snapshot recovery result. `snapshot_lsn` comes from the snapshot header and
+/// gates legacy persistence-WAL replay. `applied_lsn` comes from the snapshot
+/// body and gates hand-rolled data-plane WAL replay, because older snapshots
+/// can have a header LSN that does not match the data-plane state already
+/// serialized into the body.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct SnapshotLoadOutcome {
+    pub snapshot_lsn: Lsn,
+    pub applied_lsn: Lsn,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -134,7 +146,7 @@ fn quarantine_wal_decode_failure(
 pub fn load_snapshot_if_any(
     snapshot_dir: &Path,
     dev_agg: &DevAggState,
-) -> Result<Lsn, PersistError> {
+) -> Result<SnapshotLoadOutcome, PersistError> {
     let snaps = list_snapshots(snapshot_dir)?;
     for (lsn, path) in snaps {
         match SnapshotReader::open(&path) {
@@ -193,10 +205,14 @@ pub fn load_snapshot_if_any(
                         target: "beava.recovery",
                         kind = "recovery.snapshot_loaded",
                         snapshot_lsn = lsn,
+                        applied_lsn = next_event_id,
                         registry_version = header.registry_version,
                         "loaded snapshot"
                     );
-                    return Ok(lsn);
+                    return Ok(SnapshotLoadOutcome {
+                        snapshot_lsn: lsn,
+                        applied_lsn: next_event_id,
+                    });
                 }
                 Err(e) => {
                     tracing::warn!(
@@ -221,7 +237,7 @@ pub fn load_snapshot_if_any(
             }
         }
     }
-    Ok(0)
+    Ok(SnapshotLoadOutcome::default())
 }
 
 /// JSON shape of a WAL Event record's payload (matches push.rs encoder).
@@ -633,9 +649,14 @@ fn json_object_to_row(jv: &serde_json::Value) -> Row {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use beava_core::agg_op::AggOp;
+    use beava_core::agg_state::CountState;
+    use beava_core::agg_state_table::{ensure_capacity_for, AggStateTable, EntityKey};
     use beava_core::registry::Registry;
-    use beava_persistence::{RecordType, WalRecord};
+    use beava_persistence::{RecordType, SnapshotWriter, WalRecord};
+    use compact_str::CompactString;
     use serde_json::json;
+    use smallvec::smallvec;
     use std::sync::Arc;
 
     fn txn_register_payload() -> crate::register::RegisterPayload {
@@ -664,6 +685,64 @@ mod tests {
             ]
         }))
         .expect("valid register payload")
+    }
+
+    fn install_txn_registry(dev_agg: &DevAggState) {
+        let payload = txn_register_payload();
+        let bump = crate::register::RegistryBumpPayload {
+            new_version: 1,
+            payload_nodes: payload.nodes,
+            force_removed_descriptors: Vec::new(),
+        };
+        crate::register::apply_registry_bump(&dev_agg.registry, bump)
+            .expect("install txn registry");
+        let mut tables = dev_agg.state_tables.lock();
+        ensure_capacity_for(&mut tables, dev_agg.registry.next_agg_id() as usize);
+    }
+
+    fn put_alice_count(dev_agg: &DevAggState, count: u64) {
+        let mut tables = dev_agg.state_tables.lock();
+        ensure_capacity_for(&mut tables, 1);
+        let mut table = AggStateTable::new();
+        let entity_key = EntityKey(smallvec![(
+            CompactString::from("user_id"),
+            Value::Str(CompactString::from("alice")),
+        )]);
+        table.insert_from_entity_key(entity_key, vec![AggOp::Count(CountState { n: count })]);
+        tables[0] = table;
+    }
+
+    fn alice_count(dev_agg: &DevAggState) -> u64 {
+        let tables = dev_agg.state_tables.lock();
+        let Some(ops) = tables
+            .first()
+            .and_then(|table| table.single_str.get("alice"))
+        else {
+            return 0;
+        };
+        match ops.first() {
+            Some(AggOp::Count(count)) => count.n,
+            _ => 0,
+        }
+    }
+
+    fn encode_handrolled_v3(
+        buf: &mut Vec<u8>,
+        lsn: Lsn,
+        body_format: u8,
+        rv: u32,
+        event_name: &str,
+        body: &[u8],
+    ) {
+        buf.push(0x03);
+        buf.extend_from_slice(&lsn.to_be_bytes());
+        buf.push(body_format);
+        buf.extend_from_slice(&rv.to_be_bytes());
+        buf.extend_from_slice(&(123i64).to_be_bytes());
+        buf.extend_from_slice(&(event_name.len() as u16).to_be_bytes());
+        buf.extend_from_slice(event_name.as_bytes());
+        buf.extend_from_slice(&(body.len() as u32).to_be_bytes());
+        buf.extend_from_slice(body);
     }
 
     #[test]
@@ -723,6 +802,83 @@ mod tests {
         let outcome = replay_handrolled_wal_dir(wal.path(), 0, &dev_agg).expect("replay again");
         assert_eq!(outcome.last_lsn, lsn);
         assert_eq!(outcome.quarantined_records, 1);
+    }
+
+    #[test]
+    fn handrolled_msgpack_decode_failure_writes_quarantine_marker() {
+        let wal = tempfile::tempdir().unwrap();
+        let registry = Arc::new(Registry::new());
+        let dev_agg = DevAggState::new(registry);
+        let lsn: Lsn = 379_827;
+
+        let mut bytes = Vec::new();
+        encode_handrolled_v3(
+            &mut bytes,
+            lsn,
+            beava_core::wire::CT_MSGPACK,
+            1,
+            "Txn",
+            &[0xc1],
+        );
+        std::fs::write(wal.path().join("wal-0000000000000000.wal"), bytes).unwrap();
+
+        let outcome = replay_handrolled_wal_dir(wal.path(), 0, &dev_agg).expect("replay");
+        assert_eq!(outcome.last_lsn, lsn);
+        assert_eq!(outcome.replay_event_count, 0);
+        assert_eq!(outcome.quarantined_records, 1);
+        assert!(wal_quarantine_marker_exists(
+            wal.path(),
+            lsn,
+            WalQuarantineKind::HandrolledMsgpackBody
+        ));
+    }
+
+    #[test]
+    fn snapshot_load_body_applied_lsn_gates_handrolled_replay() {
+        let wal = tempfile::tempdir().unwrap();
+        let snap = tempfile::tempdir().unwrap();
+        let registry = Arc::new(Registry::new());
+        let dev_agg = DevAggState::new(registry);
+
+        install_txn_registry(&dev_agg);
+        put_alice_count(&dev_agg, 1);
+        dev_agg.next_event_id.store(100, Ordering::Relaxed);
+
+        let body = {
+            let registry_snap = dev_agg.registry.snapshot();
+            let tables = dev_agg.state_tables.lock();
+            SnapshotBody::from_live(&registry_snap, &tables, 100, 123)
+        };
+        let encoded = body.encode().expect("encode snapshot");
+        SnapshotWriter::write_with_stats(snap.path(), 5, body.registry.version, &encoded)
+            .expect("write snapshot with older header LSN");
+
+        let mut wal_bytes = Vec::new();
+        encode_handrolled_v3(
+            &mut wal_bytes,
+            90,
+            beava_core::wire::CT_JSON,
+            dev_agg.registry.version() as u32,
+            "Txn",
+            br#"{"user_id":"alice","amount":1.0}"#,
+        );
+        std::fs::write(wal.path().join("wal-0000000000000000.wal"), wal_bytes).unwrap();
+
+        let registry = Arc::new(Registry::new());
+        let recovered = DevAggState::new(registry);
+        let loaded = load_snapshot_if_any(snap.path(), &recovered).expect("load snapshot");
+        assert_eq!(loaded.snapshot_lsn, 5);
+        assert_eq!(loaded.applied_lsn, 100);
+        assert_eq!(alice_count(&recovered), 1);
+
+        let replay =
+            replay_handrolled_wal_dir(wal.path(), loaded.applied_lsn, &recovered).expect("replay");
+        assert_eq!(replay.replay_event_count, 0);
+        assert_eq!(
+            alice_count(&recovered),
+            1,
+            "using the snapshot body watermark must not double-apply covered v3 WAL records"
+        );
     }
 
     #[test]

@@ -16,6 +16,7 @@ use beava_core::wire::{
     OP_PUSH, OP_REGISTER, OP_RESET,
 };
 use bytes::BytesMut;
+use std::borrow::Cow;
 use std::net::SocketAddr;
 
 use crate::wire_request::WireRequest;
@@ -502,7 +503,7 @@ impl std::error::Error for JsonEnvelopeError {}
 /// hand-rolled scanner walks key/value pairs and tracks string state + brace
 /// depth for the body value range.
 #[inline]
-pub fn parse_json_envelope(payload: &[u8]) -> Result<(&str, &[u8]), JsonEnvelopeError> {
+pub fn parse_json_envelope(payload: &[u8]) -> Result<(Cow<'_, str>, &[u8]), JsonEnvelopeError> {
     // Skip optional leading whitespace, then the opening brace.
     let mut p = skip_ws(payload, 0);
     if p >= payload.len() || payload[p] != b'{' {
@@ -510,7 +511,7 @@ pub fn parse_json_envelope(payload: &[u8]) -> Result<(&str, &[u8]), JsonEnvelope
     }
     p += 1;
 
-    let mut event_name: Option<&str> = None;
+    let mut event_name: Option<Cow<'_, str>> = None;
     let mut body_slice: Option<&[u8]> = None;
 
     loop {
@@ -546,10 +547,7 @@ pub fn parse_json_envelope(payload: &[u8]) -> Result<(&str, &[u8]), JsonEnvelope
                 }
                 let v_start = p + 1;
                 let v_end = scan_string_end(payload, v_start)?;
-                event_name = Some(
-                    std::str::from_utf8(&payload[v_start..v_end])
-                        .map_err(|_| JsonEnvelopeError::Decode("invalid utf-8".to_string()))?,
-                );
+                event_name = Some(decode_json_string_fragment(payload, v_start, v_end)?);
                 p = v_end + 1;
             }
             "body" => {
@@ -587,6 +585,26 @@ pub fn parse_json_envelope(payload: &[u8]) -> Result<(&str, &[u8]), JsonEnvelope
         event_name.ok_or(JsonEnvelopeError::MissingField("event"))?,
         body_slice.ok_or(JsonEnvelopeError::MissingField("body"))?,
     ))
+}
+
+fn decode_json_string_fragment(
+    payload: &[u8],
+    start: usize,
+    end: usize,
+) -> Result<Cow<'_, str>, JsonEnvelopeError> {
+    let raw = std::str::from_utf8(&payload[start..end])
+        .map_err(|_| JsonEnvelopeError::Decode("invalid utf-8".to_string()))?;
+    if !raw.as_bytes().contains(&b'\\') {
+        return Ok(Cow::Borrowed(raw));
+    }
+
+    let mut quoted = Vec::with_capacity(raw.len() + 2);
+    quoted.push(b'"');
+    quoted.extend_from_slice(raw.as_bytes());
+    quoted.push(b'"');
+    serde_json::from_slice::<String>(&quoted)
+        .map(Cow::Owned)
+        .map_err(|e| JsonEnvelopeError::Decode(format!("invalid string escape: {e}")))
 }
 
 /// Skip ASCII whitespace (space/tab/newline/CR).
@@ -1131,6 +1149,16 @@ mod tests {
         let body_val: serde_json::Value =
             sonic_rs::from_slice(body_bytes).expect("escaped-quote body parses");
         assert_eq!(body_val["q"], "a\"b");
+    }
+
+    #[test]
+    fn parse_json_envelope_decodes_escaped_event_name() {
+        let payload = br#"{"event":"Txn\u0001","body":{"amount":99}}"#;
+        let (event, body_bytes) = parse_json_envelope(payload).expect("ok");
+        assert_eq!(event.as_ref(), "Txn\u{0001}");
+        let body_val: serde_json::Value =
+            sonic_rs::from_slice(body_bytes).expect("body parses as json");
+        assert_eq!(body_val["amount"], 99);
     }
 
     #[test]

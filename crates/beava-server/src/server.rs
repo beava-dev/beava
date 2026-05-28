@@ -786,9 +786,10 @@ async fn build_runtime_state_with_persistence(
         );
         1
     } else {
-        let snapshot_lsn = crate::recovery::load_snapshot_if_any(&snapshot_dir, &dev_agg)
+        let snapshot_load = crate::recovery::load_snapshot_if_any(&snapshot_dir, &dev_agg)
             .ok()
-            .unwrap_or(0);
+            .unwrap_or_default();
+        let snapshot_lsn = snapshot_load.snapshot_lsn;
 
         let persistence_lsn = if wal_dir.exists() {
             match replay_wal_from_lsn(&wal_dir, snapshot_lsn, &dev_agg) {
@@ -800,16 +801,19 @@ async fn build_runtime_state_with_persistence(
         };
 
         // Replay hand-rolled `*.wal` data-plane events past the state already
-        // covered by the snapshot. Legacy registry WAL records may have higher
-        // LSNs than some post-snapshot data-plane records, so they must not
-        // raise this replay floor.
-        let handrolled_from_lsn = snapshot_lsn;
+        // covered by the snapshot body. The snapshot header LSN is a mixed
+        // legacy/data-plane checkpoint; older snapshots can have a header LSN
+        // lower than their serialized data-plane state, and registry `.log`
+        // records can have higher LSNs than post-snapshot data-plane records.
+        // The body watermark is the only safe floor for hand-rolled replay.
+        let handrolled_from_lsn = snapshot_load.applied_lsn;
         let handrolled_outcome =
             replay_handrolled_wal_dir(&wal_dir, handrolled_from_lsn, &dev_agg).unwrap_or_default();
         let initial = handrolled_outcome
             .last_lsn
             .max(persistence_lsn)
             .max(snapshot_lsn)
+            .max(snapshot_load.applied_lsn)
             + 1;
 
         tracing::debug!(

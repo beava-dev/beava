@@ -6,7 +6,7 @@
 
 #![cfg(feature = "testing")]
 
-use beava_core::wire::{OP_ERROR_RESPONSE, OP_PUSH};
+use beava_core::wire::{CT_JSON, OP_ERROR_RESPONSE, OP_PUSH};
 use beava_server::testing::TestServerBuilder;
 use serde_json::json;
 use std::time::Duration;
@@ -89,6 +89,25 @@ async fn tcp_push_unknown_event_returns_error() {
 
     assert_eq!(op, OP_ERROR_RESPONSE, "expected error frame");
     assert_eq!(body["error"]["code"], "event_not_found", "body: {body}");
+
+    drop(tcp);
+    ts.shutdown().await.expect("shutdown");
+}
+
+#[tokio::test]
+async fn tcp_push_rejects_escaped_control_character_in_event_name() {
+    let ts = boot_with_transaction().await;
+    let mut tcp = ts.tcp_client().await.expect("tcp connect");
+
+    let payload = br#"{"event":"Transaction\u0001","body":{"event_time":1000,"user_id":"alice","amount":1.0}}"#;
+    let frame = tcp
+        .send_raw(OP_PUSH, CT_JSON, bytes::Bytes::copy_from_slice(payload))
+        .await
+        .expect("raw tcp push");
+    let body: serde_json::Value = serde_json::from_slice(&frame.payload).expect("json error body");
+
+    assert_eq!(frame.op, OP_ERROR_RESPONSE, "expected error frame");
+    assert_eq!(body["error"]["code"], "control_character_in_string");
 
     drop(tcp);
     ts.shutdown().await.expect("shutdown");

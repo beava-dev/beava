@@ -134,16 +134,34 @@ pub async fn do_snapshot_via_fork_with_wait_timeout(
     std::fs::create_dir_all(snapshot_dir)
         .map_err(|e| SnapshotForkError::Persist(PersistError::Io(e)))?;
 
-    let state_lock = app_state.dev_agg.state_tables.lock();
     let snapshot_dir_owned = snapshot_dir.to_path_buf();
     let registry_snap = app_state.dev_agg.registry.snapshot();
-    let next_event_id = app_state.dev_agg.next_event_id.load(Ordering::Acquire);
-    let query_time_ms = app_state.dev_agg.query_time_ms.load(Ordering::Acquire) as i64;
-    let snapshot_lsn = legacy_snapshot_lsn.max(next_event_id);
-    let _ = std::fs::remove_file(snapshot_stats_sidecar_path(snapshot_dir, snapshot_lsn));
+
+    let (state_lock, next_event_id, query_time_ms, snapshot_lsn) = loop {
+        let candidate_next_event_id = app_state.dev_agg.next_event_id.load(Ordering::Acquire);
+        let candidate_snapshot_lsn = legacy_snapshot_lsn.max(candidate_next_event_id);
+        let _ = std::fs::remove_file(snapshot_stats_sidecar_path(
+            snapshot_dir,
+            candidate_snapshot_lsn,
+        ));
+        let _ = std::fs::remove_file(snapshot_error_sidecar_path(
+            snapshot_dir,
+            candidate_snapshot_lsn,
+        ));
+
+        let state_lock = app_state.dev_agg.state_tables.lock();
+        let next_event_id = app_state.dev_agg.next_event_id.load(Ordering::Acquire);
+        let query_time_ms = app_state.dev_agg.query_time_ms.load(Ordering::Acquire) as i64;
+        let snapshot_lsn = legacy_snapshot_lsn.max(next_event_id);
+        if snapshot_lsn == candidate_snapshot_lsn {
+            break (state_lock, next_event_id, query_time_ms, snapshot_lsn);
+        }
+        drop(state_lock);
+    };
 
     // Briefly take the state_tables lock so the fork sees a quiescent state
-    // snapshot. The lock-hold spans only the fork syscall (~µs).
+    // snapshot. The lock-hold spans two scalar loads plus the fork syscall
+    // (~µs); path setup, registry capture, and sidecar cleanup happened above.
     //
     // SAFETY:
     // - beava's tokio runtime is `new_current_thread`; the forking thread is
@@ -185,7 +203,9 @@ pub async fn do_snapshot_via_fork_with_wait_timeout(
             &encoded,
         ) {
             Ok(stats) => {
-                write_stats_sidecar(&snapshot_dir_owned, snapshot_lsn, &stats);
+                if let Err(e) = write_stats_sidecar(&snapshot_dir_owned, snapshot_lsn, &stats) {
+                    child_fail(&snapshot_dir_owned, snapshot_lsn, &format!("stats: {e}"));
+                }
                 unsafe {
                     libc::_exit(0);
                 }
@@ -340,13 +360,20 @@ fn child_exit_from_status(
     if libc::WIFEXITED(status) {
         let code = libc::WEXITSTATUS(status);
         if code == 0 {
-            let write_stats = read_stats_sidecar(snapshot_dir, snapshot_lsn);
-            ChildExit::Success {
-                snapshot_lsn,
-                write_stats,
+            match read_stats_sidecar(snapshot_dir, snapshot_lsn) {
+                Some(write_stats) => ChildExit::Success {
+                    snapshot_lsn,
+                    write_stats: Some(write_stats),
+                },
+                None => ChildExit::Failure {
+                    code,
+                    message: format!(
+                        "child exited successfully but stats sidecar was missing or corrupt for snapshot LSN {snapshot_lsn}"
+                    ),
+                },
             }
         } else {
-            let err_path = snapshot_dir.join(format!("snapshot-{snapshot_lsn:016x}.error"));
+            let err_path = snapshot_error_sidecar_path(snapshot_dir, snapshot_lsn);
             let message = std::fs::read_to_string(&err_path)
                 .unwrap_or_else(|_| format!("child exited with code {code}"));
             let _ = std::fs::remove_file(&err_path);
@@ -398,6 +425,11 @@ fn snapshot_stats_sidecar_path(snapshot_dir: &Path, snapshot_lsn: u64) -> std::p
 }
 
 #[cfg(unix)]
+fn snapshot_error_sidecar_path(snapshot_dir: &Path, snapshot_lsn: u64) -> std::path::PathBuf {
+    snapshot_dir.join(format!("snapshot-{snapshot_lsn:016x}.error"))
+}
+
+#[cfg(unix)]
 fn snapshot_file_path(snapshot_dir: &Path, snapshot_lsn: u64) -> std::path::PathBuf {
     snapshot_dir.join(format!(
         "snapshot-{snapshot_lsn:016x}.{}",
@@ -406,7 +438,11 @@ fn snapshot_file_path(snapshot_dir: &Path, snapshot_lsn: u64) -> std::path::Path
 }
 
 #[cfg(unix)]
-fn write_stats_sidecar(snapshot_dir: &Path, snapshot_lsn: u64, stats: &SnapshotWriteStats) {
+fn write_stats_sidecar(
+    snapshot_dir: &Path,
+    snapshot_lsn: u64,
+    stats: &SnapshotWriteStats,
+) -> std::io::Result<()> {
     let dir_fsync_us = stats
         .dir_fsync_duration
         .map(duration_micros)
@@ -418,16 +454,22 @@ fn write_stats_sidecar(snapshot_dir: &Path, snapshot_lsn: u64, stats: &SnapshotW
         duration_micros(stats.file_fsync_duration),
         dir_fsync_us
     );
-    let _ = std::fs::write(
+    std::fs::write(
         snapshot_stats_sidecar_path(snapshot_dir, snapshot_lsn),
         body,
-    );
+    )
 }
 
 #[cfg(unix)]
 fn read_stats_sidecar(snapshot_dir: &Path, snapshot_lsn: u64) -> Option<SnapshotWriteStats> {
     let path = snapshot_stats_sidecar_path(snapshot_dir, snapshot_lsn);
-    let raw = std::fs::read_to_string(&path).ok()?;
+    let raw = match std::fs::read_to_string(&path) {
+        Ok(raw) => raw,
+        Err(_) => {
+            let _ = std::fs::remove_file(&path);
+            return None;
+        }
+    };
     let _ = std::fs::remove_file(&path);
 
     let bytes = parse_stats_field(&raw, "bytes")?.parse::<u64>().ok()?;
@@ -463,7 +505,7 @@ fn duration_micros(duration: Duration) -> u64 {
 /// Never returns. Marked `-> !` so callers don't need to handle a return.
 #[cfg(unix)]
 fn child_fail(snapshot_dir: &Path, snapshot_lsn: u64, msg: &str) -> ! {
-    let err_path = snapshot_dir.join(format!("snapshot-{snapshot_lsn:016x}.error"));
+    let err_path = snapshot_error_sidecar_path(snapshot_dir, snapshot_lsn);
     // Best-effort: ignore write failure. The parent will fall back to a
     // generic "child exited non-zero" message.
     let _ = std::fs::write(&err_path, msg);
@@ -529,6 +571,34 @@ mod tests {
         assert_eq!(
             std::io::Error::last_os_error().raw_os_error(),
             Some(libc::ECHILD)
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn stats_sidecar_roundtrip_reports_fsync_and_removes_file() {
+        let dir = temp_snapshot_dir("stats-sidecar");
+        let snapshot_lsn = 77;
+        let stats = SnapshotWriteStats {
+            path: snapshot_file_path(&dir, snapshot_lsn),
+            bytes: 1234,
+            file_fsync_duration: Duration::from_micros(456),
+            dir_fsync_duration: Some(Duration::from_micros(789)),
+        };
+
+        write_stats_sidecar(&dir, snapshot_lsn, &stats).expect("write stats sidecar");
+        let roundtrip = read_stats_sidecar(&dir, snapshot_lsn).expect("read stats sidecar");
+
+        assert_eq!(roundtrip.bytes, 1234);
+        assert_eq!(roundtrip.file_fsync_duration, Duration::from_micros(456));
+        assert_eq!(
+            roundtrip.dir_fsync_duration,
+            Some(Duration::from_micros(789))
+        );
+        assert!(
+            !snapshot_stats_sidecar_path(&dir, snapshot_lsn).exists(),
+            "parent must remove stats sidecar after reading it"
         );
 
         let _ = std::fs::remove_dir_all(dir);
