@@ -16,11 +16,10 @@
 //!
 //! Failure mode on macOS: the classic libdispatch corruption symptom is
 //! a child that hangs forever in `_dispatch_root_queue_push` (or similar).
-//! The production `do_snapshot_via_fork` uses a blocking `waitpid(..., 0)`
-//! in a `spawn_blocking` task — if the child hangs, the test would hang
-//! too. Every assertion below is bounded with `tokio::time::timeout` so
-//! a hang becomes a loud, attributable test failure instead of a CI
-//! timeout-kill 10 minutes later.
+//! `do_snapshot_via_fork` has an internal kill/reap timeout, and every
+//! assertion below is also bounded with `tokio::time::timeout` so a hang
+//! becomes a loud, attributable test failure instead of a CI timeout-kill
+//! 10 minutes later.
 
 #![cfg(target_os = "macos")]
 
@@ -32,7 +31,7 @@ use beava_core::row::Value;
 use beava_core::snapshot_body::SnapshotBody;
 use beava_persistence::SnapshotReader;
 use beava_server::registry_debug::DevAggState;
-use beava_server::snapshot_fork::{do_snapshot_via_fork, ChildExit};
+use beava_server::snapshot_fork::{do_snapshot_via_fork_with_wait_timeout, ChildExit};
 use beava_server::AppState;
 use compact_str::CompactString;
 use smallvec::smallvec;
@@ -45,6 +44,7 @@ use tempfile::TempDir;
 /// typically hangs immediately; 30 s is well past the legitimate fork
 /// snapshot cost for `n_entities=500` (sub-second on Apple-M4).
 const PER_ITER_TIMEOUT_SECS: u64 = 30;
+const CHILD_WAIT_TIMEOUT_SECS: u64 = PER_ITER_TIMEOUT_SECS - 5;
 
 fn build_app_state(n_entities: usize) -> AppState {
     let registry = Arc::new(Registry::new());
@@ -82,7 +82,12 @@ async fn fork_snapshot_repeated_macos_does_not_hang() {
         let snapshot_lsn = i + 1;
         let exit = match tokio::time::timeout(
             Duration::from_secs(PER_ITER_TIMEOUT_SECS),
-            do_snapshot_via_fork(tmp.path(), snapshot_lsn, &app_state),
+            do_snapshot_via_fork_with_wait_timeout(
+                tmp.path(),
+                snapshot_lsn,
+                &app_state,
+                Duration::from_secs(CHILD_WAIT_TIMEOUT_SECS),
+            ),
         )
         .await
         {
@@ -162,7 +167,12 @@ async fn fork_snapshot_under_concurrent_mutation_macos_stable() {
         let snapshot_lsn = 100 + i;
         let exit = match tokio::time::timeout(
             Duration::from_secs(PER_ITER_TIMEOUT_SECS),
-            do_snapshot_via_fork(tmp.path(), snapshot_lsn, &app_state),
+            do_snapshot_via_fork_with_wait_timeout(
+                tmp.path(),
+                snapshot_lsn,
+                &app_state,
+                Duration::from_secs(CHILD_WAIT_TIMEOUT_SECS),
+            ),
         )
         .await
         {

@@ -48,10 +48,10 @@
 use crate::AppState;
 use beava_core::snapshot_body::SnapshotBody;
 use beava_persistence::{PersistError, SnapshotWriteStats};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 #[cfg(unix)]
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Result of a fork-snapshot. The parent uses `ChildExit::Success` to decide
 /// whether to truncate the WAL.
@@ -110,6 +110,22 @@ pub async fn do_snapshot_via_fork(
     snapshot_dir: &Path,
     legacy_snapshot_lsn: u64,
     app_state: &AppState,
+) -> Result<ChildExit, SnapshotForkError> {
+    do_snapshot_via_fork_with_wait_timeout(
+        snapshot_dir,
+        legacy_snapshot_lsn,
+        app_state,
+        snapshot_fork_wait_timeout(),
+    )
+    .await
+}
+
+#[cfg(unix)]
+pub async fn do_snapshot_via_fork_with_wait_timeout(
+    snapshot_dir: &Path,
+    legacy_snapshot_lsn: u64,
+    app_state: &AppState,
+    wait_timeout: Duration,
 ) -> Result<ChildExit, SnapshotForkError> {
     use beava_persistence::SnapshotWriter;
 
@@ -181,44 +197,11 @@ pub async fn do_snapshot_via_fork(
     // === PARENT ===
     drop(state_lock);
 
-    // Wait on the child without blocking the tokio runtime: spawn_blocking
-    // a `waitpid` call. The lock is already released in the parent; the child
-    // inherited its own copy of the guard and exits without dropping it.
-    let exit = tokio::task::spawn_blocking(move || -> Result<ChildExit, std::io::Error> {
-        let mut status: libc::c_int = 0;
-        let waited = unsafe { libc::waitpid(pid, &mut status, 0) };
-        if waited < 0 {
-            return Err(std::io::Error::last_os_error());
-        }
-        if libc::WIFEXITED(status) {
-            let code = libc::WEXITSTATUS(status);
-            if code == 0 {
-                let write_stats = read_stats_sidecar(&snapshot_dir_owned, snapshot_lsn);
-                Ok(ChildExit::Success {
-                    snapshot_lsn,
-                    write_stats,
-                })
-            } else {
-                // Try to read the error sidecar the child wrote, best-effort.
-                let err_path =
-                    snapshot_dir_owned.join(format!("snapshot-{snapshot_lsn:016x}.error"));
-                let message = std::fs::read_to_string(&err_path)
-                    .unwrap_or_else(|_| format!("child exited with code {code}"));
-                let _ = std::fs::remove_file(&err_path);
-                Ok(ChildExit::Failure { code, message })
-            }
-        } else if libc::WIFSIGNALED(status) {
-            let sig = libc::WTERMSIG(status);
-            Ok(ChildExit::Failure {
-                code: -1,
-                message: format!("child killed by signal {sig}"),
-            })
-        } else {
-            Ok(ChildExit::Failure {
-                code: -1,
-                message: format!("child stopped with status {status}"),
-            })
-        }
+    // Wait on the child without blocking the tokio runtime. The blocking side
+    // polls with WNOHANG so a wedged fork child can be killed and reaped instead
+    // of leaving an uncancelable waitpid task behind.
+    let exit = tokio::task::spawn_blocking(move || {
+        wait_for_snapshot_child(pid, snapshot_dir_owned, snapshot_lsn, wait_timeout)
     })
     .await
     .map_err(|e| SnapshotForkError::WaitFailed(std::io::Error::other(format!("join: {e}"))))?
@@ -227,12 +210,131 @@ pub async fn do_snapshot_via_fork(
     Ok(exit)
 }
 
+#[cfg(unix)]
+const DEFAULT_SNAPSHOT_FORK_WAIT_TIMEOUT_SECS: u64 = 600;
+
+#[cfg(unix)]
+fn snapshot_fork_wait_timeout() -> Duration {
+    std::env::var("BEAVA_SNAPSHOT_FORK_WAIT_TIMEOUT_SECS")
+        .ok()
+        .and_then(|raw| raw.parse::<u64>().ok())
+        .filter(|secs| *secs > 0)
+        .map(Duration::from_secs)
+        .unwrap_or_else(|| Duration::from_secs(DEFAULT_SNAPSHOT_FORK_WAIT_TIMEOUT_SECS))
+}
+
+#[cfg(unix)]
+fn wait_for_snapshot_child(
+    pid: libc::pid_t,
+    snapshot_dir: PathBuf,
+    snapshot_lsn: u64,
+    timeout: Duration,
+) -> Result<ChildExit, std::io::Error> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        let mut status: libc::c_int = 0;
+        let waited = unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG) };
+        if waited == pid {
+            return Ok(child_exit_from_status(status, &snapshot_dir, snapshot_lsn));
+        }
+        if waited < 0 {
+            let err = std::io::Error::last_os_error();
+            if err.raw_os_error() == Some(libc::EINTR) {
+                continue;
+            }
+            return Err(err);
+        }
+
+        if Instant::now() >= deadline {
+            unsafe {
+                libc::kill(pid, libc::SIGKILL);
+            }
+            reap_killed_child(pid);
+            return Ok(ChildExit::Failure {
+                code: -1,
+                message: format!(
+                    "child exceeded fork snapshot wait timeout of {}s and was killed",
+                    timeout.as_secs()
+                ),
+            });
+        }
+
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[cfg(unix)]
+fn reap_killed_child(pid: libc::pid_t) {
+    loop {
+        let mut status: libc::c_int = 0;
+        let waited = unsafe { libc::waitpid(pid, &mut status, 0) };
+        if waited == pid {
+            return;
+        }
+        if waited < 0 {
+            let err = std::io::Error::last_os_error();
+            if err.raw_os_error() == Some(libc::EINTR) {
+                continue;
+            }
+            return;
+        }
+    }
+}
+
+#[cfg(unix)]
+fn child_exit_from_status(
+    status: libc::c_int,
+    snapshot_dir: &Path,
+    snapshot_lsn: u64,
+) -> ChildExit {
+    if libc::WIFEXITED(status) {
+        let code = libc::WEXITSTATUS(status);
+        if code == 0 {
+            let write_stats = read_stats_sidecar(snapshot_dir, snapshot_lsn);
+            ChildExit::Success {
+                snapshot_lsn,
+                write_stats,
+            }
+        } else {
+            let err_path = snapshot_dir.join(format!("snapshot-{snapshot_lsn:016x}.error"));
+            let message = std::fs::read_to_string(&err_path)
+                .unwrap_or_else(|_| format!("child exited with code {code}"));
+            let _ = std::fs::remove_file(&err_path);
+            ChildExit::Failure { code, message }
+        }
+    } else if libc::WIFSIGNALED(status) {
+        let sig = libc::WTERMSIG(status);
+        ChildExit::Failure {
+            code: -1,
+            message: format!("child killed by signal {sig}"),
+        }
+    } else {
+        ChildExit::Failure {
+            code: -1,
+            message: format!("child stopped with status {status}"),
+        }
+    }
+}
+
 /// Non-unix stub — fork is Linux/macOS only. Beava ships on those platforms.
 #[cfg(not(unix))]
 pub async fn do_snapshot_via_fork(
     _snapshot_dir: &Path,
     _legacy_snapshot_lsn: u64,
     _app_state: &AppState,
+) -> Result<ChildExit, SnapshotForkError> {
+    Err(SnapshotForkError::ForkFailed(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "fork-snapshot is unix-only",
+    )))
+}
+
+#[cfg(not(unix))]
+pub async fn do_snapshot_via_fork_with_wait_timeout(
+    _snapshot_dir: &Path,
+    _legacy_snapshot_lsn: u64,
+    _app_state: &AppState,
+    _wait_timeout: std::time::Duration,
 ) -> Result<ChildExit, SnapshotForkError> {
     Err(SnapshotForkError::ForkFailed(std::io::Error::new(
         std::io::ErrorKind::Unsupported,

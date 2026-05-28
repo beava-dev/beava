@@ -408,6 +408,12 @@ fn compact_wal_file(
         tmp.write_all(&retained)?;
         tmp.sync_all()?;
     }
+
+    // Open the replacement WAL before the rename. After rename succeeds there
+    // must be no fallible reopen step, otherwise a transient fd/open failure
+    // could leave the writer appending to the old unlinked inode.
+    let new_append_file = OpenOptions::new().append(true).open(&tmp_path)?;
+
     std::fs::rename(&tmp_path, wal_path)?;
 
     if let Some(parent) = wal_path.parent() {
@@ -416,10 +422,7 @@ fn compact_wal_file(
         }
     }
 
-    *open_append_file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(wal_path)?;
+    *open_append_file = new_append_file;
 
     Ok(WalCompactStats {
         before_bytes,
@@ -438,16 +441,13 @@ fn parse_wal_record_bounds(data: &[u8]) -> std::io::Result<Vec<ParsedWalRecord>>
         let start = pos;
         let version = data[pos];
         if version != 0x02 && version != 0x03 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("unknown WAL record version {version:#04x} at byte {pos}"),
-            ));
+            break;
         }
         pos += 1;
 
         let assigned_lsn = if version == 0x03 {
             if pos + 8 > data.len() {
-                return Err(unexpected_eof("v3 assigned_lsn"));
+                break;
             }
             let lsn = u64::from_be_bytes(data[pos..pos + 8].try_into().unwrap());
             pos += 8;
@@ -457,7 +457,7 @@ fn parse_wal_record_bounds(data: &[u8]) -> std::io::Result<Vec<ParsedWalRecord>>
         };
 
         if pos + 15 > data.len() {
-            return Err(unexpected_eof("fixed header"));
+            break;
         }
         pos += 1; // body_format
         pos += 4; // registry version
@@ -467,21 +467,18 @@ fn parse_wal_record_bounds(data: &[u8]) -> std::io::Result<Vec<ParsedWalRecord>>
         pos += 2;
 
         if pos + name_len + 4 > data.len() {
-            return Err(unexpected_eof("event name/body length"));
+            break;
         }
-        std::str::from_utf8(&data[pos..pos + name_len]).map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("invalid WAL event name utf8 at byte {pos}: {e}"),
-            )
-        })?;
+        if std::str::from_utf8(&data[pos..pos + name_len]).is_err() {
+            break;
+        }
         pos += name_len;
 
         let body_len = u32::from_be_bytes(data[pos..pos + 4].try_into().unwrap()) as usize;
         pos += 4;
 
         if pos + body_len > data.len() {
-            return Err(unexpected_eof("body"));
+            break;
         }
         pos += body_len;
 
@@ -496,13 +493,6 @@ fn parse_wal_record_bounds(data: &[u8]) -> std::io::Result<Vec<ParsedWalRecord>>
     }
 
     Ok(records)
-}
-
-fn unexpected_eof(field: &str) -> std::io::Error {
-    std::io::Error::new(
-        std::io::ErrorKind::UnexpectedEof,
-        format!("truncated WAL record while reading {field}"),
-    )
 }
 
 /// Return `true` if `path` is on a network filesystem (NFS, SMB, FUSE, etc.).
@@ -683,6 +673,40 @@ mod tests {
         assert_eq!(stats.removed_records, 0);
         assert_eq!(stats.retained_records, 1);
         assert_eq!(std::fs::read(&path).unwrap(), bytes);
+
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn compact_wal_file_ignores_truncated_tail_like_recovery() {
+        let dir = temp_dir("truncated-tail");
+        let path = dir.join("wal-0000000000000000.wal");
+        let mut bytes = Vec::new();
+        encode_v3(&mut bytes, 10, "Txn", br#"{"user_id":"covered"}"#);
+        encode_v3(&mut bytes, 30, "Txn", br#"{"user_id":"retained"}"#);
+        bytes.extend_from_slice(&[0x03, 0, 0, 0]); // torn v3 header
+        std::fs::write(&path, &bytes).unwrap();
+
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .unwrap();
+        let stats = compact_wal_file(&mut file, &path, 10).unwrap();
+        let compacted = std::fs::read(&path).unwrap();
+        let records = parse_wal_record_bounds(&compacted).unwrap();
+
+        assert_eq!(stats.removed_records, 1);
+        assert_eq!(stats.retained_records, 1);
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].lsn, 30);
+
+        file.write_all(b"tail").unwrap();
+        file.sync_all().unwrap();
+        assert!(
+            std::fs::metadata(&path).unwrap().len() > stats.after_bytes,
+            "writer must keep appending to the renamed compacted WAL"
+        );
 
         std::fs::remove_dir_all(dir).unwrap();
     }

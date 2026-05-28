@@ -35,9 +35,10 @@ async fn register_transaction(
             "fields": {
                 "event_time": "i64",
                 "user_id": "str",
-                "amount": "f64"
+                "amount": "f64",
+                "metadata": "json"
             },
-            "optional_fields": []
+            "optional_fields": ["metadata"]
         },
     });
     if let Some(k) = dedupe_key {
@@ -139,6 +140,72 @@ async fn push_rejects_control_characters_in_decoded_strings() {
         &json!({"user_id": "alice\u{0001}", "amount": 5.0, "event_time": 1_000_000}),
     )
     .await;
+    assert_eq!(resp.status().as_u16(), 400);
+    let body: serde_json::Value = resp.json().await.expect("error body");
+    assert_eq!(body["error"]["code"], "control_character_in_string");
+
+    ts.shutdown().await.expect("shutdown");
+}
+
+#[tokio::test]
+async fn push_rejects_control_characters_in_field_names() {
+    let tmp = tempfile::tempdir().unwrap();
+    let ts = spawn_with_wal(&tmp).await;
+    register_transaction(&ts, None, None).await;
+
+    let resp = push_raw(
+        &ts,
+        "Transaction",
+        &json!({"user\u{0001}_id": "alice", "amount": 5.0, "event_time": 1_000_000}),
+    )
+    .await;
+    assert_eq!(resp.status().as_u16(), 400);
+    let body: serde_json::Value = resp.json().await.expect("error body");
+    assert_eq!(body["error"]["code"], "control_character_in_string");
+
+    ts.shutdown().await.expect("shutdown");
+}
+
+#[tokio::test]
+async fn push_rejects_control_characters_in_nested_strings() {
+    let tmp = tempfile::tempdir().unwrap();
+    let ts = spawn_with_wal(&tmp).await;
+    register_transaction(&ts, None, None).await;
+
+    let resp = push_raw(
+        &ts,
+        "Transaction",
+        &json!({
+            "user_id": "alice",
+            "amount": 5.0,
+            "event_time": 1_000_000,
+            "metadata": {"nested": ["ok", "bad\u{0007}"]}
+        }),
+    )
+    .await;
+    assert_eq!(resp.status().as_u16(), 400);
+    let body: serde_json::Value = resp.json().await.expect("error body");
+    assert_eq!(body["error"]["code"], "control_character_in_string");
+
+    ts.shutdown().await.expect("shutdown");
+}
+
+#[tokio::test]
+async fn push_verb_rejects_control_characters_in_event_name() {
+    let tmp = tempfile::tempdir().unwrap();
+    let ts = spawn_with_wal(&tmp).await;
+    register_transaction(&ts, None, None).await;
+
+    let resp = ts
+        .post_json(
+            "/push",
+            &json!({
+                "event": "Transaction\u{0001}",
+                "data": {"user_id": "alice", "amount": 5.0, "event_time": 1_000_000}
+            }),
+        )
+        .await
+        .expect("post /push verb");
     assert_eq!(resp.status().as_u16(), 400);
     let body: serde_json::Value = resp.json().await.expect("error body");
     assert_eq!(body["error"]["code"], "control_character_in_string");
