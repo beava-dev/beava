@@ -240,6 +240,9 @@ fn wait_for_snapshot_child(
         if waited < 0 {
             let err = std::io::Error::last_os_error();
             if err.raw_os_error() == Some(libc::EINTR) {
+                if Instant::now() >= deadline {
+                    return terminate_timed_out_child(pid, timeout);
+                }
                 continue;
             }
             return Err(err);
@@ -314,6 +317,9 @@ fn reap_child_until(
         if waited < 0 {
             let err = std::io::Error::last_os_error();
             if err.raw_os_error() == Some(libc::EINTR) {
+                if Instant::now() >= deadline {
+                    return Ok(None);
+                }
                 continue;
             }
             return Err(err);
