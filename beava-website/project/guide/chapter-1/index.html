@@ -473,8 +473,11 @@
               borderRadius: 8, padding: '12px 14px', margin: 0,
               overflowX: 'auto',
             }}>
-{'# curl (recommended) — fetches the platform wheel from latest GH Release\n'}
+{'# pip (recommended) — fetches the platform wheel + bundled server binary\n'}
 {'$ pip install beava\n'}
+{'\n'}
+{'# brew (macOS / Linux) — server binary on PATH the Homebrew way\n'}
+{'$ brew install beava-dev/tap/beava\n'}
 {'\n'}
 {'# docker (zero deps on host — :edge tag rebuilt from main on every push)\n'}
 {'$ docker run -p 8080:8080 -p 8081:8081 beavadev/beava:edge\n'}
