@@ -134,13 +134,13 @@
 
         <pre className="code-well">
 <span className="cmt"># 1. Register the pipeline</span>{'\n'}
-<span className="kw">curl</span> -X POST localhost:8080/pipelines -d @pipeline.py{'\n'}{'\n'}
+<span className="kw">curl</span> -X POST localhost:8080/register -d @pipeline.json{'\n'}{'\n'}
 <span className="cmt"># 2. Send a watch</span>{'\n'}
-<span className="kw">curl</span> -X POST localhost:8080/events/Watch \<br/>
+<span className="kw">curl</span> -X POST localhost:8080/push \<br/>
 {'  '}-H <span className="str">'content-type: application/json'</span> \<br/>
-{'  '}-d <span className="str">{`'{"user_id":"u1","video_id":"v_abc","watch_seconds":42}'`}</span>{'\n'}{'\n'}
+{'  '}-d <span className="str">{`'{"event":"Watch","data":{"user_id":"u1","video_id":"v_abc","watch_seconds":42}}'`}</span>{'\n'}{'\n'}
 <span className="cmt"># 3. Ask what this user cares about in the last hour</span>{'\n'}
-<span className="kw">curl</span> localhost:8080/features/UserTagAffinity?user_id=u1{'\n'}
+<span className="kw">curl</span> localhost:8080/get/UserTagAffinity/u1{'\n'}
 <span className="cmt">{`# => [{"tag":"woodworking","weight_1h":42.0,...}, ...]`}</span>
         </pre>
 

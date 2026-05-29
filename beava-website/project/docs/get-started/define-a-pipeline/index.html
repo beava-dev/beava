@@ -125,21 +125,24 @@ def UserCampaignFeatures(ev: BidEvent):
             <p>Start with the feature your application actually needs. Add complexity only when the use case requires it.</p>
 
             <h2 id="testing">Test your pipeline</h2>
-            <p>Before you push real traffic at it, drive the pipeline with a fixture and assert what comes out. <code>bv.test.fixture</code> spins up an in-process server, lets you push synthetic events, and exposes the same <code>get</code> / <code>batch_get</code> API you use in production:</p>
+            <p>Before you push real traffic at it, drive the pipeline with a fixture and assert what comes out. <code>bv.test.fixture</code> is a pytest-shaped generator: <code>yield from</code> it inside your own <code>@pytest.fixture</code> and it spins up an in-process server, exposing the same <code>get</code> / <code>batch_get</code> API you use in production:</p>
             <Code lang="python">
-{`import beava as bv
+{`import pytest
+import beava as bv
+from beava.test import fixture
 
-def test_user_clicks_counts_within_window():
-    with bv.test.fixture(Click, UserClicks) as f:
-        f.push("Click", {"user_id": "u_42"})
-        f.push("Click", {"user_id": "u_42"})
-        assert f.get("UserClicks", "u_42") == {"clicks_60s": 2}
+@pytest.fixture
+def app():
+    # in-process server; reset_each=True gives every test a clean slate
+    yield from fixture(reset_each=True)
 
-        f.advance_time(seconds=120)
-        f.push("Click", {"user_id": "u_42"})
-        assert f.get("UserClicks", "u_42") == {"clicks_60s": 1}`}
+def test_user_clicks_counts_within_window(app):
+    app.register(Click, UserClicks)
+    app.push("Click", {"user_id": "u_42"})
+    app.push("Click", {"user_id": "u_42"})
+    assert app.get("UserClicks", "u_42") == {"clicks_60s": 2}`}
             </Code>
-            <p>The fixture controls the clock with <code>f.advance_time(...)</code>, so you can write deterministic tests for windowed aggregations without sleeping. Run with <code>pytest</code>; no extra config required.</p>
+            <p>The fixture yields a regular <code>bv.App</code>, so the test reads exactly like production code — <code>register</code>, <code>push</code>, <code>get</code>. Run with <code>pytest</code>; no extra config required.</p>
 
             <h2 id="go-deeper">Go deeper</h2>
             <p>Pipelines are written in Python. The engineer who understands the feature can also ship it; the runtime is a single binary that you talk to over HTTP.</p>
