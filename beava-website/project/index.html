@@ -320,7 +320,7 @@
     };
 
     const FeedRow = ({ row, now, columnWidths }) => (
-      <div style={{
+      <div className="beava-feed-row" style={{
         display: 'grid', gridTemplateColumns: columnWidths,
         alignItems: 'center', columnGap: 24,
         padding: '11px 22px', borderTop: '1px solid var(--border)',
@@ -569,6 +569,7 @@
           @media (max-width: 760px) {
             section { padding-left: 18px !important; padding-right: 18px !important; }
             .beava-feed-headers { display: none !important; }
+            .beava-feed-row { grid-template-columns: 1fr !important; align-items: start !important; row-gap: 5px !important; }
             .beava-pillars-grid { grid-template-columns: 1fr !important; }
             .beava-finalcta-grid { grid-template-columns: 1fr !important; }
             footer .bv-foot-grid { grid-template-columns: 1fr !important; gap: 32px !important; }
@@ -1339,7 +1340,8 @@
               to   { opacity: 1; transform: translateY(0); }
             }
             @media (max-width: 920px) {
-              .beava-pipelines-grid { grid-template-columns: 1fr !important; }
+              .beava-pipelines-grid { grid-template-columns: minmax(0, 1fr) !important; }
+              .beava-pipelines-grid > * { min-width: 0 !important; }
             }
           `}</style>
         </section>
