@@ -7,6 +7,42 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.0.6] - 2026-05-29
+
+Resolves a SEV-1 reported by a downstream consumer: HTTP serving (including
+`POST /ping`) stalled for 60–90 s during every snapshot write, tripping
+docker healthchecks into a restart loop.
+
+### Fixed
+
+- **Snapshot writes no longer block the data plane.** Snapshots now run in a
+  forked child via copy-on-write (Valkey BGSAVE pattern, default on unix); the
+  apply thread holds the state lock only for the `fork()` syscall, so `/ping`
+  and all HTTP/TCP requests stay responsive while a multi-hundred-MB snapshot
+  is written. Set `BEAVA_SNAPSHOT_FORK=0` to fall back to the in-process path.
+- **WAL truncation reclaims on-disk bytes.** Compaction rewrites the segment to
+  drop snapshot-covered records instead of logging "truncated" while the file
+  kept growing.
+- **`POST /push` rejects control characters in string fields** (HTTP 400,
+  `control_character_in_string`) so corrupt bytes can't poison the WAL and
+  recur as a decode WARN on every restart.
+- Hardened WAL recovery: applied-watermark replay, forced re-register on
+  schema gaps, bounded fork-child reaping, and EINTR-safe fork wait.
+
+### Added
+
+- **Configurable snapshot cadence** — `BEAVA_SNAPSHOT_INTERVAL_MS`,
+  `BEAVA_SNAPSHOT_MIN_EVENTS` (Redis-style conditional snapshot), and
+  `BEAVA_SNAPSHOT_FORK`.
+- Snapshot metrics on the admin `/metrics` endpoint: last duration, bytes,
+  and fsync time.
+
+### Docs
+
+- Install docs feature `pip` / `brew` / `docker` as the three primary paths.
+- Corrected homepage, quickstart, and field-guide snippets to match the
+  shipped SDK and HTTP API; fixed homepage mobile layout overflow.
+
 ## [0.0.4] - 2026-05-13
 
 First release with behavioural fixes since v0.0.0. Three operator bugs that
