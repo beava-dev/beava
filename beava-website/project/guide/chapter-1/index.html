@@ -727,7 +727,9 @@
         const results = [];
         for (const uid of idsRef.current) {
           const r = rowByUid.get(uid);
-          const o = { user_id: uid };
+          // Server returns a flat feature map per result, in request order
+          // (no table/entity_id/key wrapping).
+          const o = {};
           if (r) {
             for (const k of metricKeys) {
               if (k === 'views_total')           o.views_total = r.views_total;

@@ -55,12 +55,12 @@ const SiteFooter = ({ maxWidth = 1200 }) => (
         {SITE_FOOTER_COLS.map(col => (
           <div key={col.title}>
             <div style={{ fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg3)', marginBottom: 12 }}>{col.title}</div>
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
               {col.links.map(l => (
                 <li key={l.label}>
                   <a href={l.href}
                      {...(l.external ? { target: '_blank', rel: 'noopener' } : {})}
-                     style={{ fontFamily: 'var(--font-sans)', fontSize: 14, color: 'var(--fg2)', textDecoration: 'none' }}>
+                     style={{ fontFamily: 'var(--font-sans)', fontSize: 14, color: 'var(--fg2)', textDecoration: 'none', display: 'inline-block', padding: '5px 0' }}>
                     {l.label}
                   </a>
                 </li>
