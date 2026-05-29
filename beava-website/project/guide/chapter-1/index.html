@@ -693,14 +693,15 @@
     // ---------------- Query panel (live curl + JSON response) ---------------- //
 
     // Renders a curl POST request body and its JSON response based on the
-    // actual rows in state. Teaches: your app calls POST /batch/<Table>
-    // with the user_ids visible on screen, gets back the metrics, renders.
+    // actual rows in state. Teaches: your app calls POST /batch_get with
+    // {requests:[{table,key},...]}, gets back {results:[...]}, renders.
     const QueryPanel = ({ table, userIds, rowsList, metricKeys, empty, onFirstRun, autoRefreshMs }) => {
       // Show all visible users (up to 6 to keep the payload readable).
       const ids = userIds.slice(0, 6);
-      const curl = `curl -X POST https://your-beava/batch/${table} \\
+      const reqBody = JSON.stringify({ requests: ids.map(k => ({ table, key: k })) });
+      const curl = `curl -X POST https://your-beava/batch_get \\
   -H 'Content-Type: application/json' \\
-  -d '${JSON.stringify(ids)}'`;
+  -d '${reqBody}'`;
 
       // User-triggered query: the response only appears after "Run query"
       // is clicked. Once clicked, auto-refresh kicks in so the snapshot
@@ -723,20 +724,21 @@
 
       const buildResponse = React.useCallback(() => {
         const rowByUid = new Map(rowsRef.current);
-        const obj = {};
+        const results = [];
         for (const uid of idsRef.current) {
           const r = rowByUid.get(uid);
-          if (!r) { obj[uid] = null; continue; }
-          const o = {};
-          for (const k of metricKeys) {
-            if (k === 'views_total')           o.views_total = r.views_total;
-            else if (k === 'views_24h')        o.views_24h   = r.views_24h;
-            else if (k === 'distinct_cats_7d') o.distinct_cats_7d = r.cats.size;
-            else if (k === 'last_seen')        o.last_seen   = new Date(r.lastTsMs).toISOString().replace(/\.\d{3}Z$/, 'Z');
+          const o = { user_id: uid };
+          if (r) {
+            for (const k of metricKeys) {
+              if (k === 'views_total')           o.views_total = r.views_total;
+              else if (k === 'views_24h')        o.views_24h   = r.views_24h;
+              else if (k === 'distinct_cats_7d') o.distinct_cats_7d = r.cats.size;
+              else if (k === 'last_seen')        o.last_seen   = new Date(r.lastTsMs).toISOString().replace(/\.\d{3}Z$/, 'Z');
+            }
           }
-          obj[uid] = o;
+          results.push(o);
         }
-        return JSON.stringify(obj, null, 2);
+        return JSON.stringify({ results }, null, 2);
       }, [metricKeys]);
 
       const doFetch = React.useCallback((opts = {}) => {
@@ -780,7 +782,7 @@
               color: 'var(--fg3)', letterSpacing: '0.04em',
               textTransform: 'lowercase',
             }}>
-              ↓ how your app reads it: <span style={{ color: 'var(--accent)', fontWeight: 700 }}>POST /batch/{table}</span>
+              ↓ how your app reads it: <span style={{ color: 'var(--accent)', fontWeight: 700 }}>POST /batch_get</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               {state === 'done' && latency != null && (
@@ -809,9 +811,9 @@
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--fg3)', letterSpacing: '0.04em', textTransform: 'lowercase', marginBottom: 8 }}>1. request — copy-paste this into your terminal</div>
               <div style={{ position: 'relative' }}>
                 <pre className="code-well" style={{ fontSize: 12.5, padding: '18px 20px', lineHeight: 1.65, margin: 0, whiteSpace: 'pre', minHeight: 140 }}>
-                  <span className="cmt">$ </span>curl -X POST https://your-beava/batch/<span className="fn">{table}</span> \{'\n'}
+                  <span className="cmt">$ </span>curl -X POST https://your-beava/batch_get \{'\n'}
                   {'    '}-H <span className="str">'Content-Type: application/json'</span> \{'\n'}
-                  {'    '}-d <span className="str">'{JSON.stringify(ids)}'</span>
+                  {'    '}-d <span className="str">'{reqBody}'</span>
                 </pre>
                 <CopyBtn text={curl}/>
               </div>
