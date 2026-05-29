@@ -115,7 +115,7 @@ def BigCheckout(checkout: Checkout):
     return (
         checkout
         .filter(bv.col("amount") > 100)
-        .with_columns(bucket=bv.col("amount").cast(int) // 50)
+        .with_columns(bucket=bv.col("amount").cast("int") // 50)
     )`}
             </Code>
             <p>Push events to the parent (<code>Click</code>); beava routes matching records through the derivation chain and updates downstream tables for free. You never push to a derived event directly.</p>
