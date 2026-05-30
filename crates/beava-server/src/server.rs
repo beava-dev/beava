@@ -1628,7 +1628,7 @@ fn run_mio_event_loop(
         Vec::with_capacity(n_workers);
 
     for w in 0..n_workers {
-        let (write_tx, write_rx) = crossbeam_channel::bounded::<(u64, WriteEncoder)>(4_096);
+        let (write_tx, write_rx) = crossbeam_channel::unbounded::<(u64, WriteEncoder)>();
         let (new_client_tx, new_client_rx) = crossbeam_channel::bounded::<NewClient>(256);
 
         let cfg = WorkerConfig {
