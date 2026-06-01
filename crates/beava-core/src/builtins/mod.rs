@@ -2,13 +2,18 @@
 //!
 //! # Design
 //!
-//! Builtins are stored in a static `BUILTINS` table. Adding a new builtin
-//! requires only appending one `BuiltinFn` entry — no grammar or evaluator
-//! dispatch changes needed (SRV-APPLY-06 extension hook).
+//! Builtins are a closed Rust enum `BuiltinFn` — one variant per builtin.
+//! Adding a new builtin is one variant + arms in the five `match self`
+//! methods (`name`, `from_name`, `arity`, `eval`, `infer`). The compiler
+//! enforces exhaustiveness — no `_ =>` fallback arm, so a missing
+//! handler is a hard compile error.
 //!
-//! Two builtins ship today:
-//! - `cast(value, type_str)` — converts `Value` to target type; returns `Value::Null` on failure.
+//! Three builtins ship in PR 1:
+//! - `cast(value, type)` — type-conversion operator. **TRANSITIONAL**:
+//!   removed from this enum in PR 1 Step 8 when cast is promoted to
+//!   `Expr::Cast` (its own AST variant).
 //! - `isnull(value)` — always returns `Bool(true/false)`, never `Null`.
+//! - `quadkey(lat, lon, zoom)` — geo cell ID.
 //!
 //! # Cast policy decisions (CONTEXT.md §D-05)
 //!
@@ -19,12 +24,17 @@
 //! - **str → int/float**: `str.parse::<i64/f64>()` — fails → `Null`, not panic.
 //! - **Bytes**: no implicit bytes-to-str without an encoding spec → `Null`.
 
+pub(crate) mod _inference;
+
 use crate::row::Value;
+use crate::schema::FieldType;
+use crate::schema_propagate::InferredType;
+use _inference::{any_to_bool, require_arg_class, InferError, TypeClass};
 
 // ─── Arity ────────────────────────────────────────────────────────────────────
 
 /// Argument count constraint for a builtin function.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Arity {
     /// Exactly `n` arguments required.
     Fixed(usize),
@@ -34,49 +44,112 @@ pub enum Arity {
 
 // ─── BuiltinFn ────────────────────────────────────────────────────────────────
 
-/// A single entry in the builtin function table.
-pub struct BuiltinFn {
-    /// Function name as it appears in expressions (e.g. `"cast"`, `"isnull"`).
-    pub name: &'static str,
-    /// Expected argument count.
-    pub arity: Arity,
-    /// Evaluation function called by the evaluator after arguments have been
-    /// evaluated to `Value`s.
-    pub eval: fn(&[Value]) -> Value,
+/// Closed enum of builtin functions.
+///
+/// Each variant has arms in the five `match self` methods below; the
+/// compiler enforces exhaustiveness. To add a builtin: add a variant +
+/// one arm in each of `name`, `from_name`, `arity`, `eval`, `infer`.
+///
+/// `Copy + Hash + Eq` so callers can use `BuiltinFn` values freely
+/// (hash-map keys, equality checks, copy across boundaries) without
+/// borrow ceremony.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BuiltinFn {
+    /// `isnull(value)` — always returns `Bool(true/false)`, never `Null`.
+    IsNull,
+    /// `quadkey(lat, lon, zoom)` — geo cell ID. `lat`/`lon` numeric;
+    /// `zoom` typed as numeric at register time (runtime requires
+    /// strict `I64` in `1..=24`, otherwise `Null`).
+    Quadkey,
+    // Note: `cast` is NOT a variant here. It's `Expr::Cast`, a dedicated
+    // AST node (RFC-001 §5.1). The parser detects `cast(...)` before
+    // reaching `BuiltinFn::from_name` and routes directly to Expr::Cast.
+    // `cast_eval` remains in this file as a pub(crate) free fn that the
+    // evaluator's Expr::Cast arm calls.
 }
 
-// ─── BUILTINS table ───────────────────────────────────────────────────────────
+impl BuiltinFn {
+    /// Wire-format name. `const fn` because it's a pure lookup.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::IsNull => "isnull",
+            Self::Quadkey => "quadkey",
+        }
+    }
 
-/// Static table of builtin functions.
+    /// Parse a wire-format name. `None` for unknown names.
+    ///
+    /// Note: `from_name("cast")` returns `None` by design — `cast` is an
+    /// `Expr::Cast` AST variant, not a `BuiltinFn`. The parser detects
+    /// the `"cast"` token before reaching this function.
+    pub fn from_name(s: &str) -> Option<Self> {
+        match s {
+            "isnull" => Some(Self::IsNull),
+            "quadkey" => Some(Self::Quadkey),
+            _ => None,
+        }
+    }
+
+    /// Argument count constraint.
+    pub const fn arity(self) -> Arity {
+        match self {
+            Self::IsNull => Arity::Fixed(1),
+            Self::Quadkey => Arity::Fixed(3),
+        }
+    }
+
+    /// Per-event evaluator dispatch. Called after each arg has been
+    /// evaluated to a `Value`.
+    pub fn eval(self, args: &[Value]) -> Value {
+        match self {
+            Self::IsNull => isnull_eval(args),
+            Self::Quadkey => quadkey_eval(args),
+        }
+    }
+
+    /// Register-time type inference.
+    ///
+    /// Single-arg signature: no `&[Expr]` parameter, because no
+    /// value-shaped builtin needs AST access. (Cast was the only one
+    /// that ever did, and it's an `Expr::Cast` variant now.)
+    pub fn infer(self, arg_types: &[InferredType]) -> Result<InferredType, InferError> {
+        match self {
+            Self::IsNull => any_to_bool(arg_types),
+            Self::Quadkey => quadkey_infer(arg_types),
+        }
+    }
+
+    /// All variants. Used by the name↔variant round-trip test and any
+    /// future iteration need (testing, doc generation).
+    #[cfg(test)]
+    pub const fn all() -> &'static [BuiltinFn] {
+        &[Self::IsNull, Self::Quadkey]
+    }
+}
+
+impl std::fmt::Display for BuiltinFn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+// ─── quadkey_infer ────────────────────────────────────────────────────────────
+//
+// Quadkey's signature (Numeric, Numeric, Numeric) → I64 is unique enough that
+// a shared helper wouldn't pull weight. Lives here next to quadkey_eval.
+
+/// Register-time inference for `quadkey(lat, lon, zoom)`.
 ///
-/// Append a new `BuiltinFn` here to add one. No grammar or evaluator
-/// dispatch surgery required — `lookup_builtin` performs a linear scan.
-pub const BUILTINS: &[BuiltinFn] = &[
-    BuiltinFn {
-        name: "cast",
-        arity: Arity::Fixed(2),
-        eval: cast_eval,
-    },
-    BuiltinFn {
-        name: "isnull",
-        arity: Arity::Fixed(1),
-        eval: isnull_eval,
-    },
-    BuiltinFn {
-        name: "quadkey",
-        arity: Arity::Fixed(3),
-        eval: quadkey_eval,
-    },
-];
-
-// ─── Lookup ───────────────────────────────────────────────────────────────────
-
-/// Returns the `BuiltinFn` entry for `name`, or `None` if unknown.
-///
-/// Linear scan over the (currently 2-item) `BUILTINS` table. O(n) is fine
-/// at the current scale; a `HashMap` would be premature.
-pub fn lookup_builtin(name: &str) -> Option<&'static BuiltinFn> {
-    BUILTINS.iter().find(|b| b.name == name)
+/// All three args typed as `Numeric` (I64 or F64); `NullLiteral` accepted
+/// per the wildcard rule. Returns `I64`. Note: zoom is lenient at register
+/// time — runtime requires strict `I64` in `1..=24` and returns `Null`
+/// otherwise (matches existing `quadkey_eval` behavior).
+fn quadkey_infer(arg_types: &[InferredType]) -> Result<InferredType, InferError> {
+    require_arg_class(
+        arg_types,
+        &[TypeClass::Numeric, TypeClass::Numeric, TypeClass::Numeric],
+    )?;
+    Ok(InferredType::Known(FieldType::I64))
 }
 
 // ─── cast ─────────────────────────────────────────────────────────────────────
@@ -101,7 +174,7 @@ pub fn lookup_builtin(name: &str) -> Option<&'static BuiltinFn> {
 /// | Bool       | "true"/"false" | 1 / 0             | 1.0 / 0.0         | unchanged            |
 /// | Bytes      | Null           | Null              | Null              | Null                 |
 /// | Datetime   | i64.to_string  | I64(ms)           | F64(ms as f64)    | ms≠0→true            |
-fn cast_eval(args: &[Value]) -> Value {
+pub(crate) fn cast_eval(args: &[Value]) -> Value {
     // Arity guard: must be exactly 2 args.
     if args.len() != 2 {
         return Value::Null;
@@ -254,28 +327,96 @@ fn isnull_eval(args: &[Value]) -> Value {
 mod tests {
     use super::*;
     use crate::row::Value;
+    use crate::schema::FieldType;
+    use crate::schema_propagate::InferredType;
 
     // ── Lookup tests ──────────────────────────────────────────────────────────
 
     #[test]
-    fn lookup_builtin_returns_cast() {
-        let b = lookup_builtin("cast").expect("cast must be in BUILTINS");
-        assert_eq!(b.name, "cast");
-        assert_eq!(b.arity, Arity::Fixed(2));
+    fn from_name_returns_none_for_cast() {
+        // Cast is NOT a BuiltinFn variant — it's Expr::Cast. The parser
+        // routes "cast" through a special path before reaching from_name.
+        // If anyone calls from_name("cast") directly, they get None.
+        assert!(BuiltinFn::from_name("cast").is_none());
     }
 
     #[test]
-    fn lookup_builtin_returns_isnull() {
-        let b = lookup_builtin("isnull").expect("isnull must be in BUILTINS");
-        assert_eq!(b.name, "isnull");
-        assert_eq!(b.arity, Arity::Fixed(1));
+    fn from_name_returns_isnull() {
+        let b = BuiltinFn::from_name("isnull").expect("isnull must be a BuiltinFn variant");
+        assert_eq!(b, BuiltinFn::IsNull);
+        assert_eq!(b.name(), "isnull");
+        assert_eq!(b.arity(), Arity::Fixed(1));
     }
 
     #[test]
-    fn lookup_builtin_unknown_returns_none() {
-        assert!(lookup_builtin("foo").is_none());
-        assert!(lookup_builtin("").is_none());
-        assert!(lookup_builtin("COUNT").is_none());
+    fn from_name_returns_quadkey() {
+        let b = BuiltinFn::from_name("quadkey").expect("quadkey must be a BuiltinFn variant");
+        assert_eq!(b, BuiltinFn::Quadkey);
+        assert_eq!(b.name(), "quadkey");
+        assert_eq!(b.arity(), Arity::Fixed(3));
+    }
+
+    #[test]
+    fn from_name_unknown_returns_none() {
+        assert!(BuiltinFn::from_name("foo").is_none());
+        assert!(BuiltinFn::from_name("").is_none());
+        assert!(BuiltinFn::from_name("COUNT").is_none());
+    }
+
+    // ── Name ↔ variant round-trip (permanent guard against mirror drift) ─────
+
+    #[test]
+    fn name_from_name_roundtrip() {
+        for &b in BuiltinFn::all() {
+            assert_eq!(
+                BuiltinFn::from_name(b.name()),
+                Some(b),
+                "round-trip failed for {b:?}: name() = {:?}, from_name returned different variant",
+                b.name()
+            );
+        }
+    }
+
+    // ── Display ───────────────────────────────────────────────────────────────
+
+    #[test]
+    fn display_emits_wire_name() {
+        assert_eq!(format!("{}", BuiltinFn::IsNull), "isnull");
+        assert_eq!(format!("{}", BuiltinFn::Quadkey), "quadkey");
+    }
+
+    // ── BuiltinFn::eval dispatch ──────────────────────────────────────────────
+
+    #[test]
+    fn enum_eval_dispatches_to_underlying_fns() {
+        // Spot-check that match-arm dispatch in BuiltinFn::eval reaches the
+        // same fn that the per-fn tests below verify in detail. Cast no
+        // longer goes through the enum (see Expr::Cast in eval.rs); the
+        // pub(crate) cast_eval fn is tested in detail below.
+        assert_eq!(BuiltinFn::IsNull.eval(&[Value::Null]), Value::Bool(true));
+        let r = BuiltinFn::Quadkey.eval(&[Value::F64(40.0), Value::F64(-74.0), Value::I64(7)]);
+        assert!(matches!(r, Value::I64(_)));
+    }
+
+    // ── BuiltinFn::infer dispatch ─────────────────────────────────────────────
+
+    #[test]
+    fn enum_infer_dispatches_to_helpers() {
+        // IsNull → any_to_bool → Bool
+        assert_eq!(
+            BuiltinFn::IsNull.infer(&[InferredType::Known(FieldType::I64)]),
+            Ok(InferredType::Known(FieldType::Bool))
+        );
+        // Quadkey → quadkey_infer → I64
+        let quadkey_args = [
+            InferredType::Known(FieldType::F64),
+            InferredType::Known(FieldType::F64),
+            InferredType::Known(FieldType::I64),
+        ];
+        assert_eq!(
+            BuiltinFn::Quadkey.infer(&quadkey_args),
+            Ok(InferredType::Known(FieldType::I64))
+        );
     }
 
     // ── isnull tests ──────────────────────────────────────────────────────────

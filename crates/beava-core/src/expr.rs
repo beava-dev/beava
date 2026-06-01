@@ -112,10 +112,29 @@ pub enum Expr {
         operand: Box<Expr>,
         span: Span,
     },
-    /// Function call, e.g. `cast(x, float)`, `isnull(x)`.
+    /// Function call resolved to its `BuiltinFn` variant at parse time.
+    ///
+    /// `cast` does NOT route through this variant — it has its own
+    /// `Expr::Cast` shape because its second argument is a type, not a
+    /// value (RFC-001 §5.1 "Cast is its own AST node, not a builtin").
     Call {
-        fn_name: String,
+        builtin: crate::builtins::BuiltinFn,
         args: Vec<Expr>,
+        span: Span,
+    },
+    /// `cast(operand, target)` — type-conversion operator.
+    ///
+    /// `target` is expected to be `Expr::Literal(Literal::BareIdent(name))`
+    /// (the parser normalizes a bare-identifier second arg into this shape)
+    /// or `Expr::Literal(Literal::Str(name))`. `parse_cast_target` reads
+    /// the name at typecheck time; `cast_eval` reads it at run time.
+    ///
+    /// This dedicated AST shape exists because cast is parameterized by a
+    /// type, not a value — same pattern as Polars / Spark / LLVM / Clang
+    /// for statically typed systems.
+    Cast {
+        operand: Box<Expr>,
+        target: Box<Expr>,
         span: Span,
     },
 }
@@ -128,7 +147,8 @@ impl Expr {
             | Expr::Literal(_, span)
             | Expr::BinOp { span, .. }
             | Expr::UnaryOp { span, .. }
-            | Expr::Call { span, .. } => span.clone(),
+            | Expr::Call { span, .. }
+            | Expr::Cast { span, .. } => span.clone(),
         }
     }
 
@@ -158,6 +178,10 @@ fn collect_fields(expr: &Expr, out: &mut BTreeSet<String>) {
             for arg in args {
                 collect_fields(arg, out);
             }
+        }
+        Expr::Cast { operand, .. } => {
+            // Recurse into operand only — target is a type literal, not a field.
+            collect_fields(operand, out);
         }
     }
 }
@@ -190,8 +214,11 @@ pub fn parse(source: &str) -> Result<Expr, ParseError> {
             reason: format!("col {col}: unexpected token {snippet}"),
         });
     }
-    // Pass A: cast second-arg bare-ident normalization.
-    let expr = normalize_cast(expr);
+    // Pass A (cast normalization) is no longer needed: the parser now
+    // builds `Expr::Cast` directly when it sees a `cast(...)` call, and
+    // rewrites the second arg from `Field("float")` to
+    // `Literal::BareIdent("float")` at construction time. See parse_call.
+    //
     // Pass B: null-equality rewrite.
     let expr = rewrite_null_eq(expr);
     Ok(expr)
@@ -838,9 +865,16 @@ impl<'src> Parser<'src> {
                         operand,
                         span: outer_span,
                     },
-                    Expr::Call { fn_name, args, .. } => Expr::Call {
-                        fn_name,
+                    Expr::Call { builtin, args, .. } => Expr::Call {
+                        builtin,
                         args,
+                        span: outer_span,
+                    },
+                    Expr::Cast {
+                        operand, target, ..
+                    } => Expr::Cast {
+                        operand,
+                        target,
                         span: outer_span,
                     },
                 };
@@ -873,7 +907,7 @@ impl<'src> Parser<'src> {
                 let t = self.next()?;
                 let tok_text = t.text.clone();
                 let tok_span = t.span.clone();
-                // Check if followed by '(' → Call.
+                // Check if followed by '(' → Call (or Cast).
                 if self
                     .peek()
                     .map(|p| p.kind == TokenKind::LParen)
@@ -882,13 +916,31 @@ impl<'src> Parser<'src> {
                     self.next()?; // consume '('
                     let args = self.parse_arglist()?;
                     let rp = self.expect(TokenKind::RParen, "expected ',' or ')'")?;
+                    let span = Span {
+                        start: tok_span.start,
+                        end: rp.span.end,
+                    };
+                    // Cast is its own AST shape (RFC-001 §5.1) — the parser
+                    // routes `cast(...)` directly to `Expr::Cast`, rewriting
+                    // a bare-ident second arg into a `BareIdent` literal at
+                    // construction time. Replaces the old post-parse
+                    // `normalize_cast` pass.
+                    if tok_text == "cast" {
+                        return build_cast_expr(args, tok_span, span);
+                    }
+                    // Other names: resolve to BuiltinFn at parse time.
+                    let builtin =
+                        crate::builtins::BuiltinFn::from_name(&tok_text).ok_or_else(|| {
+                            let col = tok_span.start + 1;
+                            ParseError {
+                                col,
+                                reason: format!("col {col}: unknown function {:?}", tok_text),
+                            }
+                        })?;
                     Ok(Expr::Call {
-                        fn_name: tok_text,
+                        builtin,
                         args,
-                        span: Span {
-                            start: tok_span.start,
-                            end: rp.span.end,
-                        },
+                        span,
                     })
                 } else {
                     Ok(Expr::Field {
@@ -978,53 +1030,39 @@ impl<'src> Parser<'src> {
     }
 }
 
-// ─── Post-parse normalization ─────────────────────────────────────────────────
+// ─── Cast construction ───────────────────────────────────────────────────────
 
-/// Pass A: for `cast(x, Field { name })`, rewrite second arg to `Literal::BareIdent(name)`.
-/// Recurses into all nodes.
-fn normalize_cast(expr: Expr) -> Expr {
-    match expr {
-        Expr::Call {
-            fn_name,
-            args,
-            span,
-        } => {
-            // Recurse first (bottom-up).
-            let mut args: Vec<Expr> = args.into_iter().map(normalize_cast).collect();
-            if fn_name == "cast" && args.len() == 2 {
-                if let Expr::Field {
-                    name,
-                    span: field_span,
-                } = &args[1]
-                {
-                    let bare = Expr::Literal(Literal::BareIdent(name.clone()), field_span.clone());
-                    args[1] = bare;
-                }
-            }
-            Expr::Call {
-                fn_name,
-                args,
-                span,
-            }
-        }
-        Expr::BinOp {
-            op,
-            left,
-            right,
-            span,
-        } => Expr::BinOp {
-            op,
-            left: Box::new(normalize_cast(*left)),
-            right: Box::new(normalize_cast(*right)),
-            span,
-        },
-        Expr::UnaryOp { op, operand, span } => Expr::UnaryOp {
-            op,
-            operand: Box::new(normalize_cast(*operand)),
-            span,
-        },
-        leaf => leaf,
+/// Build an `Expr::Cast` from parsed `cast(operand, target)` arguments.
+///
+/// Performs the second-arg normalization the old post-parse `normalize_cast`
+/// pass used to do: a `Field("float")` second arg becomes
+/// `Literal::BareIdent("float")`. A `Literal::Str(...)` second arg passes
+/// through unchanged. Anything else is preserved — the typechecker reports
+/// "cast second argument must be a type literal" at register time.
+///
+/// Arity check fires here so `cast(x)` and `cast(x, y, z)` fail at parse
+/// time with a clear span. Other shape violations are deferred to the
+/// typechecker (better diagnostics — it can quote the bad arg's type).
+fn build_cast_expr(args: Vec<Expr>, fn_tok_span: Span, span: Span) -> Result<Expr, ParseError> {
+    if args.len() != 2 {
+        let col = fn_tok_span.start + 1;
+        return Err(ParseError {
+            col,
+            reason: format!("col {col}: cast expects 2 arguments, got {}", args.len()),
+        });
     }
+    let mut args = args;
+    let target_raw = args.remove(1);
+    let target = match target_raw {
+        Expr::Field { name, span: fspan } => Expr::Literal(Literal::BareIdent(name), fspan),
+        other => other,
+    };
+    let operand = args.remove(0);
+    Ok(Expr::Cast {
+        operand: Box::new(operand),
+        target: Box::new(target),
+        span,
+    })
 }
 
 /// Pass B: rewrite null-equality / null-inequality at parse time.
@@ -1039,6 +1077,7 @@ fn normalize_cast(expr: Expr) -> Expr {
 /// evaluate to `Value::Null` because the strict-null propagation guard in
 /// `eval_binop` fires before the `!=` branch — silently dropping rows.
 fn rewrite_null_eq(expr: Expr) -> Expr {
+    use crate::builtins::BuiltinFn;
     match expr {
         Expr::BinOp {
             op,
@@ -1052,14 +1091,14 @@ fn rewrite_null_eq(expr: Expr) -> Expr {
                 match (&lhs, &rhs) {
                     (_, Expr::Literal(Literal::Null, _)) => {
                         return Expr::Call {
-                            fn_name: "isnull".to_string(),
+                            builtin: BuiltinFn::IsNull,
                             args: vec![lhs],
                             span,
                         };
                     }
                     (Expr::Literal(Literal::Null, _), _) => {
                         return Expr::Call {
-                            fn_name: "isnull".to_string(),
+                            builtin: BuiltinFn::IsNull,
                             args: vec![rhs],
                             span,
                         };
@@ -1072,7 +1111,7 @@ fn rewrite_null_eq(expr: Expr) -> Expr {
                 match (&lhs, &rhs) {
                     (_, Expr::Literal(Literal::Null, _)) => {
                         let isnull = Expr::Call {
-                            fn_name: "isnull".to_string(),
+                            builtin: BuiltinFn::IsNull,
                             args: vec![lhs],
                             span: span.clone(),
                         };
@@ -1084,7 +1123,7 @@ fn rewrite_null_eq(expr: Expr) -> Expr {
                     }
                     (Expr::Literal(Literal::Null, _), _) => {
                         let isnull = Expr::Call {
-                            fn_name: "isnull".to_string(),
+                            builtin: BuiltinFn::IsNull,
                             args: vec![rhs],
                             span: span.clone(),
                         };
@@ -1110,12 +1149,21 @@ fn rewrite_null_eq(expr: Expr) -> Expr {
             span,
         },
         Expr::Call {
-            fn_name,
+            builtin,
             args,
             span,
         } => Expr::Call {
-            fn_name,
+            builtin,
             args: args.into_iter().map(rewrite_null_eq).collect(),
+            span,
+        },
+        Expr::Cast {
+            operand,
+            target,
+            span,
+        } => Expr::Cast {
+            operand: Box::new(rewrite_null_eq(*operand)),
+            target,
             span,
         },
         leaf => leaf,
@@ -1196,9 +1244,24 @@ mod tests {
     // reason: AST-construction scaffolding (see header comment above).
     #[allow(dead_code)]
     fn call(fn_name: &str, args: Vec<Expr>, start: usize, end: usize) -> Expr {
+        let builtin = crate::builtins::BuiltinFn::from_name(fn_name)
+            .unwrap_or_else(|| panic!("test helper: unknown builtin {:?}", fn_name));
         Expr::Call {
-            fn_name: fn_name.to_string(),
+            builtin,
             args,
+            span: Span { start, end },
+        }
+    }
+
+    // reason: AST-construction scaffolding for Expr::Cast tests.
+    #[allow(dead_code)]
+    fn cast_expr(operand: Expr, target_name: &str, start: usize, end: usize) -> Expr {
+        Expr::Cast {
+            operand: Box::new(operand),
+            target: Box::new(Expr::Literal(
+                Literal::BareIdent(target_name.to_string()),
+                Span { start, end },
+            )),
             span: Span { start, end },
         }
     }
@@ -1387,24 +1450,30 @@ mod tests {
         }
     }
 
-    // ── Test 12: call cast ────────────────────────────────────────────────────
+    // ── Test 12: cast parses to dedicated Expr::Cast AST node ─────────────────
 
     #[test]
     fn parse_call_cast() {
-        // cast(amount, float) → after Pass A normalization, second arg is BareIdent
+        // cast(amount, float) parses directly into Expr::Cast (the parser
+        // detects "cast" as a special form). The second arg's bare ident
+        // becomes Literal::BareIdent at construction time.
         let expr = parse("cast(amount, float)").expect("should parse cast call");
         match &expr {
-            Expr::Call { fn_name, args, .. } => {
-                assert_eq!(fn_name, "cast");
-                assert_eq!(args.len(), 2);
-                assert!(matches!(&args[0], Expr::Field { name, .. } if name == "amount"));
+            Expr::Cast {
+                operand, target, ..
+            } => {
                 assert!(
-                    matches!(&args[1], Expr::Literal(Literal::BareIdent(n), _) if n == "float"),
-                    "expected BareIdent('float'), got {:?}",
-                    &args[1]
+                    matches!(operand.as_ref(), Expr::Field { name, .. } if name == "amount"),
+                    "expected Field('amount') as operand, got {:?}",
+                    operand.as_ref()
+                );
+                assert!(
+                    matches!(target.as_ref(), Expr::Literal(Literal::BareIdent(n), _) if n == "float"),
+                    "expected BareIdent('float') target, got {:?}",
+                    target.as_ref()
                 );
             }
-            _ => panic!("expected Call('cast'), got {expr:?}"),
+            _ => panic!("expected Expr::Cast, got {expr:?}"),
         }
     }
 
@@ -1414,8 +1483,8 @@ mod tests {
     fn parse_call_isnull() {
         let expr = parse("isnull(amount)").expect("should parse isnull call");
         match &expr {
-            Expr::Call { fn_name, args, .. } => {
-                assert_eq!(fn_name, "isnull");
+            Expr::Call { builtin, args, .. } => {
+                assert_eq!(*builtin, crate::builtins::BuiltinFn::IsNull);
                 assert_eq!(args.len(), 1);
                 assert!(matches!(&args[0], Expr::Field { name, .. } if name == "amount"));
             }
@@ -1423,19 +1492,25 @@ mod tests {
         }
     }
 
-    // ── Test 14: empty arglist ────────────────────────────────────────────────
+    // ── Test 14: unknown function name fails at parse time ───────────────────
 
     #[test]
-    fn parse_empty_arglist() {
-        // Grammar allows empty arglists; semantics (unknown builtins) are 04-03's concern.
-        let expr = parse("noop()").expect("should parse empty arglist");
-        match &expr {
-            Expr::Call { fn_name, args, .. } => {
-                assert_eq!(fn_name, "noop");
-                assert!(args.is_empty(), "expected no args, got {args:?}");
-            }
-            _ => panic!("expected Call('noop'), got {expr:?}"),
-        }
+    fn parse_unknown_function_name_fails() {
+        // After Step 7, the parser resolves function names via
+        // BuiltinFn::from_name. Unknown names surface as a ParseError at
+        // parse time rather than at typecheck time (was: "noop" accepted
+        // as Call, rejected later by infer_call_type).
+        let err = parse("noop()").expect_err("noop is not a known builtin");
+        assert!(
+            err.reason.contains("unknown function"),
+            "reason should mention 'unknown function', got: {:?}",
+            err.reason
+        );
+        assert!(
+            err.reason.contains("noop"),
+            "reason should mention the bad name, got: {:?}",
+            err.reason
+        );
     }
 
     // ── Test 15: rejects empty input ──────────────────────────────────────────
@@ -1561,12 +1636,18 @@ mod tests {
     fn parse_equal_null_rewrites_to_isnull_call_right() {
         let expr = parse("(x == null)").expect("should parse (x == null)");
         assert!(
-            matches!(&expr, Expr::Call { fn_name, .. } if fn_name == "isnull"),
+            matches!(
+                &expr,
+                Expr::Call {
+                    builtin: crate::builtins::BuiltinFn::IsNull,
+                    ..
+                }
+            ),
             "expected Call('isnull', ...) after rewrite, got {expr:?}"
         );
         match &expr {
-            Expr::Call { fn_name, args, .. } => {
-                assert_eq!(fn_name, "isnull");
+            Expr::Call { builtin, args, .. } => {
+                assert_eq!(*builtin, crate::builtins::BuiltinFn::IsNull);
                 assert_eq!(args.len(), 1);
                 assert!(
                     matches!(&args[0], Expr::Field { name, .. } if name == "x"),
@@ -1584,12 +1665,18 @@ mod tests {
     fn parse_equal_null_rewrites_to_isnull_call_left() {
         let expr = parse("(null == x)").expect("should parse (null == x)");
         assert!(
-            matches!(&expr, Expr::Call { fn_name, .. } if fn_name == "isnull"),
+            matches!(
+                &expr,
+                Expr::Call {
+                    builtin: crate::builtins::BuiltinFn::IsNull,
+                    ..
+                }
+            ),
             "expected Call('isnull', ...) after commutative rewrite, got {expr:?}"
         );
         match &expr {
-            Expr::Call { fn_name, args, .. } => {
-                assert_eq!(fn_name, "isnull");
+            Expr::Call { builtin, args, .. } => {
+                assert_eq!(*builtin, crate::builtins::BuiltinFn::IsNull);
                 assert_eq!(args.len(), 1);
                 assert!(
                     matches!(&args[0], Expr::Field { name, .. } if name == "x"),
@@ -1607,7 +1694,13 @@ mod tests {
     fn parse_equal_null_rewrite_preserves_field_path() {
         let expr = parse("(Stream.field == null)").expect("should parse dotted field with null");
         assert!(
-            matches!(&expr, Expr::Call { fn_name, .. } if fn_name == "isnull"),
+            matches!(
+                &expr,
+                Expr::Call {
+                    builtin: crate::builtins::BuiltinFn::IsNull,
+                    ..
+                }
+            ),
             "expected isnull call, got {expr:?}"
         );
         match &expr {
@@ -1629,7 +1722,13 @@ mod tests {
         // ((amount + 1) == null) → isnull(BinOp("+", Field("amount"), Int(1)))
         let expr = parse("((amount + 1) == null)").expect("should parse nested expr with null");
         assert!(
-            matches!(&expr, Expr::Call { fn_name, .. } if fn_name == "isnull"),
+            matches!(
+                &expr,
+                Expr::Call {
+                    builtin: crate::builtins::BuiltinFn::IsNull,
+                    ..
+                }
+            ),
             "expected isnull call, got {expr:?}"
         );
         match &expr {
@@ -1658,7 +1757,13 @@ mod tests {
             } => {
                 assert_eq!(op, "and");
                 assert!(
-                    matches!(left.as_ref(), Expr::Call { fn_name, .. } if fn_name == "isnull"),
+                    matches!(
+                        left.as_ref(),
+                        Expr::Call {
+                            builtin: crate::builtins::BuiltinFn::IsNull,
+                            ..
+                        }
+                    ),
                     "left should be isnull call, got {left:?}"
                 );
                 assert!(
@@ -1689,7 +1794,13 @@ mod tests {
             Expr::UnaryOp { op, operand, .. } => {
                 assert_eq!(op, "not");
                 assert!(
-                    matches!(operand.as_ref(), Expr::Call { fn_name, .. } if fn_name == "isnull"),
+                    matches!(
+                        operand.as_ref(),
+                        Expr::Call {
+                            builtin: crate::builtins::BuiltinFn::IsNull,
+                            ..
+                        }
+                    ),
                     "inner node must be isnull call, got {operand:?}"
                 );
                 match operand.as_ref() {
@@ -1721,7 +1832,13 @@ mod tests {
         match &expr {
             Expr::UnaryOp { operand, .. } => {
                 assert!(
-                    matches!(operand.as_ref(), Expr::Call { fn_name, .. } if fn_name == "isnull"),
+                    matches!(
+                        operand.as_ref(),
+                        Expr::Call {
+                            builtin: crate::builtins::BuiltinFn::IsNull,
+                            ..
+                        }
+                    ),
                     "inner node must be isnull call, got {operand:?}"
                 );
                 match operand.as_ref() {
@@ -1746,7 +1863,13 @@ mod tests {
         // Degenerate: both sides null → isnull(null)
         let expr = parse("(null == null)").expect("should parse (null == null)");
         assert!(
-            matches!(&expr, Expr::Call { fn_name, .. } if fn_name == "isnull"),
+            matches!(
+                &expr,
+                Expr::Call {
+                    builtin: crate::builtins::BuiltinFn::IsNull,
+                    ..
+                }
+            ),
             "expected isnull call, got {expr:?}"
         );
         match &expr {
