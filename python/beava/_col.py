@@ -305,47 +305,8 @@ def if_else(cond: Any, then_: Any, else_: Any) -> _Expr:
     ``bv.if_else(denom != 0, num / denom, 0.0)`` is safe even when ``denom``
     is 0 — the division never runs. ``cond`` must be a boolean expression and
     the two branches must share a type at register time.
-
-    ``bv.when(cond).then(a).otherwise(b)`` is the equivalent builder form.
     """
     return _Call("if_else", (_coerce(cond), _coerce(then_), _coerce(else_)))
-
-
-class _WhenThen:
-    """Intermediate state of a ``when().then()`` chain, awaiting ``.otherwise()``.
-
-    Deliberately **not** an ``_Expr``: an incomplete builder cannot be passed
-    where an expression is expected, so ``.otherwise()`` is forced to always be
-    called. Calling it produces the same ``_Call("if_else", ...)`` node as
-    :func:`if_else`.
-    """
-
-    def __init__(self, cond: _Expr, then_: _Expr) -> None:
-        self._cond = cond
-        self._then = then_
-
-    def otherwise(self, else_: Any) -> _Expr:
-        return _Call("if_else", (self._cond, self._then, _coerce(else_)))
-
-
-class _When:
-    """State after ``bv.when(cond)``. Also not an ``_Expr`` (see :class:`_WhenThen`)."""
-
-    def __init__(self, cond: Any) -> None:
-        self._cond = _coerce(cond)
-
-    def then(self, value: Any) -> _WhenThen:
-        return _WhenThen(self._cond, _coerce(value))
-
-
-def when(cond: Any) -> _When:
-    """Start a ``when(cond).then(a).otherwise(b)`` conditional builder.
-
-    Reads like English and emits the same wire form as :func:`if_else`. The
-    builder shape forces ``.otherwise()`` to be supplied — an incomplete chain
-    is not an expression and cannot be registered.
-    """
-    return _When(cond)
 
 
 def lit(value: Union[int, float, str, bool, None]) -> _Literal:  # noqa: UP007

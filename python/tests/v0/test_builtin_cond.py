@@ -4,10 +4,8 @@ What this file checks: ``bv.if_else(cond, then_, else_)`` produces the
 correct wire string in all argument combinations.
 
 Why if_else is a top-level function, not a method: ``col.if_else(...)``
-reads as if the column is the subject, but the condition is. The
-``bv.when(...).then(...).otherwise(...)`` builder (tested separately) is
-the idiomatic dotted form; ``bv.if_else`` is the direct form for cases
-where a builder feels like overhead.
+reads as if the column is the subject, but the condition is. ``bv.if_else``
+is the single conditional surface in the SDK.
 
 Status: fails until Step 9 of PR 4 adds ``bv.if_else`` to the module.
 """

@@ -30,7 +30,7 @@
 //!
 //! - **Builtins**: `Call` nodes dispatch through the closed `BuiltinFn` enum
 //!   in `builtins/mod.rs`. Unknown function names are rejected at parse time
-//!  (`BuiltinFn::from_name` returns `None` for unknown names).
+//!   (`BuiltinFn::from_name` returns `None` for unknown names).
 //!
 //! - **`Literal::BareIdent`**: converted to `Value::Str` so that `cast`'s
 //!   second argument (`cast(x, float)`) arrives at `cast_eval` as

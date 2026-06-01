@@ -81,7 +81,6 @@ from beava._col import (  # noqa: F401
     length,
     lit,
     log1p,
-    when,
 )
 from beava._demo import demo  # noqa: F401
 from beava._errors import (  # noqa: F401
@@ -168,5 +167,4 @@ __all__ = [
     "hash_mod",
     "length",
     "if_else",
-    "when",
 ]
