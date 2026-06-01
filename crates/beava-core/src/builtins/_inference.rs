@@ -5,21 +5,18 @@
 //! the single source of:
 //!
 //! - **Primitives** (`require_arg_types`, `require_arg_class`,
-//!   `unify_var0_strict`, `unify_var0_with_class`) — small building
-//!   blocks for one-off inference fns.
-//! - **Shared helpers** (`any_to_bool`, `unary_str_to_str`,
-//!   `unary_numeric_to_f64`, …) — one per common signature shape, so
+//!   `infer_same_type`) — small building blocks for one-off inference
+//!   fns. A "numeric and uniform" check is just `require_arg_class`
+//!   followed by `infer_same_type` (see `clip_infer`).
+//! - **Shared helpers** (`any_to_bool`, `str_to_str`,
+//!   `numeric_to_f64`, …) — one per common signature shape, so
 //!   each builtin row in `BuiltinFn::infer`'s match block is a one-liner.
-//!
-//! Step 3 lands `InferError` and `TypeClass` here; Step 4 lands the
-//! primitives and helpers themselves.
 
-// PR 1 ships all helpers + primitives as one cohesive infra drop, but only
-// `any_to_bool` and `require_arg_class` are wired (used by `BuiltinFn::IsNull`
-// and `quadkey_infer`). The rest sit unused until PR 3 lands the v0 builtins
-// (`log1p`, `clip`, `lower`, `contains`, …). All are exercised by unit tests
-// in this module — the `dead_code` warnings are infrastructure-not-consumed,
-// not actually-dead.
+// Most helpers + primitives are wired by the v0 builtins. A few stay unused
+// pending the builtins that will consume them — `numeric_same` (abs/floor/…),
+// `two_numeric_to_f64` (pow/mod), `infer_same_type_all_args` (coalesce/
+// fill_null) — but all are exercised by this module's unit tests, so the
+// `dead_code` warnings are not-yet-consumed, not actually-dead.
 #![allow(dead_code)]
 
 use crate::schema::FieldType;
@@ -39,7 +36,7 @@ pub enum InferError {
     /// Argument count mismatch caught inside an infer fn.
     ///
     /// Rare in practice — `BuiltinFn::arity()` is checked by the dispatcher
-    /// before `infer` runs. Variadic helpers (`polymorphic_var0_unify`)
+    /// before `infer` runs. Variadic helpers (`infer_same_type_all_args`)
     /// can still produce this if a per-helper minimum-arity rule fails.
     Arity { expected: usize, got: usize },
 
@@ -212,18 +209,20 @@ pub fn require_arg_class(
     Ok(())
 }
 
-/// Strict-equality unification across the `arg_types` positions listed in
-/// `indices`.
+/// Checks that the chosen arguments all share one type, and returns it.
 ///
-/// - `NullLiteral` acts as a hole — doesn't pin the type, doesn't conflict
-///   with anything. The first concrete `Known(...)` arg determines the bound
-///   type; later args must equal it or fail with `InferError::Unify`.
-/// - If every listed position is `NullLiteral`, falls back to
-///   `Known(FieldType::Str)`. Arbitrary-but-documented default (RFC-001 §5.1).
+/// `indices` says which argument positions to look at. Walking those
+/// positions:
+/// - A `null` argument is skipped — it tells us nothing about the type, so
+///   it can never cause a conflict.
+/// - The first argument with a real type sets the answer. Every later real
+///   argument must match it exactly; if one differs (say an int after a
+///   float), it stops and returns `InferError::Unify`.
 ///
-/// Returns the unified `InferredType` — always `Known(...)` because the
-/// all-null branch resolves to `Known(Str)`.
-pub fn unify_var0_strict(
+/// If every position was `null`, there's nothing to go on, so it defaults
+/// to `Str`. Because of that fallback, the result is always a real type,
+/// never `null`.
+pub fn infer_same_type(
     arg_types: &[InferredType],
     indices: &[usize],
 ) -> Result<InferredType, InferError> {
@@ -245,42 +244,6 @@ pub fn unify_var0_strict(
     Ok(InferredType::Known(bound.unwrap_or(FieldType::Str)))
 }
 
-/// As `unify_var0_strict`, but each binding must also satisfy `class`.
-///
-/// Order of checks: per-arg class first (so `coalesce(Str, Str)` under
-/// `Numeric` reports the first non-numeric arg with `arg_idx = 0`), then
-/// strict equality (so `coalesce(I64, F64)` under `Numeric` reports the
-/// mix as `Unify` since both fit the class).
-pub fn unify_var0_with_class(
-    arg_types: &[InferredType],
-    indices: &[usize],
-    class: TypeClass,
-) -> Result<InferredType, InferError> {
-    let mut bound: Option<FieldType> = None;
-    for &idx in indices {
-        match &arg_types[idx] {
-            InferredType::NullLiteral => continue,
-            InferredType::Known(ft) if class.accepts(*ft) => match bound {
-                None => bound = Some(*ft),
-                Some(b) if b == *ft => continue,
-                Some(b) => {
-                    return Err(InferError::Unify {
-                        reason: unify_reason(b, *ft),
-                    });
-                }
-            },
-            InferredType::Known(_) => {
-                return Err(InferError::TypeMismatch {
-                    arg_idx: idx,
-                    expected: type_class_name(class),
-                    got: arg_types[idx].clone(),
-                });
-            }
-        }
-    }
-    Ok(InferredType::Known(bound.unwrap_or(FieldType::Str)))
-}
-
 // ─── Shared helpers ──────────────────────────────────────────────────────────
 //
 // One per common signature shape. Each is a 1-2 line wrapper over the
@@ -294,13 +257,13 @@ pub fn any_to_bool(arg_types: &[InferredType]) -> Result<InferredType, InferErro
 }
 
 /// `lower`, `upper` — one `Str` arg, returns `Str`.
-pub fn unary_str_to_str(arg_types: &[InferredType]) -> Result<InferredType, InferError> {
+pub fn str_to_str(arg_types: &[InferredType]) -> Result<InferredType, InferError> {
     require_arg_types(arg_types, &[FieldType::Str])?;
     Ok(InferredType::Known(FieldType::Str))
 }
 
 /// `length` — one `Str` arg, returns `I64`.
-pub fn unary_str_to_i64(arg_types: &[InferredType]) -> Result<InferredType, InferError> {
+pub fn str_to_i64(arg_types: &[InferredType]) -> Result<InferredType, InferError> {
     require_arg_types(arg_types, &[FieldType::Str])?;
     Ok(InferredType::Known(FieldType::I64))
 }
@@ -308,19 +271,19 @@ pub fn unary_str_to_i64(arg_types: &[InferredType]) -> Result<InferredType, Infe
 /// `abs`, `sign`, `floor`, `ceil`, `round` — one numeric arg; returns the
 /// same numeric type. Identity on the input — preserves `I64` vs `F64`, and
 /// propagates `NullLiteral` (the only helper that does so).
-pub fn unary_numeric_same(arg_types: &[InferredType]) -> Result<InferredType, InferError> {
+pub fn numeric_same(arg_types: &[InferredType]) -> Result<InferredType, InferError> {
     require_arg_class(arg_types, &[TypeClass::Numeric])?;
     Ok(arg_types[0].clone())
 }
 
 /// `log`, `log1p`, `log10`, `exp`, `sqrt` — one numeric arg; returns `F64`.
-pub fn unary_numeric_to_f64(arg_types: &[InferredType]) -> Result<InferredType, InferError> {
+pub fn numeric_to_f64(arg_types: &[InferredType]) -> Result<InferredType, InferError> {
     require_arg_class(arg_types, &[TypeClass::Numeric])?;
     Ok(InferredType::Known(FieldType::F64))
 }
 
 /// `pow`, `mod` — two numeric args; returns `F64`.
-pub fn binary_numeric_to_f64(arg_types: &[InferredType]) -> Result<InferredType, InferError> {
+pub fn two_numeric_to_f64(arg_types: &[InferredType]) -> Result<InferredType, InferError> {
     require_arg_class(arg_types, &[TypeClass::Numeric, TypeClass::Numeric])?;
     Ok(InferredType::Known(FieldType::F64))
 }
@@ -334,9 +297,9 @@ pub fn string_search_to_bool(arg_types: &[InferredType]) -> Result<InferredType,
 /// `coalesce`, `fill_null` — variadic; all args unify under strict equality
 /// with `NullLiteral` as the hole. All-null (including zero args) falls back
 /// to `Known(Str)` per the documented default.
-pub fn polymorphic_var0_unify(arg_types: &[InferredType]) -> Result<InferredType, InferError> {
+pub fn infer_same_type_all_args(arg_types: &[InferredType]) -> Result<InferredType, InferError> {
     let indices: Vec<usize> = (0..arg_types.len()).collect();
-    unify_var0_strict(arg_types, &indices)
+    infer_same_type(arg_types, &indices)
 }
 
 #[cfg(test)]
@@ -524,18 +487,18 @@ mod tests {
         ));
     }
 
-    // ── Test 8: unify_var0_strict same type returns it ────────────────────────
+    // ── Test 8: infer_same_type same type returns it ────────────────────────
     // Why: when all args have the same type, that's the answer. No silent upgrades.
 
     #[test]
-    fn unify_var0_strict_same_type_returns_that_type() {
+    fn infer_same_type_same_type_returns_that_type() {
         // I64 + I64 → I64
         let args_i64 = [
             InferredType::Known(FieldType::I64),
             InferredType::Known(FieldType::I64),
         ];
         assert_eq!(
-            unify_var0_strict(&args_i64, &[0, 1]).unwrap(),
+            infer_same_type(&args_i64, &[0, 1]).unwrap(),
             InferredType::Known(FieldType::I64)
         );
 
@@ -545,7 +508,7 @@ mod tests {
             InferredType::Known(FieldType::F64),
         ];
         assert_eq!(
-            unify_var0_strict(&args_f64, &[0, 1]).unwrap(),
+            infer_same_type(&args_f64, &[0, 1]).unwrap(),
             InferredType::Known(FieldType::F64)
         );
 
@@ -555,23 +518,23 @@ mod tests {
             InferredType::Known(FieldType::Str),
         ];
         assert_eq!(
-            unify_var0_strict(&args_str, &[0, 1]).unwrap(),
+            infer_same_type(&args_str, &[0, 1]).unwrap(),
             InferredType::Known(FieldType::Str)
         );
     }
 
-    // ── Test 9: unify_var0_strict NullLiteral as hole ─────────────────────────
+    // ── Test 9: infer_same_type NullLiteral as hole ─────────────────────────
     // Why: a `null` literal doesn't pick the type. The real-typed arg wins, so `if_else(c, null, 5.0)` is float.
 
     #[test]
-    fn unify_var0_strict_null_literal_is_hole() {
+    fn infer_same_type_null_literal_is_hole() {
         // NullLiteral at position 0
         let args0 = [
             InferredType::NullLiteral,
             InferredType::Known(FieldType::F64),
         ];
         assert_eq!(
-            unify_var0_strict(&args0, &[0, 1]).unwrap(),
+            infer_same_type(&args0, &[0, 1]).unwrap(),
             InferredType::Known(FieldType::F64)
         );
 
@@ -581,18 +544,18 @@ mod tests {
             InferredType::NullLiteral,
         ];
         assert_eq!(
-            unify_var0_strict(&args1, &[0, 1]).unwrap(),
+            infer_same_type(&args1, &[0, 1]).unwrap(),
             InferredType::Known(FieldType::F64)
         );
     }
 
-    // ── Test 10: unify_var0_strict all-null falls back to Str ─────────────────
+    // ── Test 10: infer_same_type all-null falls back to Str ─────────────────
     // Why: if everything is null, pick a default. String was chosen — arbitrary but documented, so users can rely on it.
 
     #[test]
-    fn unify_var0_strict_all_null_falls_back_to_str() {
+    fn infer_same_type_all_null_falls_back_to_str() {
         let args = [InferredType::NullLiteral, InferredType::NullLiteral];
-        let r = unify_var0_strict(&args, &[0, 1]);
+        let r = infer_same_type(&args, &[0, 1]);
         assert_eq!(
             r.unwrap(),
             InferredType::Known(FieldType::Str),
@@ -600,18 +563,18 @@ mod tests {
         );
     }
 
-    // ── Test 11: unify_var0_strict rejects I64 vs F64 ─────────────────────────
+    // ── Test 11: infer_same_type rejects I64 vs F64 ─────────────────────────
     // Why: int and float are different. Mixing them must fail loudly here, not silently upgrade like `+` does.
 
     #[test]
-    fn unify_var0_strict_rejects_i64_vs_f64() {
+    fn infer_same_type_rejects_i64_vs_f64() {
         // I64 then F64
         let args0 = [
             InferredType::Known(FieldType::I64),
             InferredType::Known(FieldType::F64),
         ];
         assert!(matches!(
-            unify_var0_strict(&args0, &[0, 1]),
+            infer_same_type(&args0, &[0, 1]),
             Err(InferError::Unify { .. })
         ));
 
@@ -621,60 +584,8 @@ mod tests {
             InferredType::Known(FieldType::I64),
         ];
         assert!(matches!(
-            unify_var0_strict(&args1, &[0, 1]),
+            infer_same_type(&args1, &[0, 1]),
             Err(InferError::Unify { .. })
-        ));
-    }
-
-    // ── Test 12: unify_var0_with_class strict and class OK ────────────────────
-    // Why: combining the two checks should work — if args are the same type AND fit the class, pass.
-
-    #[test]
-    fn unify_var0_with_class_combines_strict_and_class_ok() {
-        // I64 + I64 under Numeric → I64
-        let args_i64 = [
-            InferredType::Known(FieldType::I64),
-            InferredType::Known(FieldType::I64),
-        ];
-        assert_eq!(
-            unify_var0_with_class(&args_i64, &[0, 1], TypeClass::Numeric).unwrap(),
-            InferredType::Known(FieldType::I64)
-        );
-
-        // F64 + F64 under Numeric → F64
-        let args_f64 = [
-            InferredType::Known(FieldType::F64),
-            InferredType::Known(FieldType::F64),
-        ];
-        assert_eq!(
-            unify_var0_with_class(&args_f64, &[0, 1], TypeClass::Numeric).unwrap(),
-            InferredType::Known(FieldType::F64)
-        );
-    }
-
-    // ── Test 13: unify_var0_with_class rejects class violation ────────────────
-    // Why: even if args are the same type, wrong class still fails (e.g. `Str + Str` is consistent but not numeric).
-
-    #[test]
-    fn unify_var0_with_class_rejects_class_violation() {
-        // Both args violate Numeric (Str + Str) — first idx surfaces
-        let args0 = [
-            InferredType::Known(FieldType::Str),
-            InferredType::Known(FieldType::Str),
-        ];
-        assert!(matches!(
-            unify_var0_with_class(&args0, &[0, 1], TypeClass::Numeric),
-            Err(InferError::TypeMismatch { arg_idx: 0, .. })
-        ));
-
-        // Only idx 1 violates (I64 + Str)
-        let args1 = [
-            InferredType::Known(FieldType::I64),
-            InferredType::Known(FieldType::Str),
-        ];
-        assert!(matches!(
-            unify_var0_with_class(&args1, &[0, 1], TypeClass::Numeric),
-            Err(InferError::TypeMismatch { arg_idx: 1, .. })
         ));
     }
 
@@ -705,173 +616,173 @@ mod tests {
         );
     }
 
-    // ── Test 18: unary_str_to_str accepts Str (and NullLiteral) ───────────────
+    // ── Test 18: str_to_str accepts Str (and NullLiteral) ───────────────
     // Why: string in → string out. The shape used by `lower()` and `upper()`.
 
     #[test]
-    fn unary_str_to_str_accepts_str() {
+    fn str_to_str_accepts_str() {
         let args_str = [InferredType::Known(FieldType::Str)];
         assert_eq!(
-            unary_str_to_str(&args_str).unwrap(),
+            str_to_str(&args_str).unwrap(),
             InferredType::Known(FieldType::Str)
         );
 
         // NullLiteral input — primitive allows it, helper should too
         let args_null = [InferredType::NullLiteral];
         assert_eq!(
-            unary_str_to_str(&args_null).unwrap(),
+            str_to_str(&args_null).unwrap(),
             InferredType::Known(FieldType::Str)
         );
     }
 
-    // ── Test 19: unary_str_to_str rejects I64 ─────────────────────────────────
+    // ── Test 19: str_to_str rejects I64 ─────────────────────────────────
     // Why: can't lowercase a number — error points at the bad arg so users fix the right place.
 
     #[test]
-    fn unary_str_to_str_rejects_i64() {
+    fn str_to_str_rejects_i64() {
         let args = [InferredType::Known(FieldType::I64)];
-        let r = unary_str_to_str(&args);
+        let r = str_to_str(&args);
         assert!(matches!(
             r,
             Err(InferError::TypeMismatch { arg_idx: 0, .. })
         ));
     }
 
-    // ── Test 20: unary_str_to_i64 accepts Str (and NullLiteral) ───────────────
+    // ── Test 20: str_to_i64 accepts Str (and NullLiteral) ───────────────
     // Why: string in → integer out. The shape used by `length()`.
 
     #[test]
-    fn unary_str_to_i64_accepts_str() {
+    fn str_to_i64_accepts_str() {
         let args_str = [InferredType::Known(FieldType::Str)];
         assert_eq!(
-            unary_str_to_i64(&args_str).unwrap(),
+            str_to_i64(&args_str).unwrap(),
             InferredType::Known(FieldType::I64)
         );
 
         let args_null = [InferredType::NullLiteral];
         assert_eq!(
-            unary_str_to_i64(&args_null).unwrap(),
+            str_to_i64(&args_null).unwrap(),
             InferredType::Known(FieldType::I64)
         );
     }
 
-    // ── Test 21: unary_str_to_i64 rejects I64 ─────────────────────────────────
+    // ── Test 21: str_to_i64 rejects I64 ─────────────────────────────────
     // Why: `length(42)` makes no sense. Error tells users they passed the wrong type at arg 0.
 
     #[test]
-    fn unary_str_to_i64_rejects_i64() {
+    fn str_to_i64_rejects_i64() {
         let args = [InferredType::Known(FieldType::I64)];
-        let r = unary_str_to_i64(&args);
+        let r = str_to_i64(&args);
         assert!(matches!(
             r,
             Err(InferError::TypeMismatch { arg_idx: 0, .. })
         ));
     }
 
-    // ── Test 22: unary_numeric_same I64 returns I64 ───────────────────────────
+    // ── Test 22: numeric_same I64 returns I64 ───────────────────────────
     // Why: `abs(int)` should stay int. Don't sneak in a float upgrade.
 
     #[test]
-    fn unary_numeric_same_i64_returns_i64() {
+    fn numeric_same_i64_returns_i64() {
         let args = [InferredType::Known(FieldType::I64)];
-        let r = unary_numeric_same(&args);
+        let r = numeric_same(&args);
         assert_eq!(r.unwrap(), InferredType::Known(FieldType::I64));
     }
 
-    // ── Test 23: unary_numeric_same F64 returns F64 ───────────────────────────
+    // ── Test 23: numeric_same F64 returns F64 ───────────────────────────
     // Why: `abs(float)` stays float. Confirms the result tracks the input, not hardcoded to int.
 
     #[test]
-    fn unary_numeric_same_f64_returns_f64() {
+    fn numeric_same_f64_returns_f64() {
         let args = [InferredType::Known(FieldType::F64)];
-        let r = unary_numeric_same(&args);
+        let r = numeric_same(&args);
         assert_eq!(r.unwrap(), InferredType::Known(FieldType::F64));
     }
 
-    // ── Test 24: unary_numeric_same rejects Str ───────────────────────────────
+    // ── Test 24: numeric_same rejects Str ───────────────────────────────
     // Why: `abs("hello")` is nonsense. Error points at arg 0.
 
     #[test]
-    fn unary_numeric_same_rejects_str() {
+    fn numeric_same_rejects_str() {
         let args = [InferredType::Known(FieldType::Str)];
-        let r = unary_numeric_same(&args);
+        let r = numeric_same(&args);
         assert!(matches!(
             r,
             Err(InferError::TypeMismatch { arg_idx: 0, .. })
         ));
     }
 
-    // ── Test 25: unary_numeric_to_f64 I64 returns F64 ─────────────────────────
+    // ── Test 25: numeric_to_f64 I64 returns F64 ─────────────────────────
     // Why: `log(int)` returns float — log always produces a real number, even from an integer.
 
     #[test]
-    fn unary_numeric_to_f64_i64_returns_f64() {
+    fn numeric_to_f64_i64_returns_f64() {
         let args = [InferredType::Known(FieldType::I64)];
-        let r = unary_numeric_to_f64(&args);
+        let r = numeric_to_f64(&args);
         assert_eq!(r.unwrap(), InferredType::Known(FieldType::F64));
     }
 
-    // ── Test 26: unary_numeric_to_f64 F64 returns F64 ─────────────────────────
+    // ── Test 26: numeric_to_f64 F64 returns F64 ─────────────────────────
     // Why: float input also returns float. The output type is fixed, not input-dependent.
 
     #[test]
-    fn unary_numeric_to_f64_f64_returns_f64() {
+    fn numeric_to_f64_f64_returns_f64() {
         let args = [InferredType::Known(FieldType::F64)];
-        let r = unary_numeric_to_f64(&args);
+        let r = numeric_to_f64(&args);
         assert_eq!(r.unwrap(), InferredType::Known(FieldType::F64));
     }
 
-    // ── Test 27: unary_numeric_to_f64 rejects Str ─────────────────────────────
+    // ── Test 27: numeric_to_f64 rejects Str ─────────────────────────────
     // Why: `log("hi")` is nonsense. Error at arg 0.
 
     #[test]
-    fn unary_numeric_to_f64_rejects_str() {
+    fn numeric_to_f64_rejects_str() {
         let args = [InferredType::Known(FieldType::Str)];
-        let r = unary_numeric_to_f64(&args);
+        let r = numeric_to_f64(&args);
         assert!(matches!(
             r,
             Err(InferError::TypeMismatch { arg_idx: 0, .. })
         ));
     }
 
-    // ── Test 28: binary_numeric_to_f64 I64/I64 returns F64 ────────────────────
+    // ── Test 28: two_numeric_to_f64 I64/I64 returns F64 ────────────────────
     // Why: `pow(2, 3)` returns float even though both inputs are int — pow always gives back float.
 
     #[test]
-    fn binary_numeric_to_f64_i64_i64_returns_f64() {
+    fn two_numeric_to_f64_i64_i64_returns_f64() {
         let args = [
             InferredType::Known(FieldType::I64),
             InferredType::Known(FieldType::I64),
         ];
-        let r = binary_numeric_to_f64(&args);
+        let r = two_numeric_to_f64(&args);
         assert_eq!(r.unwrap(), InferredType::Known(FieldType::F64));
     }
 
-    // ── Test 29: binary_numeric_to_f64 F64/I64 returns F64 ────────────────────
+    // ── Test 29: two_numeric_to_f64 F64/I64 returns F64 ────────────────────
     // Why: mixed int/float input → float output. Same as two ints.
 
     #[test]
-    fn binary_numeric_to_f64_f64_i64_returns_f64() {
+    fn two_numeric_to_f64_f64_i64_returns_f64() {
         let args = [
             InferredType::Known(FieldType::F64),
             InferredType::Known(FieldType::I64),
         ];
-        let r = binary_numeric_to_f64(&args);
+        let r = two_numeric_to_f64(&args);
         assert_eq!(r.unwrap(), InferredType::Known(FieldType::F64));
     }
 
-    // ── Test 30: binary_numeric_to_f64 rejects Str at either arg ──────────────
+    // ── Test 30: two_numeric_to_f64 rejects Str at either arg ──────────────
     // Why: string in either slot fails, and the error names the exact slot (arg 0 or arg 1).
 
     #[test]
-    fn binary_numeric_to_f64_rejects_str() {
+    fn two_numeric_to_f64_rejects_str() {
         // Str at arg 0
         let args0 = [
             InferredType::Known(FieldType::Str),
             InferredType::Known(FieldType::I64),
         ];
         assert!(matches!(
-            binary_numeric_to_f64(&args0),
+            two_numeric_to_f64(&args0),
             Err(InferError::TypeMismatch { arg_idx: 0, .. })
         ));
 
@@ -881,20 +792,20 @@ mod tests {
             InferredType::Known(FieldType::Str),
         ];
         assert!(matches!(
-            binary_numeric_to_f64(&args1),
+            two_numeric_to_f64(&args1),
             Err(InferError::TypeMismatch { arg_idx: 1, .. })
         ));
     }
 
-    // ── Test 31: binary_numeric_to_f64 rejects wrong arity ────────────────────
+    // ── Test 31: two_numeric_to_f64 rejects wrong arity ────────────────────
     // Why: not exactly 2 args → arity error. Confirms the helper checks count, not just types.
 
     #[test]
-    fn binary_numeric_to_f64_rejects_wrong_arity() {
+    fn two_numeric_to_f64_rejects_wrong_arity() {
         // Too few: expected 2, got 1
         let args_short = [InferredType::Known(FieldType::I64)];
         assert!(matches!(
-            binary_numeric_to_f64(&args_short),
+            two_numeric_to_f64(&args_short),
             Err(InferError::Arity {
                 expected: 2,
                 got: 1
@@ -908,7 +819,7 @@ mod tests {
             InferredType::Known(FieldType::I64),
         ];
         assert!(matches!(
-            binary_numeric_to_f64(&args_long),
+            two_numeric_to_f64(&args_long),
             Err(InferError::Arity {
                 expected: 2,
                 got: 3
@@ -961,18 +872,18 @@ mod tests {
         ));
     }
 
-    // ── Test 35: polymorphic_var0_unify same type ─────────────────────────────
+    // ── Test 35: infer_same_type_all_args same type ─────────────────────────────
     // Why: `coalesce(int, int, int)` returns int. Tested with several types so result isn't hardcoded.
 
     #[test]
-    fn polymorphic_var0_unify_same_type() {
+    fn infer_same_type_all_args_same_type() {
         // I64
         let args_i64 = [
             InferredType::Known(FieldType::I64),
             InferredType::Known(FieldType::I64),
         ];
         assert_eq!(
-            polymorphic_var0_unify(&args_i64).unwrap(),
+            infer_same_type_all_args(&args_i64).unwrap(),
             InferredType::Known(FieldType::I64)
         );
 
@@ -982,7 +893,7 @@ mod tests {
             InferredType::Known(FieldType::F64),
         ];
         assert_eq!(
-            polymorphic_var0_unify(&args_f64).unwrap(),
+            infer_same_type_all_args(&args_f64).unwrap(),
             InferredType::Known(FieldType::F64)
         );
 
@@ -992,23 +903,23 @@ mod tests {
             InferredType::Known(FieldType::Str),
         ];
         assert_eq!(
-            polymorphic_var0_unify(&args_str).unwrap(),
+            infer_same_type_all_args(&args_str).unwrap(),
             InferredType::Known(FieldType::Str)
         );
     }
 
-    // ── Test 36: polymorphic_var0_unify NullLiteral as hole ───────────────────
+    // ── Test 36: infer_same_type_all_args NullLiteral as hole ───────────────────
     // Why: a `null` in `coalesce` doesn't pick the type — the real-typed arg does.
 
     #[test]
-    fn polymorphic_var0_unify_null_is_hole() {
+    fn infer_same_type_all_args_null_is_hole() {
         // NullLiteral at position 0
         let args0 = [
             InferredType::NullLiteral,
             InferredType::Known(FieldType::F64),
         ];
         assert_eq!(
-            polymorphic_var0_unify(&args0).unwrap(),
+            infer_same_type_all_args(&args0).unwrap(),
             InferredType::Known(FieldType::F64)
         );
 
@@ -1018,33 +929,33 @@ mod tests {
             InferredType::NullLiteral,
         ];
         assert_eq!(
-            polymorphic_var0_unify(&args1).unwrap(),
+            infer_same_type_all_args(&args1).unwrap(),
             InferredType::Known(FieldType::F64)
         );
     }
 
-    // ── Test 37: polymorphic_var0_unify all-null falls back to Str ────────────
+    // ── Test 37: infer_same_type_all_args all-null falls back to Str ────────────
     // Why: `coalesce(null, null)` has nothing to pin a type to — default to string.
 
     #[test]
-    fn polymorphic_var0_unify_all_null_falls_back_to_str() {
+    fn infer_same_type_all_args_all_null_falls_back_to_str() {
         let args = [InferredType::NullLiteral, InferredType::NullLiteral];
-        let r = polymorphic_var0_unify(&args);
+        let r = infer_same_type_all_args(&args);
         assert_eq!(r.unwrap(), InferredType::Known(FieldType::Str));
     }
 
-    // ── Test 38: polymorphic_var0_unify rejects I64 vs F64 ────────────────────
+    // ── Test 38: infer_same_type_all_args rejects I64 vs F64 ────────────────────
     // Why: `coalesce(int, float)` mixes types — fail loud. No silent upgrade like `+` does.
 
     #[test]
-    fn polymorphic_var0_unify_rejects_i64_vs_f64() {
+    fn infer_same_type_all_args_rejects_i64_vs_f64() {
         // I64 then F64
         let args0 = [
             InferredType::Known(FieldType::I64),
             InferredType::Known(FieldType::F64),
         ];
         assert!(matches!(
-            polymorphic_var0_unify(&args0),
+            infer_same_type_all_args(&args0),
             Err(InferError::Unify { .. })
         ));
 
@@ -1054,7 +965,7 @@ mod tests {
             InferredType::Known(FieldType::I64),
         ];
         assert!(matches!(
-            polymorphic_var0_unify(&args1),
+            infer_same_type_all_args(&args1),
             Err(InferError::Unify { .. })
         ));
     }
@@ -1116,37 +1027,23 @@ mod tests {
         ));
     }
 
-    // ── Test 41: unify_var0_with_class rejects strict mismatch under class ────
-    // Why: even when both args fit the class (both numeric), mixed int/float must still fail strict equality.
-
-    #[test]
-    fn unify_var0_with_class_rejects_strict_mismatch_under_class() {
-        // Both args satisfy Numeric but fail strict equality
-        let args = [
-            InferredType::Known(FieldType::I64),
-            InferredType::Known(FieldType::F64),
-        ];
-        let r = unify_var0_with_class(&args, &[0, 1], TypeClass::Numeric);
-        assert!(matches!(r, Err(InferError::Unify { .. })));
-    }
-
-    // ── Test 42: unary_numeric_same propagates NullLiteral ────────────────────
+    // ── Test 42: numeric_same propagates NullLiteral ────────────────────
     // Why: this is the only helper that returns the input type as-is. Null in → null out, not a fixed Known(...).
 
     #[test]
-    fn unary_numeric_same_propagates_null_literal() {
+    fn numeric_same_propagates_null_literal() {
         // Identity-preserving helper: NullLiteral in → NullLiteral out.
         // Unique to this helper; the others return a fixed Known(...) type.
         let args = [InferredType::NullLiteral];
-        let r = unary_numeric_same(&args);
+        let r = numeric_same(&args);
         assert_eq!(r.unwrap(), InferredType::NullLiteral);
     }
 
-    // ── Test 43: polymorphic_var0_unify variadic (4 and 5 args) ───────────────
+    // ── Test 43: infer_same_type_all_args variadic (4 and 5 args) ───────────────
     // Why: coalesce takes any number of args. Test with 4 and 5 so we know loops don't stop early.
 
     #[test]
-    fn polymorphic_var0_unify_variadic() {
+    fn infer_same_type_all_args_variadic() {
         // 4 args, all same type
         let args4 = [
             InferredType::Known(FieldType::I64),
@@ -1155,7 +1052,7 @@ mod tests {
             InferredType::Known(FieldType::I64),
         ];
         assert_eq!(
-            polymorphic_var0_unify(&args4).unwrap(),
+            infer_same_type_all_args(&args4).unwrap(),
             InferredType::Known(FieldType::I64)
         );
 
@@ -1168,7 +1065,7 @@ mod tests {
             InferredType::Known(FieldType::Str),
         ];
         assert_eq!(
-            polymorphic_var0_unify(&args5).unwrap(),
+            infer_same_type_all_args(&args5).unwrap(),
             InferredType::Known(FieldType::Str)
         );
 
@@ -1181,7 +1078,7 @@ mod tests {
             InferredType::NullLiteral,
         ];
         assert_eq!(
-            polymorphic_var0_unify(&args5_holes).unwrap(),
+            infer_same_type_all_args(&args5_holes).unwrap(),
             InferredType::Known(FieldType::F64)
         );
 
@@ -1195,7 +1092,7 @@ mod tests {
             InferredType::Known(FieldType::F64),
         ];
         assert!(matches!(
-            polymorphic_var0_unify(&args5_late_mismatch),
+            infer_same_type_all_args(&args5_late_mismatch),
             Err(InferError::Unify { .. })
         ));
     }
@@ -1208,30 +1105,30 @@ mod tests {
     // contract per-helper so a future refactor that tightens any helper's
     // null-handling fails loudly.
 
-    // ── Test 44: unary_numeric_to_f64 accepts NullLiteral ─────────────────────
+    // ── Test 44: numeric_to_f64 accepts NullLiteral ─────────────────────
     // Why: `log(null)` shouldn't be rejected — null is allowed; output is still float.
 
     #[test]
-    fn unary_numeric_to_f64_accepts_null_literal() {
+    fn numeric_to_f64_accepts_null_literal() {
         let args = [InferredType::NullLiteral];
         assert_eq!(
-            unary_numeric_to_f64(&args).unwrap(),
+            numeric_to_f64(&args).unwrap(),
             InferredType::Known(FieldType::F64)
         );
     }
 
-    // ── Test 45: binary_numeric_to_f64 accepts NullLiteral at each position ──
+    // ── Test 45: two_numeric_to_f64 accepts NullLiteral at each position ──
     // Why: `pow(null, 3)`, `pow(2, null)`, `pow(null, null)` all allowed — output type fixed at float.
 
     #[test]
-    fn binary_numeric_to_f64_accepts_null_literal() {
+    fn two_numeric_to_f64_accepts_null_literal() {
         // NullLiteral at arg 0
         let args0 = [
             InferredType::NullLiteral,
             InferredType::Known(FieldType::F64),
         ];
         assert_eq!(
-            binary_numeric_to_f64(&args0).unwrap(),
+            two_numeric_to_f64(&args0).unwrap(),
             InferredType::Known(FieldType::F64)
         );
 
@@ -1241,14 +1138,14 @@ mod tests {
             InferredType::NullLiteral,
         ];
         assert_eq!(
-            binary_numeric_to_f64(&args1).unwrap(),
+            two_numeric_to_f64(&args1).unwrap(),
             InferredType::Known(FieldType::F64)
         );
 
         // Both NullLiteral
         let args_both = [InferredType::NullLiteral, InferredType::NullLiteral];
         assert_eq!(
-            binary_numeric_to_f64(&args_both).unwrap(),
+            two_numeric_to_f64(&args_both).unwrap(),
             InferredType::Known(FieldType::F64)
         );
     }
@@ -1310,19 +1207,19 @@ mod tests {
         }
     }
 
-    // ── Test 48: polymorphic_var0_unify with zero args ────────────────────────
+    // ── Test 48: infer_same_type_all_args with zero args ────────────────────────
     // Why: 0 args shouldn't happen in real use (arity check catches it first),
     // but the helper should still behave predictably — fall back to string,
     // same as the all-null case. Pins the contract so callers can rely on it.
 
     #[test]
-    fn polymorphic_var0_unify_zero_args() {
+    fn infer_same_type_all_args_zero_args() {
         let args: [InferredType; 0] = [];
         // Documented behavior: empty binding falls back to Str (same as
         // all-null). Alternative would be an InferError; pinning the Ok(Str)
         // contract here means callers can rely on it.
         assert_eq!(
-            polymorphic_var0_unify(&args).unwrap(),
+            infer_same_type_all_args(&args).unwrap(),
             InferredType::Known(FieldType::Str)
         );
     }
