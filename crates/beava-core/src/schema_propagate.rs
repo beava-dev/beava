@@ -501,8 +501,10 @@ fn infer_expr_type_inner(
         Expr::Cast {
             operand, target, ..
         } => {
-            // Walk operand for FieldMissing side effects on its subexpressions.
-            let _ = infer_expr_type_inner(op_index, operand, schema, errors);
+            // Infer the operand's type (also records FieldMissing side effects
+            // on its subexpressions). Kept so the legality check below mirrors
+            // the column-level cast path (`apply_cast_schema`).
+            let operand_type = infer_expr_type_inner(op_index, operand, schema, errors);
 
             // Read the target type name from the literal carried in Expr::Cast.target.
             // Parser already normalized Field("float") → Literal::BareIdent("float").
@@ -521,8 +523,8 @@ fn infer_expr_type_inner(
                 }
             };
 
-            match parse_cast_target(target_name) {
-                Some(ft) => Some(InferredType::Known(ft)),
+            let target_type = match parse_cast_target(target_name) {
+                Some(ft) => ft,
                 None => {
                     errors.push(PropagationError::TypeMismatch {
                         op_index,
@@ -531,9 +533,29 @@ fn infer_expr_type_inner(
                             target_name
                         ),
                     });
-                    None
+                    return None;
+                }
+            };
+
+            // Reject illegal casts at register time (e.g. Bytes → int), matching
+            // `apply_cast_schema`. Without this the expression-form cast would
+            // promise `target_type` but `cast_eval` returns Null at runtime —
+            // schema and behaviour disagree. NullLiteral / unknown operand types
+            // are not checked here (the operand error, if any, is already
+            // recorded above).
+            if let Some(InferredType::Known(source_type)) = operand_type {
+                if !is_cast_legal(source_type, target_type) {
+                    errors.push(PropagationError::TypeMismatch {
+                        op_index,
+                        reason: format!(
+                            "cannot cast from {source_type:?} to {target_type:?}: Bytes type cannot be cast"
+                        ),
+                    });
+                    return None;
                 }
             }
+
+            Some(InferredType::Known(target_type))
         }
     }
 }
@@ -1438,6 +1460,16 @@ mod tests {
         assert!(
             r2.is_err(),
             "expected TypeMismatch for unknown cast target 'blob', got {r2:?}"
+        );
+
+        // Illegal cast (Bytes → anything) is rejected at register time, the
+        // same as the column-level cast path. Without this the expression
+        // would infer I64 but `cast_eval` returns Null at runtime.
+        let s_bytes = schema_with(&[("blob", FieldType::Bytes)]);
+        let r3 = parse_and_infer("cast(blob, int)", &s_bytes);
+        assert!(
+            r3.is_err(),
+            "expected TypeMismatch casting Bytes → int, got {r3:?}"
         );
     }
 
