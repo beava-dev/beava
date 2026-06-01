@@ -614,10 +614,10 @@ pub fn is_network_fs(path: &Path) -> bool {
         }
 
         // Known Linux NFS/SMB/FUSE f_type magic numbers.
-        const NFS_SUPER_MAGIC: u64 = 0x6969;
-        const SMB_SUPER_MAGIC: u64 = 0x517B;
-        const CIFS_MAGIC_NUMBER: u64 = 0xFF534D42;
-        const FUSE_SUPER_MAGIC: u64 = 0x65735546;
+        const NFS_SUPER_MAGIC: i64 = 0x6969;
+        const SMB_SUPER_MAGIC: i64 = 0x517B;
+        const CIFS_MAGIC_NUMBER: i64 = 0xFF534D42;
+        const FUSE_SUPER_MAGIC: i64 = 0x65735546;
 
         matches!(
             stat.f_type,
