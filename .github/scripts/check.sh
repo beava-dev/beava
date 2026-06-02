@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
 # Local pre-PR check — runs the same gates CI runs (cargo fmt + clippy +
-# tests + Python tests) and writes a one-line PASS/FAIL summary you can
-# paste into the PR description as proof.
+# tests + Python tests + beava-js Vitest) and writes a one-line PASS/FAIL
+# summary you can paste into the PR description as proof.
 #
 # Usage:
 #   bash .github/scripts/check.sh            # run everything, print summary
 #   bash .github/scripts/check.sh --fast     # skip cargo test (~10× faster)
 #   bash .github/scripts/check.sh --rust     # rust gates only (cargo fmt/clippy/test)
 #   bash .github/scripts/check.sh --python   # python gates only (ruff + mypy + pytest)
+#   bash .github/scripts/check.sh --js       # beava-js only (pnpm install + turbo lint/check-types/test)
 #   bash .github/scripts/check.sh --output=  # path for full log (default ~/.beava-check.log)
 #
-# --rust and --python are mutually exclusive; pass neither to run both.
+# When target/debug/beava exists, beava-js Vitest also runs HTTP integration tests (BEAVA_INTEGRATION=1).
+# Otherwise three integration tests are skipped (same as CI after cargo build).
+#
+# --rust, --python, and --js are mutually exclusive; pass none to run rust + python + beava-js.
 #
 # Exit code: 0 if all checks pass, non-zero otherwise.
 set -uo pipefail
@@ -18,12 +22,14 @@ set -uo pipefail
 FAST=0
 RUN_RUST=1
 RUN_PYTHON=1
+RUN_JS=1
 OUT="$HOME/.beava-check.log"
 for arg in "$@"; do
   case "$arg" in
     --fast) FAST=1 ;;
-    --rust) RUN_PYTHON=0 ;;
-    --python) RUN_RUST=0 ;;
+    --rust) RUN_PYTHON=0; RUN_JS=0 ;;
+    --python) RUN_RUST=0; RUN_JS=0 ;;
+    --js) RUN_RUST=0; RUN_PYTHON=0; RUN_JS=1 ;;
     --output=*) OUT="${arg#--output=}" ;;
     -h|--help)
       sed -n '2,/^set/p' "$0" | sed 's/^# \{0,1\}//; /^set /d'
@@ -32,8 +38,8 @@ for arg in "$@"; do
   esac
 done
 
-if [[ "$RUN_RUST" -eq 0 && "$RUN_PYTHON" -eq 0 ]]; then
-  echo "error: --rust and --python are mutually exclusive" >&2
+if [[ "$RUN_RUST" -eq 0 && "$RUN_PYTHON" -eq 0 && "$RUN_JS" -eq 0 ]]; then
+  echo "error: no check targets enabled (use --rust, --python, or --js)" >&2
   exit 2
 fi
 
@@ -98,6 +104,18 @@ if [[ "$RUN_PYTHON" -eq 1 && -d python && -f python/pyproject.toml ]]; then
   # are documented drift, tracked as v0.0.x cleanup backlog.
   run "pytest python (v0 acceptance suite)" \
     bash -c 'cd python && python -m pytest -q --no-header'
+fi
+
+if [[ "$RUN_JS" -eq 1 && -f "$REPO_ROOT/beava-js/package.json" ]]; then
+  js_cmd='cd beava-js && (command -v corepack >/dev/null 2>&1 && corepack enable pnpm || true) && pnpm install && pnpm exec turbo run lint check-types test'
+  if [[ -f "$REPO_ROOT/target/debug/beava" || -f "$REPO_ROOT/target/debug/beava.exe" ]]; then
+    run "pnpm turbo lint/check-types/test (beava-js, +HTTP integration)" \
+      env BEAVA_INTEGRATION=1 BEAVA_REPO_ROOT="$REPO_ROOT" bash -c "$js_cmd"
+  else
+    printf '\n(note: target/debug/beava missing; 3 HTTP integration Vitest tests skipped — run: cargo build --bin beava)\n' | tee -a "$OUT" >&2
+    run "pnpm turbo lint/check-types/test (beava-js, unit Vitest only)" \
+      bash -c "$js_cmd"
+  fi
 fi
 
 # Tail-of-log + summary.

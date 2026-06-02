@@ -114,3 +114,34 @@ jobs:
       - name: Run pytest (v0 acceptance suite via pyproject testpaths)
         working-directory: python
         run: python -m pytest -q --timeout=60 --no-header
+
+  beava-js:
+    name: beava-js (lint, types, Vitest + HTTP integration)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: beava-js-${{ runner.os }}
+
+      - name: Build beava binary (Vitest integration harness)
+        run: cargo build --bin beava
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Enable pnpm
+        run: corepack enable pnpm
+
+      - name: pnpm install + turbo (lint, check-types, test)
+        working-directory: beava-js
+        env:
+          BEAVA_INTEGRATION: "1"
+          BEAVA_REPO_ROOT: ${{ github.workspace }}
+        run: |
+          pnpm install
+          pnpm exec turbo run lint check-types test

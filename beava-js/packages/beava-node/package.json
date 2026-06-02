@@ -1,0 +1,54 @@
+{
+  "name": "@beava/sdk",
+  "version": "0.1.0",
+  "description": "Server-side TypeScript SDK for Beava feature servers.",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18.18.0"
+  },
+  "files": ["dist", "README.md"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "rimraf dist && tsc",
+    "prepack": "pnpm run build",
+    "test": "vitest run",
+    "lint": "eslint . --max-warnings 0",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/node": "^22.15.3",
+    "eslint": "^9.39.1",
+    "eslint-config-prettier": "^10.1.1",
+    "rimraf": "^6.0.1",
+    "typescript": "5.9.2",
+    "typescript-eslint": "^8.49.0",
+    "vitest": "^3.1.3"
+  },
+  "homepage": "https://beava.dev",
+  "bugs": {
+    "url": "https://github.com/beava-dev/beava/issues"
+  },
+  "keywords": ["beava", "features", "server", "sdk", "http", "real-time"],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/beava-dev/beava.git",
+    "directory": "beava-js/packages/beava-node"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
