@@ -1,0 +1,175 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/inter-tight";
+@import "@fontsource/alegreya/400.css";
+@import "@fontsource/alegreya/500.css";
+@import "@fontsource/alegreya/600.css";
+@import "@fontsource/alegreya/700.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+@import "./styles/beava-tokens.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans:
+    "Inter Tight", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    "Helvetica Neue", Arial, sans-serif;
+  --font-heading:
+    "Alegreya", ui-serif, Georgia, "Iowan Old Style", "Apple Garamond",
+    "Palatino Linotype", serif;
+  --font-serif:
+    "Alegreya", ui-serif, Georgia, "Iowan Old Style", "Apple Garamond",
+    "Palatino Linotype", serif;
+  --font-mono:
+    "JetBrains Mono", ui-monospace, "SF Mono", "Menlo", "Monaco", Consolas,
+    monospace;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-success-foreground: var(--success-foreground);
+  --color-success: var(--success);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --background: var(--beava-cream);
+  --foreground: var(--beava-brown-ink);
+  --card: #ffffff;
+  --card-foreground: var(--beava-brown-ink);
+  --popover: #ffffff;
+  --popover-foreground: var(--beava-brown-ink);
+  --primary: var(--beava-orange);
+  --primary-foreground: var(--beava-cream);
+  --secondary: var(--beava-cream-deep);
+  --secondary-foreground: var(--beava-brown-dark);
+  --muted: var(--beava-paper);
+  --muted-foreground: var(--beava-brown-mid);
+  --accent: var(--beava-orange-wash);
+  --accent-foreground: var(--beava-brown-dark);
+  --destructive: var(--beava-danger);
+  --success: var(--beava-success);
+  --success-foreground: var(--beava-cream);
+  --border: var(--beava-rule);
+  --input: var(--beava-rule);
+  --ring: var(--beava-orange-soft);
+  --chart-1: var(--beava-orange);
+  --chart-2: var(--beava-orange-soft);
+  --chart-3: var(--beava-success);
+  --chart-4: var(--beava-info);
+  --chart-5: var(--beava-warn);
+  --radius: var(--radius-beava);
+  --sidebar: var(--beava-cream-deep);
+  --sidebar-foreground: var(--beava-brown-ink);
+  --sidebar-primary: var(--beava-orange);
+  --sidebar-primary-foreground: var(--beava-cream);
+  --sidebar-accent: var(--primary);
+  --sidebar-accent-foreground: var(--primary-foreground);
+  --sidebar-border: var(--beava-rule);
+  --sidebar-ring: var(--beava-orange-soft);
+}
+
+.dark {
+  --background: var(--beava-brown-ink);
+  --foreground: var(--beava-cream);
+  --card: var(--beava-brown-dark);
+  --card-foreground: var(--beava-cream);
+  --popover: var(--beava-brown-dark);
+  --popover-foreground: var(--beava-cream);
+  --primary: var(--beava-orange-soft);
+  --primary-foreground: var(--beava-brown-ink);
+  --secondary: var(--beava-brown);
+  --secondary-foreground: var(--beava-cream);
+  --muted: var(--beava-brown);
+  --muted-foreground: #c4a88f;
+  --accent: #4a3528;
+  --accent-foreground: var(--beava-cream);
+  --destructive: #d46a52;
+  --success: #6b9a58;
+  --success-foreground: var(--beava-brown-ink);
+  --border: rgb(246 238 217 / 12%);
+  --input: rgb(246 238 217 / 16%);
+  --ring: var(--beava-orange-glow);
+  --chart-1: var(--beava-orange-soft);
+  --chart-2: var(--beava-orange-glow);
+  --chart-3: var(--beava-success);
+  --chart-4: #6a9ab8;
+  --chart-5: var(--beava-warn);
+  --sidebar: #221c18;
+  --sidebar-foreground: var(--beava-cream);
+  --sidebar-primary: var(--beava-orange-soft);
+  --sidebar-primary-foreground: var(--beava-brown-ink);
+  --sidebar-accent: var(--primary);
+  --sidebar-accent-foreground: var(--primary-foreground);
+  --sidebar-border: rgb(246 238 217 / 12%);
+  --sidebar-ring: var(--beava-orange-glow);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    @apply font-sans;
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+  }
+
+  ::selection {
+    background: var(--beava-orange-glow);
+    color: var(--beava-brown-ink);
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--beava-focus-ring);
+    outline-offset: 2px;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}

@@ -1,0 +1,44 @@
+/* Beava admin brand tokens (aligned with beava design system palette) */
+
+:root {
+  --beava-orange: #b85c20;
+  --beava-orange-soft: #d97a3e;
+  --beava-orange-glow: #e89a65;
+  --beava-orange-wash: #fbecde;
+
+  --beava-brown-ink: #1a1714;
+  --beava-brown-dark: #3a2a1f;
+  --beava-brown: #6b4a35;
+  --beava-brown-mid: #8a6a54;
+
+  --beava-cream: #fdfaf4;
+  --beava-cream-deep: #f6eed9;
+  --beava-paper: #fbf5e8;
+  --beava-rule: #e6dccb;
+  --beava-rule-soft: #efe6d3;
+
+  --beava-success: #4a7a3a;
+  --beava-success-wash: #e5edd9;
+  --beava-warn: #c98a1e;
+  --beava-warn-wash: #fbecc6;
+  --beava-danger: #a6351f;
+  --beava-danger-wash: #f4d9d0;
+  --beava-info: #3a6a8a;
+  --beava-info-wash: #dbe6ee;
+
+  --beava-accent-hover: #a04e16;
+  --beava-focus-ring: #b85c2044;
+  --beava-border-strong: #d4c5a8;
+
+  --font-sans:
+    "Inter Tight", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    "Helvetica Neue", Arial, sans-serif;
+  --font-serif:
+    "Alegreya", ui-serif, Georgia, "Iowan Old Style", "Apple Garamond",
+    "Palatino Linotype", serif;
+  --font-mono:
+    "JetBrains Mono", ui-monospace, "SF Mono", "Menlo", "Monaco", Consolas,
+    monospace;
+
+  --radius-beava: 14px;
+}

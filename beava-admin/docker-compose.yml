@@ -1,0 +1,31 @@
+name: beava-admin
+
+services:
+  beava:
+    image: beavadev/beava:latest
+    pull_policy: always
+    container_name: beava-admin-beava
+    restart: unless-stopped
+    volumes:
+      - ./deploy/beava.yaml:/app/beava.yaml:ro
+      - beava-state:/data
+
+  admin:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: beava-admin-ui
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:8080"
+    environment:
+      BEAVA_ADMIN_UPSTREAM: http://beava:8090
+      BEAVA_DATA_UPSTREAM: http://beava:8080
+      BEAVA_CONTAINER_NAME: beava-admin-beava
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - beava
+
+volumes:
+  beava-state:
