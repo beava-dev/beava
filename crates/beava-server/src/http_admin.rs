@@ -47,6 +47,10 @@ pub struct RegistrySnapshot {
 
 pub type SharedRegistrySnapshot = Arc<RwLock<RegistrySnapshot>>;
 
+/// Static v0 estimate from PROJECT.md "Memory" budget (~7 KB per entity
+/// for a rich 30-feature pack). A periodic resampler is post-v0 work.
+pub const BYTES_PER_ENTITY_P99_V0_PLACEHOLDER: u64 = 7000;
+
 #[derive(Clone)]
 struct AdminState {
     snapshot: SharedRegistrySnapshot,
@@ -86,9 +90,6 @@ async fn metrics_handler(State(state): State<AdminState>) -> impl IntoResponse {
     let cold_evictions = ColdEntityEvictionCounter::count();
     let bucket_reclaims = BucketReclaimCounter::count();
     let entity_count = EntityCountResidentSnapshot::load();
-    // Static v0 estimate from PROJECT.md "Memory" budget (~7 KB per entity
-    // for a rich 30-feature pack). A periodic resampler is post-v0 work.
-    const BYTES_PER_ENTITY_P99_V0_PLACEHOLDER: u64 = 7000;
     // The lifetime-op aggregate counter currently aliases entropy
     // `categories_capped`; top-k displacement and histogram bucket drops
     // join when those operator internals expose hooks.

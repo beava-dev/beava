@@ -121,6 +121,10 @@ impl CountMinSketch {
         self.total
     }
 
+    pub fn counter_capacity(&self) -> usize {
+        self.counters.capacity()
+    }
+
     #[inline]
     fn rehash(hash: u64, seed: u64) -> u64 {
         let mut h = hash ^ seed;
@@ -355,6 +359,26 @@ impl TopKHeap {
             self.heap.iter().map(|(c, v)| (v.clone(), *c)).collect();
         out.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
         out
+    }
+
+    pub fn heap_capacity(&self) -> usize {
+        self.heap.capacity()
+    }
+
+    pub fn index_entry_count_estimate(&self) -> usize {
+        if self.index_ready {
+            self.index.len()
+        } else {
+            self.heap.len()
+        }
+    }
+
+    pub fn index_capacity_estimate(&self) -> usize {
+        if self.index_ready {
+            self.index.capacity()
+        } else {
+            self.heap.capacity()
+        }
     }
 
     pub fn estimated_bytes(&self) -> usize {

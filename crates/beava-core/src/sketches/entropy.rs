@@ -57,6 +57,10 @@ impl EntropyHistogram {
         self.counts.len()
     }
 
+    pub fn key_capacity_bytes(&self) -> usize {
+        self.counts.keys().map(|k| k.capacity()).sum()
+    }
+
     pub fn insert(&mut self, value: &str) {
         self.total = self.total.saturating_add(1);
         // 1) Already-tracked key → bump and return.

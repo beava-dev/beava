@@ -19,6 +19,7 @@ pub mod defaults;
 pub mod eval;
 pub mod expr;
 pub mod expr_builtins;
+pub mod mem_usage;
 pub mod op_chain;
 pub mod op_node;
 pub mod register_validate;
