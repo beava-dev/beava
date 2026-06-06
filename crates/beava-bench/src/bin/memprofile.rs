@@ -1,14 +1,19 @@
 //! Per-AggOp memory profile report for realistic workload configs.
 
 use anyhow::{anyhow, Context, Result};
-use beava_core::agg_op::{AggExtParams, AggKind, AggOp, AggOpDescriptor, SketchParams};
+use beava_core::agg_apply::apply_event_to_aggregations;
+use beava_core::agg_descriptor::AggregationDescriptor;
+use beava_core::agg_op::{AggKind, AggOpDescriptor};
+use beava_core::agg_state_table::{new_state_tables_for, EntityKey, StateTables};
 use beava_core::mem_usage::{MemBreakdown, MemProfile, MemUsage};
 use beava_core::row::{json_value_to_beava_value, Row, Value};
+use beava_core::{register_validate::validate_payload, registry::Registry};
 use clap::Parser;
 use serde_json::Value as JsonValue;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 #[derive(Debug, Parser)]
 #[command(name = "memprofile", about = "Profile per-AggOp memory usage")]
@@ -23,16 +28,6 @@ struct Args {
     metrics_bytes_per_entity_p99: u64,
     #[arg(long, default_value_t = 0.15)]
     tolerance: f64,
-}
-
-#[derive(Debug, Clone)]
-struct FeatureSpec {
-    source_events: Vec<String>,
-    derivation: String,
-    feature: String,
-    op_name: String,
-    key_path: Vec<String>,
-    desc: AggOpDescriptor,
 }
 
 #[derive(Debug, Clone)]
@@ -81,50 +76,6 @@ struct ReportInput<'a> {
 }
 
 #[derive(Debug, Clone)]
-struct TableSpec {
-    source_events: Vec<String>,
-    derivation: String,
-    key_path: Vec<String>,
-    features: Vec<FeatureSpec>,
-}
-
-struct TableState {
-    spec: TableSpec,
-    entities: BTreeMap<String, EntityState>,
-    events_applied: u64,
-}
-
-struct EntityState {
-    events_applied: u64,
-    features: Vec<ProfileSlot>,
-}
-
-struct ProfileSlot {
-    spec: FeatureSpec,
-    op: AggOp,
-    events_applied: u64,
-}
-
-impl ProfileSlot {
-    fn new(spec: FeatureSpec) -> Self {
-        Self {
-            op: AggOp::new(&spec.desc),
-            spec,
-            events_applied: 0,
-        }
-    }
-}
-
-impl EntityState {
-    fn new(features: &[FeatureSpec]) -> Self {
-        Self {
-            events_applied: 0,
-            features: features.iter().cloned().map(ProfileSlot::new).collect(),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
 struct EntityProfile {
     entity_key: String,
     events_applied: u64,
@@ -167,6 +118,69 @@ struct TableProfile {
     entities: Vec<EntityProfile>,
 }
 
+#[derive(Debug, Default)]
+struct ProfileCounters {
+    table_events: BTreeMap<u32, u64>,
+    entity_events: BTreeMap<(u32, String), u64>,
+    feature_events: BTreeMap<(u32, String, usize), u64>,
+    last_seen_ms: BTreeMap<(u32, String), u64>,
+}
+
+impl ProfileCounters {
+    fn record_descriptor_entity(
+        &mut self,
+        desc: &AggregationDescriptor,
+        entity_key: String,
+        now_ms: i64,
+        cold_after_ms: Option<u64>,
+    ) {
+        let entity_id = (desc.agg_id, entity_key.clone());
+        if let Some(ttl_ms) = cold_after_ms {
+            let now_ms = now_ms as u64;
+            if self
+                .last_seen_ms
+                .get(&entity_id)
+                .map(|last_seen| now_ms.saturating_sub(*last_seen) > ttl_ms)
+                .unwrap_or(false)
+            {
+                self.entity_events.remove(&entity_id);
+                for feature_index in 0..desc.features.len() {
+                    self.feature_events
+                        .remove(&(desc.agg_id, entity_key.clone(), feature_index));
+                }
+            }
+            self.last_seen_ms.insert(entity_id.clone(), now_ms);
+        }
+
+        *self.table_events.entry(desc.agg_id).or_insert(0) += 1;
+        *self.entity_events.entry(entity_id).or_insert(0) += 1;
+        for feature_index in 0..desc.features.len() {
+            *self
+                .feature_events
+                .entry((desc.agg_id, entity_key.clone(), feature_index))
+                .or_insert(0) += 1;
+        }
+    }
+
+    fn table_events(&self, agg_id: u32) -> u64 {
+        self.table_events.get(&agg_id).copied().unwrap_or(0)
+    }
+
+    fn entity_events(&self, agg_id: u32, entity_key: &str) -> u64 {
+        self.entity_events
+            .get(&(agg_id, entity_key.to_string()))
+            .copied()
+            .unwrap_or(0)
+    }
+
+    fn feature_events(&self, agg_id: u32, entity_key: &str, feature_index: usize) -> u64 {
+        self.feature_events
+            .get(&(agg_id, entity_key.to_string(), feature_index))
+            .copied()
+            .unwrap_or(0)
+    }
+}
+
 fn main() -> Result<()> {
     let args = Args::parse();
     let report = build_report(&args)?;
@@ -178,9 +192,14 @@ fn main() -> Result<()> {
 fn build_report(args: &Args) -> Result<String> {
     let workload = beava_bench::workloads::load_by_name(&args.workload)
         .with_context(|| format!("load workload {:?}", args.workload))?;
-    let features = feature_specs_from_register(&workload.register_payload)?;
-    let feature_count = features.len();
-    let mut tables = table_states_from_features(features)?;
+    let registry = registry_from_register(&workload.register_payload)?;
+    let descriptors = aggregation_descriptors(&registry);
+    let feature_count = descriptors
+        .iter()
+        .map(|desc| desc.features.len())
+        .sum::<usize>();
+    let mut state_tables = new_state_tables_for(&registry);
+    let mut counters = ProfileCounters::default();
 
     let mut events_generated = 0;
     let mut events_by_source = BTreeMap::new();
@@ -191,28 +210,30 @@ fn build_report(args: &Args) -> Result<String> {
             .or_insert(0) += 1;
         let now_ms = event_time_ms(&event.fields).unwrap_or(1_000_000 + idx as i64 * 1_000);
         let row = row_from_fields(event.fields);
-        for table in tables
-            .iter_mut()
-            .filter(|table| matches_source(&table.spec.source_events, &event.event_name))
-        {
-            let Some(entity_key) = entity_key_from_row(&row, &table.spec.key_path) else {
-                continue;
-            };
-            let entity = table
-                .entities
-                .entry(entity_key)
-                .or_insert_with(|| EntityState::new(&table.spec.features));
-            entity.events_applied += 1;
-            table.events_applied += 1;
-            for slot in &mut entity.features {
-                let field = slot.spec.desc.field.as_deref();
-                slot.op.update(&row, now_ms, field, true);
-                slot.events_applied += 1;
-            }
-        }
+        let cold_after_ms = registry
+            .get_event_descriptor(&event.event_name)
+            .and_then(|event_desc| event_desc.cold_after_ms);
+        record_profile_counters(
+            &registry,
+            &mut counters,
+            &event.event_name,
+            &row,
+            now_ms,
+            cold_after_ms,
+        );
+        apply_event_to_aggregations(
+            &event.event_name,
+            &row,
+            now_ms,
+            idx as u64,
+            &registry,
+            &mut state_tables,
+            cold_after_ms,
+        );
     }
 
-    let (mut table_profiles, mut rows) = collect_table_profiles(tables);
+    let (mut table_profiles, mut rows) =
+        collect_table_profiles(&registry, &state_tables, &counters);
 
     rows.sort_by(compare_profile_rows);
 
@@ -242,6 +263,68 @@ fn build_report(args: &Args) -> Result<String> {
         metrics_placeholder: args.metrics_bytes_per_entity_p99,
         tolerance: args.tolerance,
     }))
+}
+
+fn registry_from_register(register: &JsonValue) -> Result<Registry> {
+    let payload: beava_server::register::RegisterPayload =
+        serde_json::from_value(register.clone()).context("parse workload register payload")?;
+    let registry = Registry::new();
+    let validated = validate_payload(&registry.snapshot(), payload.nodes).map_err(|errors| {
+        let first = errors
+            .first()
+            .map(|err| format!("{}: {}", err.path, err.reason))
+            .unwrap_or_else(|| "unknown validation error".to_string());
+        anyhow!("workload register payload failed validation: {first}")
+    })?;
+    let (nodes, compiled_chains, propagated_schemas, compiled_aggregations) =
+        validated.into_parts();
+    registry.apply_registration(
+        nodes,
+        compiled_chains,
+        propagated_schemas,
+        compiled_aggregations,
+    );
+    Ok(registry)
+}
+
+fn aggregation_descriptors(registry: &Registry) -> Vec<Arc<AggregationDescriptor>> {
+    let mut descriptors = registry
+        .snapshot()
+        .compiled_aggregations
+        .into_values()
+        .collect::<Vec<_>>();
+    descriptors.sort_by(|a, b| {
+        a.agg_id
+            .cmp(&b.agg_id)
+            .then_with(|| a.node_name.cmp(&b.node_name))
+    });
+    descriptors
+}
+
+fn record_profile_counters(
+    registry: &Registry,
+    counters: &mut ProfileCounters,
+    source_name: &str,
+    row: &Row,
+    now_ms: i64,
+    cold_after_ms: Option<u64>,
+) {
+    for desc in registry.compiled_aggregations_for_source(source_name) {
+        if let Some(chain) = registry.compiled_chain(&desc.node_name) {
+            if chain.apply(row.clone()).is_none() {
+                continue;
+            }
+        }
+        let Some(entity_key) = EntityKey::from_row(&desc.group_keys, row) else {
+            continue;
+        };
+        counters.record_descriptor_entity(
+            &desc,
+            format_entity_key(&entity_key),
+            now_ms,
+            cold_after_ms,
+        );
+    }
 }
 
 fn render_markdown(input: ReportInput<'_>) -> String {
@@ -308,7 +391,27 @@ fn render_markdown(input: ReportInput<'_>) -> String {
         ));
     }
 
-    out.push_str("\n## Per-Table Entity Details\n\n");
+    out.push_str("\n## AggOp Payload Bytes Plot\n\n");
+    out.push_str(
+        "Unique AggOp kinds grouped by max observed inline `payload_bytes` in 8-byte bands (`0-8`, `9-16`, ...). Bars use `#`; the detail table marks bands containing payloads at or above 48 bytes as boxing candidates.\n\n",
+    );
+    out.push_str("```text\n");
+    out.push_str("Payload band | Op count | Plot\n");
+    out.push_str("-------------|----------|----------------------------------\n");
+    for line in render_payload_plot_lines(input.rows) {
+        out.push_str(&line);
+        out.push('\n');
+    }
+    out.push_str("```\n\n");
+    out.push_str("| Payload band | Boxing candidate | Op count | AggOps |\n");
+    out.push_str("|--------------|------------------|----------|--------|\n");
+    for row in render_payload_detail_rows(input.rows) {
+        out.push_str(&row);
+        out.push('\n');
+    }
+    out.push('\n');
+
+    out.push_str("## Per-Table Entity Details\n\n");
     for table in input.table_profiles {
         out.push_str(&format!(
             "### `{}` (`{}` by `{}`)\n\n",
@@ -476,86 +579,73 @@ fn render_markdown(input: ReportInput<'_>) -> String {
     out.push_str("- `payload_bytes` is the active variant payload inside the enum slot. For boxed variants this is the inline `Box<T>` pointer, while the boxed pointee remains in `heap_bytes`.\n");
     out.push_str("- `slack_bytes` is unused capacity in the fixed-size `AggOp` enum slot: `enum_slot_bytes - payload_bytes`.\n");
     out.push_str("- Heap entries are deterministic structural counts; map/table allocator overhead is labeled as an estimate.\n");
+    out.push_str("- `AggOp` state is replayed through production `Registry` + `StateTables`; event counts come from a memprofile-only sidecar counter.\n");
     out.push_str("- Primary grain is `derivation table -> entity row -> feature column`; top offenders list one concrete entity-feature row per unique op.\n");
     out
 }
 
-fn table_states_from_features(features: Vec<FeatureSpec>) -> Result<Vec<TableState>> {
-    let mut grouped: BTreeMap<String, TableSpec> = BTreeMap::new();
-    for feature in features {
-        let entry = grouped
-            .entry(feature.derivation.clone())
-            .or_insert_with(|| TableSpec {
-                source_events: feature.source_events.clone(),
-                derivation: feature.derivation.clone(),
-                key_path: feature.key_path.clone(),
-                features: Vec::new(),
-            });
-        if entry.source_events != feature.source_events || entry.key_path != feature.key_path {
-            return Err(anyhow!(
-                "derivation {:?} has inconsistent source/key path",
-                feature.derivation
-            ));
-        }
-        entry.features.push(feature);
-    }
-    Ok(grouped
-        .into_values()
-        .map(|mut spec| {
-            spec.features.sort_by(|a, b| a.feature.cmp(&b.feature));
-            TableState {
-                spec,
-                entities: BTreeMap::new(),
-                events_applied: 0,
-            }
-        })
-        .collect())
-}
-
-fn collect_table_profiles(tables: Vec<TableState>) -> (Vec<TableProfile>, Vec<ProfileRow>) {
+fn collect_table_profiles(
+    registry: &Registry,
+    state_tables: &StateTables,
+    counters: &ProfileCounters,
+) -> (Vec<TableProfile>, Vec<ProfileRow>) {
     let mut all_rows = Vec::new();
     let mut table_profiles = Vec::new();
-    for table in tables {
+    for desc in aggregation_descriptors(registry) {
+        let source_events = vec![desc.source_node_name.clone()];
+        let derivation = desc.node_name.clone();
+        let key_path = desc.group_keys.clone();
+        let configured_features = desc.features.len();
         let mut entities = Vec::new();
-        for (entity_key, entity) in table.entities {
-            let mut entity_profile = MemProfile::new(entity_key.clone(), 0);
-            let mut feature_rows = Vec::with_capacity(entity.features.len());
-            for slot in entity.features {
-                let spec = slot.spec;
-                let mut profile = slot.op.mem_profile();
-                profile.label = format!(
-                    "{}::{}[{}]::{} ({})",
-                    format_sources(&spec.source_events),
-                    spec.derivation,
+        if let Some(table) = state_tables.get(desc.agg_id as usize) {
+            for (entity_key, ops) in table.iter_sorted() {
+                let entity_key = format_entity_key(&entity_key);
+                let entity_events = counters.entity_events(desc.agg_id, &entity_key);
+                let mut entity_profile = MemProfile::new(entity_key.clone(), 0);
+                let mut feature_rows = Vec::with_capacity(desc.features.len());
+                for (feature_index, feature) in desc.features.iter().enumerate() {
+                    let Some(op) = ops.get(feature_index) else {
+                        continue;
+                    };
+                    let mut profile = op.mem_profile();
+                    let op_name = op_name_from_kind(feature.descriptor.kind).to_string();
+                    let shape = profile_shape(&feature.descriptor);
+                    let feature_name = feature.feature_name.clone();
+                    let events_applied =
+                        counters.feature_events(desc.agg_id, &entity_key, feature_index);
+                    profile.label = format!(
+                        "{}::{}[{}]::{} ({})",
+                        format_sources(&source_events),
+                        derivation,
+                        entity_key,
+                        feature_name,
+                        op_name
+                    );
+                    add_profile_totals(&mut entity_profile, &profile);
+                    let row = ProfileRow {
+                        source_events: source_events.clone(),
+                        derivation: derivation.clone(),
+                        entity_key: entity_key.clone(),
+                        entity_events,
+                        feature: feature_name,
+                        op_name,
+                        key_path: key_path.clone(),
+                        events_applied,
+                        window_ms: feature.descriptor.window_ms,
+                        shape,
+                        profile,
+                    };
+                    feature_rows.push(row.clone());
+                    all_rows.push(row);
+                }
+                feature_rows.sort_by(compare_profile_rows);
+                entities.push(EntityProfile {
                     entity_key,
-                    spec.feature,
-                    spec.op_name
-                );
-                add_profile_totals(&mut entity_profile, &profile);
-                let shape = profile_shape(&spec.desc);
-                let row = ProfileRow {
-                    source_events: spec.source_events,
-                    derivation: spec.derivation,
-                    entity_key: entity_key.clone(),
-                    entity_events: entity.events_applied,
-                    feature: spec.feature,
-                    op_name: spec.op_name,
-                    key_path: spec.key_path,
-                    events_applied: slot.events_applied,
-                    window_ms: spec.desc.window_ms,
-                    shape,
-                    profile,
-                };
-                feature_rows.push(row.clone());
-                all_rows.push(row);
+                    events_applied: entity_events,
+                    profile: entity_profile,
+                    features: feature_rows,
+                });
             }
-            feature_rows.sort_by(compare_profile_rows);
-            entities.push(EntityProfile {
-                entity_key,
-                events_applied: entity.events_applied,
-                profile: entity_profile,
-                features: feature_rows,
-            });
         }
         entities.sort_by(compare_entity_profiles);
         let feature_summaries = feature_summaries_for_table(&entities);
@@ -572,12 +662,12 @@ fn collect_table_profiles(tables: Vec<TableState>) -> (Vec<TableProfile>, Vec<Pr
             .map(|entity| entity.profile.total_bytes())
             .collect::<Vec<_>>();
         table_profiles.push(TableProfile {
-            source_events: table.spec.source_events,
-            derivation: table.spec.derivation,
-            key_path: table.spec.key_path,
-            configured_features: table.spec.features.len(),
+            source_events,
+            derivation,
+            key_path,
+            configured_features,
             active_entities: entities.len(),
-            events_applied: table.events_applied,
+            events_applied: counters.table_events(desc.agg_id),
             stack_p50: percentile_usize(stack_values.clone(), 0.50),
             stack_p99: percentile_usize(stack_values.clone(), 0.99),
             stack_max: stack_values.into_iter().max().unwrap_or(0),
@@ -681,21 +771,6 @@ fn compare_entity_profiles(a: &EntityProfile, b: &EntityProfile) -> std::cmp::Or
         .then_with(|| a.entity_key.cmp(&b.entity_key))
 }
 
-fn matches_source(sources: &[String], event_name: &str) -> bool {
-    sources.is_empty() || sources.iter().any(|source| source == event_name)
-}
-
-fn entity_key_from_row(row: &Row, key_path: &[String]) -> Option<String> {
-    if key_path.is_empty() {
-        return Some("<global>".to_string());
-    }
-    key_path
-        .iter()
-        .map(|key| row.get(key).map(value_key_part))
-        .collect::<Option<Vec<_>>>()
-        .map(|parts| parts.join("|"))
-}
-
 fn value_key_part(value: &Value) -> String {
     match value {
         Value::Null => "null".to_string(),
@@ -709,6 +784,17 @@ fn value_key_part(value: &Value) -> String {
         Value::List(values) => format!("<list:{}>", values.len()),
         Value::Map(values) => format!("<map:{}>", values.len()),
     }
+}
+
+fn format_entity_key(key: &EntityKey) -> String {
+    if key.0.is_empty() {
+        return "<global>".to_string();
+    }
+    key.0
+        .iter()
+        .map(|(_, value)| value_key_part(value))
+        .collect::<Vec<_>>()
+        .join("|")
 }
 
 fn format_sources(sources: &[String]) -> String {
@@ -740,6 +826,137 @@ fn format_top_features(features: &[ProfileRow], limit: usize) -> String {
         })
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+fn render_payload_plot_lines(rows: &[ProfileRow]) -> Vec<String> {
+    const BAR_WIDTH: usize = 16;
+
+    let bands = payload_band_summaries(rows);
+    let max_count = bands
+        .iter()
+        .map(|band| band.ops.len())
+        .max()
+        .unwrap_or(1)
+        .max(1);
+    let mut lines = Vec::new();
+    for band in bands {
+        let op_count = band.ops.len();
+        let bar_len = if op_count == 0 {
+            0
+        } else {
+            ((op_count * BAR_WIDTH).div_ceil(max_count)).max(1)
+        };
+        let bar = "#".repeat(bar_len);
+        let plot = if bar.is_empty() {
+            String::new()
+        } else {
+            format!(" {bar}")
+        };
+        lines.push(format!(
+            "   {lower:>3}-{upper:<3} B | {count:>8} |{plot}",
+            lower = band.lower,
+            upper = band.upper,
+            count = op_count
+        ));
+    }
+    if lines.is_empty() {
+        lines.push("      -      |        0 |".into());
+    }
+    lines
+}
+
+fn render_payload_detail_rows(rows: &[ProfileRow]) -> Vec<String> {
+    const BOX_CANDIDATE_BYTES: usize = 48;
+
+    let mut out = Vec::new();
+    for band in payload_band_summaries(rows) {
+        let candidate = if band
+            .ops
+            .iter()
+            .any(|(_, payload_bytes)| *payload_bytes >= BOX_CANDIDATE_BYTES)
+        {
+            "yes"
+        } else {
+            "no"
+        };
+        let ops = if band.ops.is_empty() {
+            "-".to_string()
+        } else {
+            band.ops
+                .iter()
+                .map(|(op, bytes)| format!("`{op}({bytes}B)`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        out.push(format!(
+            "| {}-{} B | {} | {} | {} |",
+            band.lower,
+            band.upper,
+            candidate,
+            band.ops.len(),
+            ops
+        ));
+    }
+    if out.is_empty() {
+        out.push("| - | no | 0 | <no active ops> |".to_string());
+    }
+    out
+}
+
+#[derive(Debug)]
+struct PayloadBandSummary {
+    lower: usize,
+    upper: usize,
+    ops: Vec<(String, usize)>,
+}
+
+fn payload_band_summaries(rows: &[ProfileRow]) -> Vec<PayloadBandSummary> {
+    let mut max_payload_by_op: BTreeMap<String, usize> = BTreeMap::new();
+    for row in rows {
+        max_payload_by_op
+            .entry(row.op_name.clone())
+            .and_modify(|bytes| *bytes = (*bytes).max(row.profile.payload_bytes))
+            .or_insert(row.profile.payload_bytes);
+    }
+
+    let mut grouped: BTreeMap<(usize, usize), Vec<(String, usize)>> = BTreeMap::new();
+    for (op_name, payload_bytes) in max_payload_by_op {
+        let (lower, upper) = payload_band(payload_bytes);
+        grouped
+            .entry((lower, upper))
+            .or_default()
+            .push((op_name, payload_bytes));
+    }
+
+    let Some((first_band, _)) = grouped.first_key_value() else {
+        return Vec::new();
+    };
+    let Some((last_band, _)) = grouped.last_key_value() else {
+        return Vec::new();
+    };
+
+    let mut summaries = Vec::new();
+    let mut upper = first_band.1;
+    let last_upper = last_band.1;
+    while upper <= last_upper {
+        let lower = if upper <= 8 { 0 } else { upper - 7 };
+        let mut ops = grouped.remove(&(lower, upper)).unwrap_or_default();
+        summaries.push({
+            ops.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+            PayloadBandSummary { lower, upper, ops }
+        });
+        upper += 8;
+    }
+    summaries
+}
+
+fn payload_band(payload_bytes: usize) -> (usize, usize) {
+    if payload_bytes <= 8 {
+        (0, 8)
+    } else {
+        let upper = payload_bytes.div_ceil(8) * 8;
+        (upper - 7, upper)
+    }
 }
 
 fn top_breakdown(entries: &[MemBreakdown], limit: usize) -> Vec<MemBreakdown> {
@@ -841,150 +1058,63 @@ fn format_duration_ms(ms: u64) -> String {
     }
 }
 
-fn feature_specs_from_register(register: &JsonValue) -> Result<Vec<FeatureSpec>> {
-    let nodes = register
-        .get("nodes")
-        .and_then(JsonValue::as_array)
-        .ok_or_else(|| anyhow!("register payload missing nodes[]"))?;
-    let mut out = Vec::new();
-    for node in nodes
-        .iter()
-        .filter(|n| n.get("kind") == Some(&JsonValue::String("derivation".into())))
-    {
-        let derivation = node
-            .get("name")
-            .and_then(JsonValue::as_str)
-            .unwrap_or("unknown_derivation")
-            .to_string();
-        let source_events = string_array_field(node, "upstreams");
-        let table_key_path = string_array_field(node, "table_primary_key");
-        let Some(ops) = node.get("ops").and_then(JsonValue::as_array) else {
-            continue;
-        };
-        for step in ops {
-            let Some(agg) = step.get("agg").and_then(JsonValue::as_object) else {
-                continue;
-            };
-            let key_path = if table_key_path.is_empty() {
-                string_array_field(step, "keys")
-            } else {
-                table_key_path.clone()
-            };
-            for (feature, spec) in agg {
-                let op_name = spec
-                    .get("op")
-                    .and_then(JsonValue::as_str)
-                    .ok_or_else(|| anyhow!("feature {feature} missing op"))?
-                    .to_string();
-                let params = spec.get("params").unwrap_or(&JsonValue::Null);
-                out.push(FeatureSpec {
-                    source_events: source_events.clone(),
-                    derivation: derivation.clone(),
-                    feature: feature.clone(),
-                    desc: descriptor_from_op(&op_name, params)?,
-                    op_name,
-                    key_path: key_path.clone(),
-                });
-            }
-        }
+fn op_name_from_kind(kind: AggKind) -> &'static str {
+    match kind {
+        AggKind::Count => "count",
+        AggKind::Sum => "sum",
+        AggKind::Avg => "mean",
+        AggKind::Min => "min",
+        AggKind::Max => "max",
+        AggKind::Variance => "var",
+        AggKind::StdDev => "std",
+        AggKind::Ratio => "ratio",
+        AggKind::First => "first",
+        AggKind::Last => "last",
+        AggKind::FirstN => "first_n",
+        AggKind::LastN => "last_n",
+        AggKind::Lag => "lag",
+        AggKind::FirstSeen => "first_seen",
+        AggKind::LastSeen => "last_seen",
+        AggKind::Age => "age",
+        AggKind::HasSeen => "has_seen",
+        AggKind::TimeSince => "time_since",
+        AggKind::TimeSinceLastN => "time_since_last_n",
+        AggKind::Streak => "streak",
+        AggKind::MaxStreak => "max_streak",
+        AggKind::NegativeStreak => "negative_streak",
+        AggKind::FirstSeenInWindow => "first_seen_in_window",
+        AggKind::Ewma => "ewma",
+        AggKind::EwVar => "ewvar",
+        AggKind::EwZScore => "ew_zscore",
+        AggKind::DecayedSum => "decayed_sum",
+        AggKind::DecayedCount => "decayed_count",
+        AggKind::Twa => "twa",
+        AggKind::RateOfChange => "rate_of_change",
+        AggKind::InterArrivalStats => "inter_arrival_stats",
+        AggKind::BurstCount => "burst_count",
+        AggKind::DeltaFromPrev => "delta_from_prev",
+        AggKind::Trend => "trend",
+        AggKind::TrendResidual => "trend_residual",
+        AggKind::OutlierCount => "outlier_count",
+        AggKind::ValueChangeCount => "value_change_count",
+        AggKind::ZScore => "z_score",
+        AggKind::CountDistinct => "n_unique",
+        AggKind::Percentile => "quantile",
+        AggKind::TopK => "top_k",
+        AggKind::BloomMember => "bloom_member",
+        AggKind::Entropy => "entropy",
+        AggKind::Histogram => "histogram",
+        AggKind::HourOfDayHistogram => "hour_of_day_histogram",
+        AggKind::DowHourHistogram => "dow_hour_histogram",
+        AggKind::SeasonalDeviation => "seasonal_deviation",
+        AggKind::EventTypeMix => "event_type_mix",
+        AggKind::MostRecentN => "most_recent_n",
+        AggKind::ReservoirSample => "reservoir_sample",
+        AggKind::GeoVelocity => "geo_velocity",
+        AggKind::GeoDistance => "geo_distance",
+        AggKind::GeoSpread => "geo_spread",
+        AggKind::DistanceFromHome => "distance_from_home",
     }
-    Ok(out)
-}
-
-fn descriptor_from_op(op_name: &str, params: &JsonValue) -> Result<AggOpDescriptor> {
-    let kind = agg_kind_from_name(op_name)?;
-    let mut desc = AggOpDescriptor {
-        kind,
-        field: string_param(params, "field").or_else(|| string_param(params, "expr")),
-        window_ms: duration_param(params, "window")?,
-        n: number_param(params, "n").map(|n| n as u32),
-        half_life_ms: duration_param(params, "half_life")?,
-        sub_window_ms: duration_param(params, "sub_window")?,
-        sigma: float_param(params, "sigma"),
-        sketch_params: Some(SketchParams {
-            percentile_q: float_param(params, "q"),
-            top_k_k: number_param(params, "k"),
-            bloom_capacity: number_param(params, "capacity"),
-            bloom_fpr: float_param(params, "fpr"),
-        }),
-        ext: AggExtParams {
-            buckets: array_f64_param(params, "buckets"),
-            n: number_param(params, "n"),
-            k: number_param(params, "k"),
-            precision: number_param(params, "precision").map(|n| n as u32),
-            lat_field: string_param(params, "lat"),
-            lon_field: string_param(params, "lon"),
-            samples: number_param(params, "samples"),
-            categories: string_array_param(params, "categories"),
-            max_categories: number_param(params, "max_categories"),
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-    if desc.field.is_none() && matches!(kind, AggKind::BloomMember | AggKind::Entropy) {
-        desc.field = Some("__expr".into());
-    }
-    Ok(desc)
-}
-
-fn agg_kind_from_name(name: &str) -> Result<AggKind> {
-    let kind = match name {
-        "count" => AggKind::Count,
-        "sum" => AggKind::Sum,
-        "mean" => AggKind::Avg,
-        "min" => AggKind::Min,
-        "max" => AggKind::Max,
-        "var" => AggKind::Variance,
-        "std" => AggKind::StdDev,
-        "quantile" => AggKind::Percentile,
-        "n_unique" => AggKind::CountDistinct,
-        "top_k" => AggKind::TopK,
-        "bloom_member" => AggKind::BloomMember,
-        "entropy" => AggKind::Entropy,
-        "first" => AggKind::First,
-        "last" => AggKind::Last,
-        "first_n" => AggKind::FirstN,
-        "last_n" => AggKind::LastN,
-        "lag" => AggKind::Lag,
-        "first_seen" => AggKind::FirstSeen,
-        "last_seen" => AggKind::LastSeen,
-        "age" => AggKind::Age,
-        "has_seen" => AggKind::HasSeen,
-        "time_since" => AggKind::TimeSince,
-        "time_since_last_n" => AggKind::TimeSinceLastN,
-        "first_seen_in_window" => AggKind::FirstSeenInWindow,
-        "streak" => AggKind::Streak,
-        "max_streak" => AggKind::MaxStreak,
-        "negative_streak" => AggKind::NegativeStreak,
-        "ewma" => AggKind::Ewma,
-        "ewvar" => AggKind::EwVar,
-        "ew_zscore" => AggKind::EwZScore,
-        "decayed_sum" => AggKind::DecayedSum,
-        "decayed_count" => AggKind::DecayedCount,
-        "twa" => AggKind::Twa,
-        "rate_of_change" => AggKind::RateOfChange,
-        "inter_arrival_stats" => AggKind::InterArrivalStats,
-        "burst_count" => AggKind::BurstCount,
-        "delta_from_prev" => AggKind::DeltaFromPrev,
-        "trend" => AggKind::Trend,
-        "trend_residual" => AggKind::TrendResidual,
-        "outlier_count" => AggKind::OutlierCount,
-        "value_change_count" => AggKind::ValueChangeCount,
-        "z_score" => AggKind::ZScore,
-        "histogram" => AggKind::Histogram,
-        "hour_of_day_histogram" => AggKind::HourOfDayHistogram,
-        "dow_hour_histogram" => AggKind::DowHourHistogram,
-        "seasonal_deviation" => AggKind::SeasonalDeviation,
-        "event_type_mix" => AggKind::EventTypeMix,
-        "most_recent_n" => AggKind::MostRecentN,
-        "reservoir_sample" => AggKind::ReservoirSample,
-        "geo_velocity" => AggKind::GeoVelocity,
-        "geo_distance" => AggKind::GeoDistance,
-        "geo_spread" => AggKind::GeoSpread,
-        "distance_from_home" => AggKind::DistanceFromHome,
-        other => return Err(anyhow!("unsupported agg op {other:?}")),
-    };
-    Ok(kind)
 }
 
 fn row_from_fields(fields: serde_json::Map<String, JsonValue>) -> Row {
@@ -997,95 +1127,9 @@ fn event_time_ms(fields: &serde_json::Map<String, JsonValue>) -> Option<i64> {
     fields.get("event_time").and_then(JsonValue::as_i64)
 }
 
-fn string_array_field(value: &JsonValue, key: &str) -> Vec<String> {
-    value
-        .get(key)
-        .and_then(JsonValue::as_array)
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(JsonValue::as_str)
-                .map(str::to_string)
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-fn string_param(params: &JsonValue, key: &str) -> Option<String> {
-    params
-        .get(key)
-        .and_then(JsonValue::as_str)
-        .map(str::to_string)
-}
-
-fn number_param(params: &JsonValue, key: &str) -> Option<usize> {
-    params
-        .get(key)
-        .and_then(JsonValue::as_u64)
-        .map(|n| n as usize)
-}
-
-fn float_param(params: &JsonValue, key: &str) -> Option<f64> {
-    params.get(key).and_then(JsonValue::as_f64)
-}
-
-fn array_f64_param(params: &JsonValue, key: &str) -> Option<Vec<f64>> {
-    params.get(key)?.as_array().map(|items| {
-        items
-            .iter()
-            .filter_map(JsonValue::as_f64)
-            .collect::<Vec<f64>>()
-    })
-}
-
-fn string_array_param(params: &JsonValue, key: &str) -> Option<Vec<String>> {
-    params.get(key)?.as_array().map(|items| {
-        items
-            .iter()
-            .filter_map(JsonValue::as_str)
-            .map(str::to_string)
-            .collect::<Vec<String>>()
-    })
-}
-
-fn duration_param(params: &JsonValue, key: &str) -> Result<Option<u64>> {
-    let Some(raw) = params.get(key).and_then(JsonValue::as_str) else {
-        return Ok(None);
-    };
-    parse_duration_ms(raw)
-        .map(Some)
-        .with_context(|| format!("parse duration param {key}={raw:?}"))
-}
-
-fn parse_duration_ms(raw: &str) -> Result<u64> {
-    let raw = raw.trim();
-    let split_at = raw
-        .find(|c: char| !c.is_ascii_digit())
-        .ok_or_else(|| anyhow!("duration missing unit: {raw}"))?;
-    let (n, unit) = raw.split_at(split_at);
-    let n: u64 = n.parse()?;
-    let multiplier = match unit {
-        "ms" => 1,
-        "s" => 1_000,
-        "m" => 60_000,
-        "h" => 3_600_000,
-        "d" => 86_400_000,
-        _ => return Err(anyhow!("unsupported duration unit {unit:?}")),
-    };
-    Ok(n.saturating_mul(multiplier))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn memprofile_duration_parser_handles_fraud_units() {
-        assert_eq!(parse_duration_ms("10s").unwrap(), 10_000);
-        assert_eq!(parse_duration_ms("5m").unwrap(), 300_000);
-        assert_eq!(parse_duration_ms("24h").unwrap(), 86_400_000);
-        assert_eq!(parse_duration_ms("30d").unwrap(), 2_592_000_000);
-    }
 
     #[test]
     fn memprofile_report_contains_required_sections() {
@@ -1108,6 +1152,10 @@ mod tests {
         assert!(report.contains(
             "| Rank | Table | Source | group_by key | Active entities | Features/entity | Events applied | Stack p50 | Stack p99 | Stack max | Heap p50 | Heap p99 | Heap max | Total p50 | Total p99 | Total max | Top contributor |"
         ));
+        assert!(report.contains("## AggOp Payload Bytes Plot"));
+        assert!(report.contains("Payload band | Op count | Plot"));
+        assert!(report.contains("| Payload band | Boxing candidate | Op count | AggOps |"));
+        assert!(report.contains("| 41-48 B | yes |"));
         assert!(report.contains("`TxnByUser` | `Txn` | `user_id`"));
         assert!(report.contains("## Per-Table Entity Details"));
         assert!(report.contains("### `TxnByUser` (`Txn` by `user_id`)"));

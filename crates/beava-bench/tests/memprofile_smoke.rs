@@ -30,6 +30,10 @@ fn memprofile_smoke_writes_required_sections() {
     assert!(report.contains(
         "| Rank | Table | Source | group_by key | Active entities | Features/entity | Events applied | Stack p50 | Stack p99 | Stack max | Heap p50 | Heap p99 | Heap max | Total p50 | Total p99 | Total max | Top contributor |"
     ));
+    assert!(report.contains("## AggOp Payload Bytes Plot"));
+    assert!(report.contains("Payload band | Op count | Plot"));
+    assert!(report.contains("| Payload band | Boxing candidate | Op count | AggOps |"));
+    assert!(report.contains("| 41-48 B | yes |"));
     assert!(report.contains("`TxnByUser` | `Txn` | `user_id`"));
     assert!(report.contains("## Per-Table Entity Details"));
     assert!(report.contains("### `TxnByUser` (`Txn` by `user_id`)"));

@@ -41,6 +41,15 @@ impl std::hash::Hasher for NoOpHasher {
 
 type HashSetU64 = hashbrown::HashSet<u64, std::hash::BuildHasherDefault<NoOpHasher>>;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CountDistinctHashSetStats {
+    pub usage_limit: usize,
+    pub requested_capacity: usize,
+    pub usable_capacity: usize,
+    pub inferred_backing_buckets: usize,
+    pub allocation_size_bytes: usize,
+}
+
 /// Three-mode adaptive distinct-count state. Promotes from `ExactArray` →
 /// `HashSet` → `Hll` automatically on insert. Serde tags are stable v0
 /// snapshot identifiers (`v0_count_distinct_*`).
@@ -91,6 +100,22 @@ impl CountDistinctState {
     pub fn hash_set_capacity(&self) -> Option<usize> {
         match self {
             CountDistinctState::HashSet { hashes } => Some(hashes.capacity()),
+            _ => None,
+        }
+    }
+
+    pub fn hash_set_stats(&self) -> Option<CountDistinctHashSetStats> {
+        match self {
+            CountDistinctState::HashSet { hashes } => {
+                let usable_capacity = hashes.capacity();
+                Some(CountDistinctHashSetStats {
+                    usage_limit: HASH_THRESHOLD,
+                    requested_capacity: HASH_THRESHOLD,
+                    usable_capacity,
+                    inferred_backing_buckets: infer_hashbrown_bucket_count(usable_capacity),
+                    allocation_size_bytes: hashes.allocation_size(),
+                })
+            }
             _ => None,
         }
     }
@@ -229,6 +254,19 @@ impl CountDistinctState {
                 unreachable!("promote_to_hll above ensures self is Hll when other is Hll")
             }
         }
+    }
+}
+
+fn infer_hashbrown_bucket_count(usable_capacity: usize) -> usize {
+    if usable_capacity == 0 {
+        0
+    } else if usable_capacity < 8 {
+        usable_capacity.saturating_add(1).next_power_of_two()
+    } else {
+        usable_capacity
+            .saturating_mul(8)
+            .div_ceil(7)
+            .next_power_of_two()
     }
 }
 

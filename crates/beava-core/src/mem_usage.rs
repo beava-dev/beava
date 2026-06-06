@@ -196,16 +196,27 @@ fn add_count_distinct_breakdown(profile: &mut MemProfile, state: &CountDistinctS
             "Vec",
             "capacity * size_of::<u64>() for exact distinct hashes",
         ),
-        CountDistinctState::HashSet { .. } => profile.add_breakdown(
-            "CountDistinct hash-set slots",
-            state
-                .inner
-                .hash_set_capacity()
-                .unwrap_or(0)
-                .saturating_mul(16),
-            "HashSet",
-            "estimated hashbrown slot cost for u64 distinct hashes",
-        ),
+        CountDistinctState::HashSet { .. } => {
+            let stats = state.inner.hash_set_stats();
+            let allocation_size_bytes = stats.map_or(0, |stats| stats.allocation_size_bytes);
+            let note = match stats {
+                Some(stats) => format!(
+                    "usage_limit={}; requested_capacity={}; hashbrown_usable_capacity={}; \
+                     inferred_backing_buckets={};",
+                    stats.usage_limit,
+                    stats.requested_capacity,
+                    stats.usable_capacity,
+                    stats.inferred_backing_buckets
+                ),
+                None => "bytes from hashbrown::HashSet::allocation_size()".into(),
+            };
+            profile.add_breakdown(
+                "CountDistinct hash-set slots",
+                allocation_size_bytes,
+                "HashSet",
+                note,
+            );
+        }
         CountDistinctState::Hll { sketch } => profile.add_breakdown(
             "CountDistinct HLL registers",
             sketch.register_capacity().saturating_mul(size_of::<u8>()),
@@ -793,10 +804,22 @@ mod tests {
             op.update(&row, i as i64, Some("merchant_id"), true);
         }
         let profile = op.mem_profile();
-        assert!(profile
+        let hash_set_breakdown = profile
             .breakdown
             .iter()
-            .any(|b| b.label == "CountDistinct hash-set slots"));
+            .find(|b| b.label == "CountDistinct hash-set slots")
+            .expect("hash-set mode should report hash-set slot breakdown");
+        assert!(hash_set_breakdown.note.contains("usage_limit=1024"));
+        assert!(hash_set_breakdown.note.contains("requested_capacity=1024"));
+        assert!(hash_set_breakdown
+            .note
+            .contains("hashbrown_usable_capacity="));
+        assert!(hash_set_breakdown
+            .note
+            .contains("inferred_backing_buckets="));
+        assert!(hash_set_breakdown
+            .note
+            .contains("HashSet::allocation_size()"));
     }
 
     #[test]
