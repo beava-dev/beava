@@ -155,12 +155,18 @@ def _descriptor_to_node(d: Any) -> dict[str, Any] | None:
         # transforms (filter/select/with_columns/...).
         has_agg = any(step.get("op") == "agg" for step in chain)
         output_kind = "table" if has_agg else "event"
+        # When the chain ends in `group_by(...).agg(...)`, the result is a
+        # table, and every table needs to know which columns are its key (the
+        # ones we grouped by). Grab those key columns here so they show up both
+        # in the field list and in `table_primary_key`, which the server needs
+        # for any table it stores.
+        key_cols = getattr(d, "_key_cols", []) or []
         parent_schema = _parent_wire_schema_from_root(ev_root)
         if has_agg:
-            fields = _infer_derivation_schema(chain, parent_schema, [])
+            fields = _infer_derivation_schema(chain, parent_schema, list(key_cols))
         else:
             fields = _infer_event_derivation_schema(chain, parent_schema)
-        return {
+        node: dict[str, Any] = {
             "kind": "derivation",
             "name": getattr(d, "_name", ""),
             "output_kind": output_kind,
@@ -168,6 +174,9 @@ def _descriptor_to_node(d: Any) -> dict[str, Any] | None:
             "ops": ops,
             "schema": {"fields": fields, "optional_fields": []},
         }
+        if output_kind == "table":
+            node["table_primary_key"] = list(key_cols)
+        return node
     return None
 
 
